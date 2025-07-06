@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Buildings, BuildingInstance, BuildingType, BuildingInfo, Resources, UnitInfo, MilitaryUnitType, GameTask } from '../types';
-import { DemolishIcon, EditIcon, FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
+import { DemolishIcon, FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
 import { iconMap } from './GameUI';
 
@@ -26,6 +26,7 @@ interface BuildingManagementPanelProps {
     panelOpacity: number;
 }
 
+
 const BuildingRow: React.FC<{
     building: BuildingInstance;
     type: BuildingType;
@@ -34,36 +35,65 @@ const BuildingRow: React.FC<{
 }> = ({ building, type, onUpdate, onDemolish }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(building.name);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isEditing) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+    }, [isEditing]);
 
     const handleSave = () => {
-        if (name.trim()) {
+        if (name.trim() && name.trim() !== building.name) {
             onUpdate(type, building.id, name.trim());
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleSave();
+        } else if (e.key === 'Escape') {
+            setName(building.name);
             setIsEditing(false);
         }
     };
 
     return (
-        <div className="sci-fi-unit-row flex items-center gap-4">
+        <div className="sci-fi-unit-row flex items-center gap-2 p-2 justify-between">
             {isEditing ? (
-                <>
-                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="sci-fi-input w-full" />
-                    <div className="flex gap-1">
-                        <button onClick={handleSave} title="Save" className="bg-brand-green/80 hover:bg-brand-green text-white px-2 py-0.5 text-xs rounded-md">✓</button>
-                        <button onClick={() => setIsEditing(false)} title="Cancel" className="bg-stone-light/80 hover:bg-stone-light text-white px-2 py-0.5 text-xs rounded-md">×</button>
-                    </div>
-                </>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onBlur={handleSave}
+                    onKeyDown={handleKeyDown}
+                    className="sci-fi-input w-full !text-base"
+                />
             ) : (
-                <>
-                    <p className="flex-grow font-bold">{building.name}</p>
-                    <div className="flex items-center gap-1">
-                        <button onClick={() => setIsEditing(true)} title="Rename" className="sci-fi-action-button"><EditIcon /></button>
-                        <button onClick={() => onDemolish(type, building.id)} title="Demolish" className="sci-fi-action-button"><DemolishIcon /></button>
-                    </div>
-                </>
+                <div 
+                    className="flex-grow"
+                    onDoubleClick={() => setIsEditing(true)}
+                    title="Double-click to rename"
+                >
+                    <p className="text-base font-bold cursor-pointer">{building.name}</p>
+                </div>
             )}
+            <div className="flex-shrink-0">
+                <button
+                    onClick={() => onDemolish(type, building.id)}
+                    title="Demolish"
+                    className="sci-fi-action-button"
+                >
+                    <DemolishIcon />
+                </button>
+            </div>
         </div>
     );
 };
+
 
 const CostDisplay: React.FC<{ cost: { [key in keyof Resources]?: number }, resources: Resources }> = ({ cost, resources }) => (
     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -160,21 +190,23 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
         <div style={panelStyle} className={`fixed z-40 w-96 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
             <div className="sci-fi-panel-popup sci-fi-grid p-4">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-2xl font-serif">Manage {buildingInfo?.name}</h2>
+                    <h2 className="text-2xl font-serif">{buildingInfo?.name}{!buildingInfo?.isUnique ? 's' : ''}</h2>
                     <button onClick={handleClose} className="text-3xl font-bold sci-fi-close-button">&times;</button>
                 </div>
 
-                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                     {buildingInstances.length > 0 ? (
                         buildingInstances.map(instance => (
                             <BuildingRow key={instance.id} building={instance} type={type} onUpdate={onUpdateBuilding} onDemolish={onDemolishBuilding} />
                         ))
                     ) : ( <p className="text-center text-parchment-dark py-4">You have no {buildingInfo?.name?.toLowerCase()}s.</p> )}
+                </div>
 
+                {(type === 'townCenter' || unitToTrain) && <hr className="border-stone-light/20 my-3" />}
+                
+                <div className="space-y-3">
                     {type === 'townCenter' && (
                          <>
-                            <hr className="border-stone-light/20 my-3" />
-                            {/* Villager Training Section */}
                             {activeVillagerTask ? (
                                 <div className="h-14 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeVillagerTask.payload?.count} Villager(s)...</p><ProgressBar startTime={activeVillagerTask.startTime} duration={activeVillagerTask.duration} className="w-full h-2"/></div>
                             ) : (
@@ -189,7 +221,6 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                                     </div>
                                 </div>
                             )}
-                            {/* Advance Age Section */}
                              {activeAgeTask ? (
                                 <div className="h-12 mt-2 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Advancing to the next age...</p><ProgressBar startTime={activeAgeTask.startTime} duration={activeAgeTask.duration} className="w-full h-2"/></div>
                             ) : (
@@ -206,8 +237,6 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                     )}
                     {unitToTrain && (
                         <>
-                            <hr className="border-stone-light/20 my-3" />
-                            {/* Military Unit Training Section */}
                             {activeTrainTask ? (
                                 <div className="h-16 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeTrainTask.payload?.count} {unitToTrain.name}(s)...</p><ProgressBar startTime={activeTrainTask.startTime} duration={activeTrainTask.duration} className="w-full h-2"/></div>
                             ) : (

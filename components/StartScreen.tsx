@@ -1,0 +1,88 @@
+import React, { useState } from 'react';
+
+interface StartScreenProps {
+    onNewGame: (name: string) => void;
+    onResumeGame: (name: string) => void;
+    savedGames: string[];
+}
+
+const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, savedGames }) => {
+    const [isNaming, setIsNaming] = useState(false);
+    const [newName, setNewName] = useState('');
+
+    const handleStart = () => {
+        if (newName.trim().length >= 4) {
+            onNewGame(newName.trim());
+        }
+    };
+    
+    return (
+        <div className="text-center bg-stone-dark p-8 rounded-lg shadow-2xl border-2 border-stone-light w-full max-w-2xl">
+            <h1 className="text-6xl font-serif text-parchment-light mb-2 tracking-wider">Gemini Empires</h1>
+            
+            {isNaming ? (
+                <div className="mt-8">
+                    <h2 className="text-2xl font-serif text-brand-gold mb-4">Name Your Saga</h2>
+                    <input
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="At least 4 characters..."
+                        className="bg-parchment-dark text-stone-dark placeholder-stone-light w-full max-w-sm mx-auto text-center font-sans text-xl p-3 rounded-lg border-2 border-stone-light focus:border-brand-gold focus:outline-none"
+                    />
+                    <div className="flex gap-4 justify-center mt-6">
+                         <button
+                            onClick={() => setIsNaming(false)}
+                            className="bg-stone-light hover:bg-stone-dark text-white font-bold py-3 px-8 rounded-lg text-xl font-serif tracking-wide transition-transform duration-200 ease-in-out hover:scale-105 shadow-lg"
+                        >
+                            Back
+                        </button>
+                        <button
+                            onClick={handleStart}
+                            disabled={newName.trim().length < 4}
+                            className="bg-brand-red hover:bg-red-700 disabled:bg-stone-dark disabled:text-stone-light/50 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg text-xl font-serif tracking-wide transition-transform duration-200 ease-in-out hover:scale-105 shadow-lg"
+                        >
+                            Begin
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    <p className="text-lg text-parchment-dark mb-8 font-sans">Your Civilization's Saga, Written by AI</p>
+                    <div className="flex flex-col gap-4 items-center">
+                        {savedGames.length > 0 && (
+                            <div className="w-full max-w-sm">
+                                <h3 className="text-xl font-serif text-brand-gold mb-2">Resume a Saga</h3>
+                                <div className="flex flex-col gap-3 max-h-48 overflow-y-auto bg-black/20 p-2 rounded-md">
+                                    {savedGames.map(name => (
+                                        <button
+                                            key={name}
+                                            onClick={() => onResumeGame(name)}
+                                            className="w-full bg-brand-green/80 hover:bg-brand-green text-white font-bold py-2 px-4 rounded-md text-lg font-sans transition-colors duration-200"
+                                        >
+                                            {name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <button
+                            onClick={() => setIsNaming(true)}
+                            className="bg-brand-red hover:bg-red-700 text-white font-bold py-4 px-8 rounded-lg text-2xl font-serif tracking-wide transition-transform duration-200 ease-in-out hover:scale-105 shadow-lg mt-4"
+                        >
+                            New Saga
+                        </button>
+                    </div>
+                     <p className="mt-8 text-sm text-stone-light font-sans">
+                        {savedGames.length > 0
+                            ? "Start a new saga or resume an existing one."
+                            : "Lead your people from a nomadic tribe to a thriving empire. Every game is a unique story."
+                        }
+                    </p>
+                </>
+            )}
+        </div>
+    );
+};
+
+export default StartScreen;

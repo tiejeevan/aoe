@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Buildings, BuildingInstance, BuildingType, BuildingInfo, Resources, UnitInfo, MilitaryUnitType, GameTask } from '../types';
-import { DemolishIcon, FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
+import { FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
 import { iconMap } from './GameUI';
+import { Trash2 } from 'lucide-react';
 
 interface BuildingManagementPanelProps {
     isOpen: boolean;
@@ -73,23 +74,28 @@ const BuildingRow: React.FC<{
                     className="sci-fi-input w-full !text-base"
                 />
             ) : (
-                <div 
-                    className="flex-grow"
-                    onDoubleClick={() => setIsEditing(true)}
-                    title="Double-click to rename"
-                >
-                    <p className="text-base font-bold cursor-pointer">{building.name}</p>
-                </div>
+                <>
+                    <div 
+                        className="flex-grow cursor-pointer"
+                        onDoubleClick={() => setIsEditing(true)}
+                        title="Double-click to rename"
+                    >
+                        <p className="text-base font-bold">{building.name}</p>
+                    </div>
+                    <div className="relative group flex-shrink-0">
+                        <button
+                            onClick={() => onDemolish(type, building.id)}
+                            className="p-1.5 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-red/50"
+                            aria-label="Demolish"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                        <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            Demolish
+                        </div>
+                    </div>
+                </>
             )}
-            <div className="flex-shrink-0">
-                <button
-                    onClick={() => onDemolish(type, building.id)}
-                    title="Demolish"
-                    className="sci-fi-action-button"
-                >
-                    <DemolishIcon />
-                </button>
-            </div>
         </div>
     );
 };
@@ -119,17 +125,27 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const [currentData, setCurrentData] = useState({ panelState, buildings, anchorRect });
     const [trainCount, setTrainCount] = useState(1);
 
+     useEffect(() => {
+        if (!isOpen) return;
+
+        const popSpace = population.capacity - population.current;
+        const currentCount = trainCount;
+
+        if (currentCount > popSpace) {
+             setTrainCount(Math.max(0, popSpace));
+        } else if (currentCount === 0 && popSpace > 0) {
+             setTrainCount(1);
+        } else if (popSpace === 0) {
+            setTrainCount(0);
+        }
+
+    }, [isOpen, panelState.type, population.capacity, population.current, trainCount]);
+
     useEffect(() => {
         if (isOpen || isClosing) {
             setCurrentData({ panelState, buildings, anchorRect });
         }
     }, [panelState, buildings, anchorRect, isOpen, isClosing]);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const popSpace = population.capacity - population.current;
-        setTrainCount(popSpace > 0 ? 1 : 0);
-    }, [isOpen, panelState.type, population.capacity, population.current]);
 
     const handleClose = () => {
         setIsClosing(true);

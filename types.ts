@@ -131,13 +131,6 @@ export interface UINotification {
     message: string;
 }
 
-export interface ConstructingBuilding {
-    id: string; // Corresponds to task ID
-    type: BuildingType;
-    position: { x: number; y: number; };
-    villagerIds: string[];
-}
-
 export type ResourceNodeType = 'food' | 'wood' | 'gold' | 'stone';
 
 export interface ResourceNode {
@@ -163,12 +156,19 @@ export interface GameTask {
     startTime: number;
     duration: number; // in milliseconds
     payload?: {
-        buildingId?: string;
-        buildingType?: BuildingType;
-        unitType?: MilitaryUnitType;
-        count?: number;
+        // Shared
+        buildingId?: string; // ID of the building performing the action (e.g. TC for training)
         villagerIds?: string[];
+        count?: number;
+        
+        // Build task
+        buildingType?: BuildingType;
         position?: { x: number; y: number };
+        
+        // Train military task
+        unitType?: MilitaryUnitType;
+        
+        // Gather task
         resourceNodeId?: string;
     };
 }
@@ -180,7 +180,6 @@ export interface FullGameState {
     buildings: Buildings;
     currentAge: string;
     gameLog: GameLogEntry[];
-    constructingBuildings: ConstructingBuilding[];
     activeTasks: GameTask[];
     resourceNodes: ResourceNode[];
 }

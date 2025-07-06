@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import type { BuildingType, BuildingInfo, ConstructingBuilding } from '../types';
+import type { BuildingType, BuildingInfo, GameTask } from '../types';
 import { iconMap } from './GameUI';
 
 // StatBox component copied from GameUI for reuse in this panel.
@@ -35,15 +35,17 @@ interface AllBuildingsPanelProps {
     onClose: () => void;
     buildingList: BuildingInfo[];
     buildingCounts: Record<BuildingType, number>;
-    constructingBuildings: ConstructingBuilding[];
+    activeTasks: GameTask[];
     onOpenBuildingPanel: (type: BuildingType, instanceId: string, rect: DOMRect) => void;
     anchorRect: DOMRect | null;
 }
 
 
-const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, buildingList, buildingCounts, constructingBuildings, onOpenBuildingPanel, anchorRect }) => {
+const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, buildingList, buildingCounts, activeTasks, onOpenBuildingPanel, anchorRect }) => {
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ anchorRect });
+    
+    const constructionTasks = activeTasks.filter(t => t.type === 'build');
 
     useEffect(() => {
         if (isOpen || isClosing) {
@@ -97,7 +99,7 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
                 </div>
 
                 <div className="space-y-2 flex-grow overflow-y-auto pr-2">
-                    {(totalBuildings > 0 || constructingBuildings.length > 0) ? (
+                    {(totalBuildings > 0 || constructionTasks.length > 0) ? (
                         Object.entries(buildingCounts)
                             .sort(([typeA], [typeB]) => {
                                 const order = ['townCenter', 'houses'];
@@ -109,7 +111,8 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
                                 return typeA.localeCompare(typeB);
                             })
                             .map(([type, count]) => {
-                                if(count === 0 && constructingBuildings.every(b => b.type !== type)) return null;
+                                const isConstructing = constructionTasks.some(t => t.payload?.buildingType === type);
+                                if(count === 0 && !isConstructing) return null;
 
                                 const info = buildingList.find(b => b.id === type);
                                 if (!info) return null;
@@ -117,12 +120,15 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
                                 const Icon = iconMap[type as BuildingType];
                                 if (!Icon) return null;
 
+                                const constructingCount = constructionTasks.filter(t => t.payload?.buildingType === type).length;
+                                const displayValue = count > 0 ? `${count}${constructingCount > 0 ? ` (+${constructingCount})` : ''}` : `Constructing...`;
+
                                 return (
                                     <StatBox 
                                         key={type} 
                                         icon={Icon} 
                                         label={info.name}
-                                        value={count > 0 ? count : '0'} 
+                                        value={displayValue} 
                                         colorClass="text-parchment-dark" 
                                         onActionClick={count > 0 ? (e) => {
                                             onOpenBuildingPanel(type as BuildingType, '', e.currentTarget.getBoundingClientRect());

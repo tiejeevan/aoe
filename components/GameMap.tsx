@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Buildings, BuildingType, BuildingInstance, ConstructingBuilding, GameTask, BuildingInfo, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
+import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingInfo, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 import { VillagerIcon } from './icons/ResourceIcons';
@@ -53,7 +53,6 @@ const ResourceNodeTooltip: React.FC<{ node: ResourceNode; gatherInfo: Record<Res
 
 interface GameMapProps {
     buildings: Buildings;
-    constructingBuildings: ConstructingBuilding[];
     activeTasks: GameTask[];
     playerAction: PlayerActionState;
     onConfirmPlacement: (position: { x: number; y: number; }) => void;
@@ -67,22 +66,26 @@ interface GameMapProps {
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
 }
 
-const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {
+const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {
     const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number; } | null>(null);
+
+    const constructionTasks = useMemo(() => activeTasks.filter(t => t.type === 'build'), [activeTasks]);
 
     const occupiedCells = useMemo(() => {
         const cellSet = new Set<string>();
         Object.values(buildings).flat().forEach(building => {
             cellSet.add(`${building.position.x},${building.position.y}`);
         });
-        constructingBuildings.forEach(building => {
-            cellSet.add(`${building.position.x},${building.position.y}`);
+        constructionTasks.forEach(task => {
+            if(task.payload?.position) {
+                cellSet.add(`${task.payload.position.x},${task.payload.position.y}`);
+            }
         });
         resourceNodes.forEach(node => {
             cellSet.add(`${node.position.x},${node.position.y}`);
         });
         return cellSet;
-    }, [buildings, constructingBuildings, resourceNodes]);
+    }, [buildings, constructionTasks, resourceNodes]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -111,8 +114,8 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
         return undefined;
     };
 
-    const getConstructionAt = (x: number, y: number): ConstructingBuilding | undefined => {
-        return constructingBuildings.find(b => b.position.x === x && b.position.y === y);
+    const getConstructionAt = (x: number, y: number): GameTask | undefined => {
+        return constructionTasks.find(t => t.payload?.position?.x === x && t.payload?.position?.y === y);
     }
     
     const getResourceNodeAt = (x: number, y: number): ResourceNode | undefined => {
@@ -134,15 +137,15 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                 const x = index % mapDimensions.width;
                 const y = Math.floor(index / mapDimensions.width);
                 const building = getBuildingAt(x, y);
-                const construction = getConstructionAt(x, y);
+                const constructionTask = getConstructionAt(x, y);
                 const resourceNode = getResourceNodeAt(x, y);
-                const isOccupied = !!building || !!construction || !!resourceNode;
-                const buildTask = construction ? activeTasks.find(t => t.id === construction.id) : undefined;
+                const isOccupied = !!building || !!constructionTask || !!resourceNode;
+                
                 const gatherTask = resourceNode ? activeTasks.find(t => t.id === resourceNode.id) : undefined;
-                const buildingInfo = construction ? buildingList.find(b => b.id === construction.type) : undefined;
+                const buildingInfo = constructionTask ? buildingList.find(b => b.id === constructionTask.payload?.buildingType) : undefined;
 
                 let cellClass = "bg-stone-dark/20 hover:bg-stone-light/10 transition-colors duration-150";
-                if((resourceNode || construction) && !playerAction) {
+                if((resourceNode || constructionTask) && !playerAction) {
                     cellClass += " cursor-pointer hover:bg-brand-blue/20";
                 }
                 
@@ -170,8 +173,8 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                             }
                             if (resourceNode) {
                                 onOpenAssignmentPanel(resourceNode.id, e.currentTarget.getBoundingClientRect());
-                            } else if (construction) {
-                                onOpenConstructionPanel(construction.id, e.currentTarget.getBoundingClientRect());
+                            } else if (constructionTask) {
+                                onOpenConstructionPanel(constructionTask.id, e.currentTarget.getBoundingClientRect());
                             } else if (building) {
                                 onBuildingClick(building, e.currentTarget.getBoundingClientRect());
                             }
@@ -185,15 +188,15 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                                 </div>
                              </div>
                         )}
-                        {construction && (
+                        {constructionTask && constructionTask.payload?.buildingType && (
                             <div className="absolute inset-0 p-1 text-parchment-light opacity-60 flex flex-col justify-center items-center gap-1 group">
-                                {iconMap[construction.type]}
-                                {buildTask && <ProgressBar startTime={buildTask.startTime} duration={buildTask.duration} className="w-10/12 h-1.5"/>}
-                                {buildTask && buildingInfo && <ConstructionTooltip task={buildTask} buildingInfo={buildingInfo} builderCount={construction.villagerIds.length} />}
-                                {construction.villagerIds.length > 0 && (
+                                {iconMap[constructionTask.payload.buildingType]}
+                                <ProgressBar startTime={constructionTask.startTime} duration={constructionTask.duration} className="w-10/12 h-1.5"/>
+                                {buildingInfo && <ConstructionTooltip task={constructionTask} buildingInfo={buildingInfo} builderCount={constructionTask.payload.villagerIds?.length || 0} />}
+                                {(constructionTask.payload.villagerIds?.length || 0) > 0 && (
                                     <div className="absolute top-0.5 right-0.5 flex items-center bg-stone-dark/80 rounded-full px-1.5 py-0.5 text-xs text-brand-blue z-10">
                                         <div className="w-3 h-3"><VillagerIcon /></div>
-                                        <span className="ml-1 font-bold">{construction.villagerIds.length}</span>
+                                        <span className="ml-1 font-bold">{constructionTask.payload.villagerIds?.length}</span>
                                     </div>
                                 )}
                             </div>

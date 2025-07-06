@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, ConstructingBuilding, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
@@ -65,7 +65,6 @@ const GamePage: React.FC = () => {
     const [currentSaveName, setCurrentSaveName] = useState<string | null>(null);
     const [playerAction, setPlayerAction] = useState<PlayerActionState>(null);
     const [activeTasks, setActiveTasks] = useState<GameTask[]>([]);
-    const [constructingBuildings, setConstructingBuildings] = useState<ConstructingBuilding[]>([]);
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
     
     // Panel States
@@ -103,12 +102,11 @@ const GamePage: React.FC = () => {
                 currentAge,
                 gameLog,
                 activeTasks,
-                constructingBuildings,
                 resourceNodes,
             };
             saveGameState(currentSaveName, fullState);
         }
-    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, constructingBuildings, resourceNodes]);
+    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes]);
 
     const addNotification = useCallback((message: string) => {
         const id = `${Date.now()}-${Math.random()}`;
@@ -158,7 +156,6 @@ const GamePage: React.FC = () => {
                 const [name] = getRandomNames('building', 1);
                 const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
                 
-                setConstructingBuildings(prev => prev.filter(b => b.id !== task.id));
                 setBuildings(p => ({ ...p, [buildingType!]: [...p[buildingType!], newBuilding] }));
                 
                 if (villagerIds && villagerIds.length > 0) {
@@ -201,10 +198,11 @@ const GamePage: React.FC = () => {
                 break;
             }
         }
-    }, [currentAge, updateResources, addToLog]);
+    }, [currentAge, addToLog]);
     
     // Game Loop
     useEffect(() => {
+        if (gameState !== GameStatus.PLAYING) return;
         const gameLoop = setInterval(() => {
             const now = Date.now();
             let completedTasks: GameTask[] = [];
@@ -221,7 +219,8 @@ const GamePage: React.FC = () => {
                     const villagerCount = task.payload?.villagerIds?.length || 0;
                     
                     if (!node || villagerCount === 0) {
-                        return null; // Orphaned task, mark for removal
+                        completedTasks.push(task); // Orphaned or empty gather task, mark for removal
+                        return null; 
                     }
 
                     const gatherRatePerVillagerPerSecond = GATHER_INFO[node.type].rate / 10;
@@ -246,7 +245,6 @@ const GamePage: React.FC = () => {
                 });
 
                 setResourceNodes(prevNodes => {
-                    let nodesWereDepleted = false;
                     const newNodes = prevNodes.map(node => {
                         const amountToDecrement = resourceDeltasThisTick[node.type];
                         if (amountToDecrement) {
@@ -254,7 +252,6 @@ const GamePage: React.FC = () => {
                             if (newAmount <= 0) {
                                 addToLog(`${node.assignedVillagers.length} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
                                 setActivityStatus(`A ${node.type} source has been fully depleted.`);
-                                nodesWereDepleted = true;
 
                                 const gatherTask = stillActiveTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === node.id);
                                 if(gatherTask) completedTasks.push(gatherTask);
@@ -266,9 +263,6 @@ const GamePage: React.FC = () => {
                         return node;
                     }).filter(Boolean) as ResourceNode[];
 
-                    if (nodesWereDepleted) {
-                        // This will filter out the completed gather tasks in the next step
-                    }
                     return newNodes;
                 });
             }
@@ -282,12 +276,14 @@ const GamePage: React.FC = () => {
         }, 1000);
 
         return () => clearInterval(gameLoop);
-    }, [activeTasks, resourceNodes, handleTaskCompletion, addToLog]);
+    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog]);
 
 
     const handleNewEvent = useCallback(() => {
-        const nonGatheringTasks = activeTasks.filter(t => t.type !== 'gather');
-        if (!civilization || currentEvent || nonGatheringTasks.length > 0) return;
+        // Events should not trigger if a major task (build, train, advance age) is in progress.
+        // Gathering resources is a background task and should not block events.
+        const majorTaskInProgress = activeTasks.some(t => t.type !== 'gather');
+        if (!civilization || currentEvent || majorTaskInProgress) return;
         
         addToLog('A new chapter unfolds...', 'event');
         const event = getPredefinedGameEvent();
@@ -350,7 +346,6 @@ const GamePage: React.FC = () => {
         setCurrentEvent(null);
         setUnlimitedResources(false);
         setActiveTasks([]);
-        setConstructingBuildings([]);
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
@@ -395,8 +390,11 @@ const GamePage: React.FC = () => {
             }
             
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
-            
-            const occupiedCells = new Set(Object.values(finalBuildings).flat().map((b: any) => `${b.position.x},${b.position.y}`));
+            const constructionTasks = (savedState.activeTasks || []).filter(t => t.type === 'build');
+            const occupiedCells = new Set([
+                ...Object.values(finalBuildings).flat().map((b: any) => `${b.position.x},${b.position.y}`),
+                ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)
+            ]);
 
             if (!finalBuildings.townCenter || finalBuildings.townCenter.length === 0) {
                 let tcPos = { x: 10, y: 5 };
@@ -433,20 +431,18 @@ const GamePage: React.FC = () => {
 
             setCurrentAge(savedState.currentAge);
             setGameLog(savedState.gameLog);
-            setActiveTasks((savedState.activeTasks || []).map(t => {
-                // Migration for old save format
-                if (t.type === 'build' && t.payload?.villagerId) {
-                    return { ...t, payload: { ...t.payload, villagerIds: [t.payload.villagerId], villagerId: undefined } };
+            
+            // Migration for old save formats
+            const migratedTasks = (savedState.activeTasks || []).map(t => {
+                if ('constructingBuildings' in savedState && t.type === 'build' && t.payload?.villagerId) {
+                     return { ...t, payload: { ...t.payload, villagerIds: [t.payload.villagerId] } };
+                }
+                if (t.type === 'build' && !t.payload?.villagerIds) {
+                    return { ...t, payload: { ...t.payload, villagerIds: [] } };
                 }
                 return t;
-            }));
-            setConstructingBuildings((savedState.constructingBuildings || []).map(c => {
-                 // Migration for old save format
-                if ((c as any).villagerId) {
-                    return { ...c, villagerIds: [(c as any).villagerId], villagerId: undefined };
-                }
-                return c;
-            }));
+            });
+            setActiveTasks(migratedTasks);
             
             setCurrentEvent(null);
             setActivityStatus('Welcome back to your saga.');
@@ -458,11 +454,11 @@ const GamePage: React.FC = () => {
 
     // Event Trigger Timer
     useEffect(() => {
-        // Events should not trigger if a major task (build, train, advance age) is in progress.
-        // Gathering resources is a background task and should not block events.
+        if (gameState !== GameStatus.PLAYING) return;
+        
         const majorTaskInProgress = activeTasks.some(t => t.type !== 'gather');
 
-        if (gameState === GameStatus.PLAYING && !currentEvent && !playerAction && !majorTaskInProgress) {
+        if (!currentEvent && !playerAction && !majorTaskInProgress) {
             scheduleNextEvent();
         } else if (eventTimerRef.current) {
             clearTimeout(eventTimerRef.current);
@@ -546,7 +542,8 @@ const GamePage: React.FC = () => {
         const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingId);
         if (!buildingInfo) return;
 
-        if (buildingInfo.isUnique && (buildings[buildingInfo.id].length > 0 || constructingBuildings.some(b => b.type === buildingInfo.id))) {
+        const isAlreadyConstructing = activeTasks.some(t => t.type === 'build' && t.payload?.buildingType === buildingInfo.id);
+        if (buildingInfo.isUnique && (buildings[buildingInfo.id].length > 0 || isAlreadyConstructing)) {
             addNotification(`You can only build one ${buildingInfo.name}.`); return;
         }
         
@@ -585,18 +582,18 @@ const GamePage: React.FC = () => {
         }
         
         const buildTime = buildingInfo.buildTime * 1000;
+        const taskId = `${Date.now()}-build-${buildingType}`;
         const taskPayload = { buildingType, villagerIds: [villagerId], position };
 
         if (unlimitedResources) {
-             const taskId = `${Date.now()}-instant-build`;
              handleTaskCompletion({ id: taskId, type: 'build', startTime: 0, duration: 0, payload: { ...taskPayload, position } });
         } else {
-            const taskId = `${Date.now()}-build-${buildingType}`;
-            const newConstruction: ConstructingBuilding = { id: taskId, type: buildingType, position, villagerIds: [villagerId] };
-            setConstructingBuildings(prev => [...prev, newConstruction]);
-
             const newTask: GameTask = {
-                id: taskId, type: 'build', startTime: Date.now(), duration: buildTime, payload: taskPayload
+                id: taskId, 
+                type: 'build', 
+                startTime: Date.now(), 
+                duration: buildTime, 
+                payload: taskPayload
             };
             setActiveTasks(prev => [...prev, newTask]);
             setActivityStatus(`${builder.name} has started constructing a ${buildingInfo.name}.`);
@@ -789,21 +786,20 @@ const GamePage: React.FC = () => {
             });
             addToLog(`${count} villager(s) recalled from gathering ${node.type}.`, 'villager');
         } else { // construction
-            const construction = constructingBuildings.find(c => c.id === targetId);
             const task = activeTasks.find(t => t.id === targetId);
-            if (!construction || !task || construction.villagerIds.length < count) return;
+            if (!task || task.type !== 'build' || (task.payload?.villagerIds?.length ?? 0) < count) return;
             
-            const villagersToRecall = construction.villagerIds.slice(construction.villagerIds.length - count);
-            const remainingVillagers = construction.villagerIds.filter(id => !villagersToRecall.includes(id));
+            const villagersToRecall = task.payload!.villagerIds!.slice(task.payload!.villagerIds!.length - count);
+            const remainingVillagers = task.payload!.villagerIds!.filter(id => !villagersToRecall.includes(id));
     
             if (remainingVillagers.length === 0) {
                 addNotification("Cannot recall the last builder. This would cancel the project.");
                 return;
             }
     
-            const buildingInfo = BUILDINGS_INFO.find(b => b.id === construction.type)!;
+            const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType)!;
             const totalWork = buildingInfo.buildTime * 1000;
-            const oldWorkerCount = construction.villagerIds.length;
+            const oldWorkerCount = task.payload!.villagerIds!.length;
     
             const timeElapsed = Date.now() - task.startTime;
             const workDone = timeElapsed * oldWorkerCount;
@@ -812,7 +808,6 @@ const GamePage: React.FC = () => {
             const newWorkerCount = remainingVillagers.length;
             const newRemainingDuration = workRemaining / newWorkerCount;
             
-            setConstructingBuildings(prev => prev.map(c => c.id === targetId ? { ...c, villagerIds: remainingVillagers } : c));
             setActiveTasks(prev => prev.map(t => t.id === targetId ? {
                 ...t,
                 startTime: Date.now(),
@@ -833,11 +828,10 @@ const GamePage: React.FC = () => {
 
         const villagersToAssign = idleVillagers.slice(0, cappedCount).map(v => v.id);
         const task = activeTasks.find(t => t.id === constructionId);
-        const construction = constructingBuildings.find(c => c.id === constructionId);
 
-        if (!task || !construction) return;
+        if (!task || task.type !== 'build') return;
 
-        const buildingInfo = BUILDINGS_INFO.find(b => b.id === construction.type);
+        const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload?.buildingType);
         if (!buildingInfo) return;
 
         const baseDuration = buildingInfo.buildTime * 1000;
@@ -859,11 +853,6 @@ const GamePage: React.FC = () => {
             duration: newRemainingDuration,
             payload: { ...t.payload, villagerIds: updatedVillagerIds }
         } : t));
-
-        setConstructingBuildings(prev => prev.map(c => c.id === constructionId ? {
-            ...c,
-            villagerIds: updatedVillagerIds
-        } : c));
 
         addToLog(`${cappedCount} villager(s) are now assisting with the ${buildingInfo.name}.`, buildingInfo.id);
         setActivityStatus(`Construction of the ${buildingInfo.name} is now faster.`);
@@ -935,7 +924,7 @@ const GamePage: React.FC = () => {
     
     const assignmentTarget = assignmentPanelState.targetType === 'resource'
         ? resourceNodes.find(n => n.id === assignmentPanelState.targetId)
-        : constructingBuildings.find(c => c.id === assignmentPanelState.targetId);
+        : activeTasks.find(t => t.type === 'build' && t.id === assignmentPanelState.targetId);
 
     const closeAllPanels = useCallback(() => {
         setUnitManagementPanel(p => p.isOpen ? { isOpen: false, type: null, anchorRect: null } : p);
@@ -1023,7 +1012,6 @@ const GamePage: React.FC = () => {
                                 if(type) setBuildingManagementPanel({ isOpen: true, type, instanceId: building.id, anchorRect: rect });
                             }}
                             mapDimensions={MAP_DIMENSIONS}
-                            constructingBuildings={constructingBuildings}
                             activeTasks={activeTasks}
                             onExitGame={handleExitGame}
                             onOpenCivPanel={(rect) => { closeAllPanels(); setCivPanelState({ isOpen: true, anchorRect: rect }); }}
@@ -1091,7 +1079,7 @@ const GamePage: React.FC = () => {
                             onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })}
                             buildingList={BUILDINGS_INFO}
                             buildingCounts={buildingCounts}
-                            constructingBuildings={constructingBuildings}
+                            activeTasks={activeTasks}
                             onOpenBuildingPanel={handleOpenBuildingPanel}
                             anchorRect={allBuildingsPanel.anchorRect}
                         />

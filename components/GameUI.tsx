@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
+import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText } from 'lucide-react';
@@ -27,7 +27,6 @@ interface GameUIProps {
     onCancelPlayerAction: () => void;
     onBuildingClick: (building: BuildingInstance, rect: DOMRect) => void;
     mapDimensions: { width: number; height: number; };
-    constructingBuildings: ConstructingBuilding[];
     activeTasks: GameTask[];
     onExitGame: () => void;
     onOpenCivPanel: (rect: DOMRect) => void;
@@ -80,7 +79,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
+        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -145,7 +144,6 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                      <div className="relative">
                         <GameMap
                             buildings={buildings}
-                            constructingBuildings={constructingBuildings}
                             activeTasks={activeTasks}
                             playerAction={playerAction}
                             onConfirmPlacement={onConfirmPlacement}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import type { ResourceNode, ResourceNodeType, ConstructingBuilding, BuildingInfo } from '../types';
+import type { ResourceNode, ResourceNodeType, GameTask, BuildingInfo } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, VillagerIcon, ClockIcon, GatherIcon, BuildIcon } from './icons/ResourceIcons';
 import { iconMap } from './GameUI';
 import { Undo2 } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Undo2 } from 'lucide-react';
 interface ResourceAssignmentPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    assignmentTarget: (ResourceNode | ConstructingBuilding) | null;
+    assignmentTarget: (ResourceNode | GameTask) | null;
     idleVillagerCount: number;
     onAssignVillagers: (targetId: string, count: number) => void;
     onRecallVillagers: (targetId: string, count: number, type: 'resource' | 'construction') => void;
@@ -36,12 +36,13 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ assignmentTarget, anchorRect });
     
-    const isConstruction = assignmentTarget ? 'villagerIds' in assignmentTarget : false;
+    const isConstruction = assignmentTarget ? 'type' in assignmentTarget && assignmentTarget.type === 'build' : false;
     const isResource = assignmentTarget ? 'amount' in assignmentTarget : false;
+
     const assignedCount = isResource 
         ? ((assignmentTarget as ResourceNode).assignedVillagers || []).length 
         : isConstruction 
-        ? (assignmentTarget as ConstructingBuilding).villagerIds.length 
+        ? ((assignmentTarget as GameTask).payload?.villagerIds || []).length 
         : 0;
     
     useEffect(() => {
@@ -93,7 +94,7 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
         title = `Gather ${node.type}`;
         const IconComponent = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
         MainIcon = <IconComponent />;
-        const currentRate = assignedVillagers.length * (gatherInfo[node.type].rate / 10);
+        const currentRate = assignedVillagers.length * gatherInfo[node.type].rate;
         InfoIcons = (
             <>
                 <InfoIcon icon={MainIcon} value={Math.floor(node.amount)} tooltip="Remaining Amount" />
@@ -104,14 +105,14 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     }
 
     if (isConstruction) {
-        const construction = currentTarget as ConstructingBuilding;
-        const buildingInfo = buildingList.find(b => b.id === construction.type);
+        const constructionTask = currentTarget as GameTask;
+        const buildingInfo = buildingList.find(b => b.id === constructionTask.payload!.buildingType);
         title = `Construct ${buildingInfo?.name || 'Building'}`;
-        MainIcon = iconMap[construction.type];
+        MainIcon = iconMap[constructionTask.payload!.buildingType!];
         AssignIcon = <BuildIcon />;
         InfoIcons = (
              <>
-                <InfoIcon icon={<BuildIcon />} value={construction.villagerIds.length} tooltip="Current Builders" />
+                <InfoIcon icon={<BuildIcon />} value={constructionTask.payload!.villagerIds!.length} tooltip="Current Builders" />
                 <InfoIcon icon={<VillagerIcon />} value={idleVillagerCount} tooltip="Idle Villagers Available" />
             </>
         )

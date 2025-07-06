@@ -154,13 +154,15 @@ const GamePage: React.FC = () => {
     }, []);
 
     const handleNewEvent = useCallback(() => {
-        if (!civilization || currentEvent || activeTasks.length > 0) return;
+        // Allow events to trigger even if villagers are just gathering.
+        const nonGatheringTasks = activeTasks.filter(t => t.type !== 'gather');
+        if (!civilization || currentEvent || nonGatheringTasks.length > 0) return;
         
         addToLog('A new chapter unfolds...', 'event');
         const event = getPredefinedGameEvent();
         setCurrentEvent(event);
         setActivityStatus('A new event requires your attention!');
-    }, [civilization, currentEvent, activeTasks.length]);
+    }, [civilization, currentEvent, activeTasks]);
     
     const scheduleNextEvent = useCallback(() => {
         if (eventTimerRef.current) {
@@ -326,7 +328,7 @@ const GamePage: React.FC = () => {
     const handleTaskCompletion = useCallback((task: GameTask) => {
         switch (task.type) {
             case 'build': {
-                const { buildingType, villagerIds } = task.payload!;
+                const { buildingType, villagerIds, position } = task.payload!;
                 const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
                 const [name] = getRandomNames('building', 1);
                 const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
@@ -400,7 +402,7 @@ const GamePage: React.FC = () => {
             const completedTasks: GameTask[] = [];
             setActiveTasks(currentTasks => {
                 return currentTasks.filter(task => {
-                    if (now >= task.startTime + task.duration) {
+                    if (task.type !== 'gather' && now >= task.startTime + task.duration) {
                         completedTasks.push(task);
                         return false;
                     }
@@ -417,8 +419,13 @@ const GamePage: React.FC = () => {
     }, [handleTaskCompletion]);
 
 
+    // Event Trigger Timer
     useEffect(() => {
-        if (gameState === GameStatus.PLAYING && !currentEvent && !playerAction && activeTasks.length === 0) {
+        // Events should not trigger if a major task (build, train, advance age) is in progress.
+        // Gathering resources is a background task and should not block events.
+        const majorTaskInProgress = activeTasks.some(t => t.type !== 'gather');
+
+        if (gameState === GameStatus.PLAYING && !currentEvent && !playerAction && !majorTaskInProgress) {
             scheduleNextEvent();
         } else if (eventTimerRef.current) {
             clearTimeout(eventTimerRef.current);
@@ -429,7 +436,7 @@ const GamePage: React.FC = () => {
                 clearTimeout(eventTimerRef.current);
             }
         };
-    }, [gameState, currentEvent, playerAction, activeTasks.length, scheduleNextEvent]);
+    }, [gameState, currentEvent, playerAction, activeTasks, scheduleNextEvent]);
 
     const handleEventChoice = (choice: GameEventChoice) => {
         addToLog(`Decision: "${choice.text}"`, 'event');
@@ -544,7 +551,8 @@ const GamePage: React.FC = () => {
         const taskPayload = { buildingType, villagerIds: [villagerId], position };
 
         if (unlimitedResources) {
-            handleTaskCompletion({ id: `${Date.now()}-instant-build`, type: 'build', startTime: 0, duration: 0, payload: taskPayload });
+             const taskId = `${Date.now()}-instant-build`;
+             handleTaskCompletion({ id: taskId, type: 'build', startTime: 0, duration: 0, payload: { ...taskPayload, position } });
         } else {
             const taskId = `${Date.now()}-build-${buildingType}`;
             const newConstruction: ConstructingBuilding = { id: taskId, type: buildingType, position, villagerIds: [villagerId] };
@@ -699,7 +707,6 @@ const GamePage: React.FC = () => {
             prevNodes.map(n => n.id === nodeId ? {...n, assignedVillagers: [...new Set([...n.assignedVillagers, ...villagerIdsToAssign])]} : n)
         );
         
-        const existingTask = activeTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === nodeId);
         const gatherRatePerVillager = GATHER_INFO[targetNode.type].rate;
 
         if (unlimitedResources) { // Instant gather for test mode

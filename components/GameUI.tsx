@@ -21,6 +21,7 @@ interface GameUIProps {
     buildingList: BuildingInfo[];
     onOpenUnitPanel: (type: 'villagers' | 'military', rect: DOMRect) => void;
     onOpenBuildingPanel: (type: BuildingType, instanceId: string, rect: DOMRect) => void;
+    onOpenAllBuildingsPanel: (rect: DOMRect) => void;
     playerAction: PlayerActionState;
     onConfirmPlacement: (position: { x: number; y: number }) => void;
     onCancelPlayerAction: () => void;
@@ -58,32 +59,6 @@ const HeaderStat: React.FC<{ icon: React.ReactNode; value: string | number; delt
     </div>
 );
 
-const StatBox: React.FC<{ 
-    icon: React.ReactNode; 
-    label: string; 
-    value: string | number; 
-    colorClass: string;
-    onActionClick?: (event: React.MouseEvent<HTMLElement>) => void; 
-}> = ({ icon, label, value, colorClass, onActionClick }) => {
-    const Component = onActionClick ? 'button' : 'div';
-    
-    return (
-        <Component
-            onClick={onActionClick}
-            className={`relative flex items-center space-x-3 w-full p-2 rounded-lg border border-stone-light/50 transition-colors duration-200
-            bg-stone-dark/50 ${colorClass}
-            ${onActionClick ? 'hover:bg-stone-light/10 cursor-pointer' : ''}
-            overflow-hidden text-left`}
-        >
-            <div className="w-8 h-8">{icon}</div>
-            <div className="flex flex-col">
-                <span className="font-bold text-lg leading-tight">{value}</span>
-                <span className="text-xs text-parchment-dark leading-tight">{label}</span>
-            </div>
-        </Component>
-    );
-};
-
 export const iconMap: Record<LogIconType, React.ReactNode> = {
     food: <FoodIcon />, wood: <WoodIcon />, gold: <GoldIcon />, stone: <StoneIcon />,
     villager: <VillagerIcon />, 
@@ -106,7 +81,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
+        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -121,6 +96,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
     }, {} as Record<MilitaryUnitType, number>);
     
     const busyVillagerCount = new Set(activeTasks.flatMap(t => t.payload?.villagerIds || [])).size;
+    const totalBuildingsCount = Object.values(buildingCounts).reduce((a, b) => a + b, 0);
 
     return (
         <div className="w-full h-full bg-stone-dark p-4 rounded-lg shadow-2xl border-2 border-stone-light flex flex-col space-y-4">
@@ -137,9 +113,6 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                             <h2 className="text-2xl font-serif text-parchment-light">{currentAge}</h2>
                             <div className="w-5 h-5 text-parchment-dark/70 ml-1"><ScrollText /></div>
                          </button>
-                         <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                            Civilization Details
-                        </div>
                     </div>
                 </div>
 
@@ -179,48 +152,9 @@ const GameUI: React.FC<GameUIProps> = (props) => {
             </header>
 
             {/* Main Content Grid */}
-            <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Left Panel: Buildings */}
-                <div className="md:col-span-1 bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col space-y-4">
-                    <div className="space-y-1 flex-grow">
-                        <h4 className="font-serif text-parchment-dark mb-2">Buildings</h4>
-                        <div className="space-y-2">
-                             {Object.entries(buildingCounts)
-                                .sort(([typeA], [typeB]) => {
-                                    const order = ['townCenter', 'houses'];
-                                    const indexA = order.indexOf(typeA);
-                                    const indexB = order.indexOf(typeB);
-                                    if(indexA !== -1 && indexB !== -1) return indexA - indexB;
-                                    if(indexA !== -1) return -1;
-                                    if(indexB !== -1) return 1;
-                                    return typeA.localeCompare(typeB);
-                                })
-                                .map(([type, count]) => {
-                                if(count === 0 && constructingBuildings.every(b => b.type !== type)) return null;
-
-                                const info = buildingList.find(b => b.id === type);
-                                if (!info) return null;
-                                
-                                const Icon = iconMap[type as BuildingType];
-                                if (!Icon) return null;
-
-                                return (
-                                    <StatBox 
-                                        key={type} 
-                                        icon={Icon} 
-                                        label={info.name}
-                                        value={count > 0 ? count : '0'} 
-                                        colorClass="text-parchment-dark" 
-                                        onActionClick={count > 0 ? (e) => onOpenBuildingPanel(type as BuildingType, '', e.currentTarget.getBoundingClientRect()) : undefined}
-                                    />
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
+            <div className="flex-grow grid grid-cols-1 gap-4">
                 {/* Center Panel: Map, Units, Events & Log */}
-                <div className="md:col-span-2 bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col gap-4">
+                <div className="bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col gap-4">
                      <GameMap
                         buildings={buildings}
                         constructingBuildings={constructingBuildings}
@@ -288,6 +222,24 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                                 )}
                                 <hr className="border-stone-light/20 my-1" />
                                 <p className="text-xs italic text-parchment-dark/70">Click to manage your forces.</p>
+                            </div>
+                        </div>
+                        
+                        {/* Buildings Button */}
+                        <div className="relative group">
+                            <button 
+                                onClick={(e) => onOpenAllBuildingsPanel(e.currentTarget.getBoundingClientRect())}
+                                className="flex items-center gap-4 px-6 py-2 rounded-lg bg-stone-dark/60 border-2 border-stone-light/40 hover:bg-brand-green/20 hover:border-brand-green/70 transition-all duration-200"
+                            >
+                                <div className="w-10 h-10 text-brand-green"><WatchTowerIcon /></div>
+                                <div className="text-left">
+                                    <p className="text-2xl font-bold">{totalBuildingsCount}</p>
+                                    <p className="text-xs text-parchment-dark -mt-1">Buildings</p>
+                                </div>
+                            </button>
+                            <div className="absolute bottom-full mb-2 w-max px-3 py-2 bg-stone-dark text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-left sci-fi-panel-popup">
+                                <p className="font-serif text-brand-gold text-base">Manage Buildings</p>
+                                <p className="text-sm text-parchment-dark">Click to see all your structures.</p>
                             </div>
                         </div>
                     </div>

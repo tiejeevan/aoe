@@ -3,8 +3,7 @@ import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon, SettingsIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
-import { ScrollText, Layers, X } from 'lucide-react';
-import MapCommandBar from './MapCommandBar';
+import { ScrollText } from 'lucide-react';
 
 interface GameUIProps {
     civilization: Civilization;
@@ -172,13 +171,59 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                             onOpenConstructionPanel={onOpenConstructionPanel}
                             gatherInfo={gatherInfo}
                         />
-                         <MapCommandBar
-                            onOpenUnitPanel={onOpenUnitPanel}
-                            onOpenAllBuildingsPanel={onOpenAllBuildingsPanel}
-                            villagerCount={units.villagers.length}
-                            militaryCount={units.military.length}
-                            buildingCount={totalBuildingsCount}
-                        />
+                         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4">
+                            {/* Villagers Button */}
+                            <div className="relative group">
+                                <button
+                                    onClick={(e) => onOpenUnitPanel('villagers', e.currentTarget.getBoundingClientRect())}
+                                    className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
+                                    aria-label={`Manage Villagers (${units.villagers.length})`}
+                                >
+                                    <div className="w-7 h-7 text-brand-blue"><VillagerIcon /></div>
+                                    <span className="text-xl font-bold">{units.villagers.length}</span>
+                                </button>
+                                <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                    <p className="font-bold">Villagers</p>
+                                    <p>Idle: {units.villagers.length - busyVillagerCount}</p>
+                                    <p>Busy: {busyVillagerCount}</p>
+                                </div>
+                            </div>
+
+                            {/* Military Button */}
+                            <div className="relative group">
+                                <button
+                                    onClick={(e) => onOpenUnitPanel('military', e.currentTarget.getBoundingClientRect())}
+                                    className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
+                                    aria-label={`Manage Military (${units.military.length})`}
+                                >
+                                    <div className="w-7 h-7 text-brand-red"><SwordIcon /></div>
+                                    <span className="text-xl font-bold">{units.military.length}</span>
+                                </button>
+                                <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                    <p className="font-bold">Military Forces</p>
+                                    {Object.keys(militaryUnitCounts).length > 0 ? (
+                                        Object.entries(militaryUnitCounts).map(([type, count]) => (
+                                            <p key={type} className="capitalize text-parchment-dark">{type}: {count}</p>
+                                        ))
+                                    ) : <p>No forces trained.</p>}
+                                </div>
+                            </div>
+
+                            {/* Buildings Button */}
+                            <div className="relative group">
+                                <button
+                                    onClick={(e) => onOpenAllBuildingsPanel(e.currentTarget.getBoundingClientRect())}
+                                    className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
+                                    aria-label={`View All Buildings (${totalBuildingsCount})`}
+                                >
+                                    <div className="w-7 h-7 text-parchment-dark"><WatchTowerIcon /></div>
+                                    <span className="text-xl font-bold">{totalBuildingsCount}</span>
+                                </button>
+                                <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                    View All Structures
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="flex flex-col flex-grow">

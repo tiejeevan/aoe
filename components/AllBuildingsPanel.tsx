@@ -38,11 +38,10 @@ interface AllBuildingsPanelProps {
     constructingBuildings: ConstructingBuilding[];
     onOpenBuildingPanel: (type: BuildingType, instanceId: string, rect: DOMRect) => void;
     anchorRect: DOMRect | null;
-    panelOpacity: number;
 }
 
 
-const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, buildingList, buildingCounts, constructingBuildings, onOpenBuildingPanel, anchorRect, panelOpacity }) => {
+const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, buildingList, buildingCounts, constructingBuildings, onOpenBuildingPanel, anchorRect }) => {
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ anchorRect });
 
@@ -70,7 +69,6 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
         left: `${currentAnchor.left}px`,
         transformOrigin: 'bottom left',
         maxHeight: `${currentAnchor.top - 24}px`,
-        '--panel-opacity': panelOpacity,
     } as React.CSSProperties;
     
     const totalBuildings = Object.values(buildingCounts).reduce((a, b) => a + b, 0);

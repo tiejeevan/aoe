@@ -6,10 +6,9 @@ interface CivilizationPanelProps {
     onClose: () => void;
     civilization: Civilization | null;
     anchorRect: DOMRect | null;
-    panelOpacity: number;
 }
 
-const CivilizationPanel: React.FC<CivilizationPanelProps> = ({ isOpen, onClose, civilization, anchorRect, panelOpacity }) => {
+const CivilizationPanel: React.FC<CivilizationPanelProps> = ({ isOpen, onClose, civilization, anchorRect }) => {
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ civilization, anchorRect });
 
@@ -35,7 +34,6 @@ const CivilizationPanel: React.FC<CivilizationPanelProps> = ({ isOpen, onClose, 
         top: `${currentAnchor.bottom + 8}px`,
         left: `${currentAnchor.left}px`,
         transformOrigin: 'top left',
-        '--panel-opacity': panelOpacity,
     } as React.CSSProperties;
 
     return (

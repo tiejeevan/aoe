@@ -10,7 +10,6 @@ interface BuildPanelProps {
     buildingCounts: Record<BuildingType, number>;
     buildingList: BuildingInfo[];
     anchorRect: DOMRect | null;
-    panelOpacity: number;
 }
 
 const buildingIcons: Record<BuildingType, React.FC> = {
@@ -42,7 +41,7 @@ const CostDisplay: React.FC<{ cost: BuildingCosts, resources: Resources }> = ({ 
     );
 };
 
-const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlacement, resources, buildingCounts, buildingList, anchorRect, panelOpacity }) => {
+const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlacement, resources, buildingCounts, buildingList, anchorRect }) => {
     const constructibleBuildings = buildingList.filter(b => b.id !== 'townCenter');
     const [selectedBuilding, setSelectedBuilding] = useState<BuildingInfo>(constructibleBuildings[0] ?? null);
     
@@ -82,7 +81,6 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
         top: `${currentAnchor.bottom + 8}px`,
         left: `${currentAnchor.left}px`,
         transformOrigin: 'top left',
-        '--panel-opacity': panelOpacity,
     } as React.CSSProperties;
     
     const constructButtonTooltip = isBuilt ? 'Already Built' : !isAffordable ? 'Insufficient Resources' : `Construct ${selectedBuilding?.name}`;

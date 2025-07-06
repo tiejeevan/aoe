@@ -15,7 +15,6 @@ interface ResourceAssignmentPanelProps {
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
     buildingList: BuildingInfo[];
     anchorRect: DOMRect | null;
-    panelOpacity: number;
 }
 
 const InfoIcon: React.FC<{ icon: React.ReactNode; value: string | number; tooltip: string }> = ({ icon, value, tooltip }) => (
@@ -30,7 +29,7 @@ const InfoIcon: React.FC<{ icon: React.ReactNode; value: string | number; toolti
 
 
 const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) => {
-    const { isOpen, onClose, assignmentTarget, idleVillagerCount, onAssignVillagers, onRecallVillagers, gatherInfo, buildingList, anchorRect, panelOpacity } = props;
+    const { isOpen, onClose, assignmentTarget, idleVillagerCount, onAssignVillagers, onRecallVillagers, gatherInfo, buildingList, anchorRect } = props;
     
     const [assignCount, setAssignCount] = useState(1);
     const [recallCount, setRecallCount] = useState(1);
@@ -120,7 +119,7 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
 
     const maxAssignable = idleVillagerCount;
     
-    const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `max(8px, ${currentAnchor.left - 144}px)`, transformOrigin: 'top center', '--panel-opacity': panelOpacity } as React.CSSProperties;
+    const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `max(8px, ${currentAnchor.left - 144}px)`, transformOrigin: 'top center' } as React.CSSProperties;
 
     return (
         <div style={panelStyle} className={`fixed z-40 w-80 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>

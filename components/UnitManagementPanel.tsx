@@ -14,7 +14,6 @@ interface UnitManagementPanelProps {
     onInitiateBuild: (villagerId: string, rect: DOMRect) => void;
     getVillagerTaskDetails: (villagerId: string) => string;
     anchorRect: DOMRect | null;
-    panelOpacity: number;
 }
 
 const ActionButton: React.FC<{
@@ -31,7 +30,7 @@ const ActionButton: React.FC<{
         >
             <div className="w-5 h-5">{children}</div>
         </button>
-        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none z-10">
             {title}
         </div>
     </div>
@@ -128,7 +127,7 @@ const UnitRow: React.FC<{
 };
 
 
-const UnitManagementPanel: React.FC<UnitManagementPanelProps> = ({ isOpen, onClose, units, type, onUpdateUnit, onDismissUnit, onInitiateBuild, getVillagerTaskDetails, anchorRect, panelOpacity }) => {
+const UnitManagementPanel: React.FC<UnitManagementPanelProps> = ({ isOpen, onClose, units, type, onUpdateUnit, onDismissUnit, onInitiateBuild, getVillagerTaskDetails, anchorRect }) => {
     
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ type, units, anchorRect });
@@ -159,7 +158,6 @@ const UnitManagementPanel: React.FC<UnitManagementPanelProps> = ({ isOpen, onClo
         top: `${currentAnchor.bottom + 8}px`,
         left: `${currentAnchor.left}px`,
         transformOrigin: 'top left',
-        '--panel-opacity': panelOpacity,
         maxHeight: `calc(100vh - ${currentAnchor.bottom + 24}px)`,
     } as React.CSSProperties;
 

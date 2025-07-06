@@ -1,7 +1,7 @@
 
 import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon, SettingsIcon } from './icons/ResourceIcons';
+import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText } from 'lucide-react';
 
@@ -30,7 +30,6 @@ interface GameUIProps {
     constructingBuildings: ConstructingBuilding[];
     activeTasks: GameTask[];
     onExitGame: () => void;
-    onOpenSettingsPanel: (rect: DOMRect) => void;
     onOpenCivPanel: (rect: DOMRect) => void;
     resourceNodes: ResourceNode[];
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
@@ -81,7 +80,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
+        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -125,18 +124,6 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                     <HeaderStat icon={<StoneIcon/>} value={Math.floor(resources.stone)} delta={resourceDeltas.stone} tooltip="Stone"/>
                     
                     <div className="relative group pl-4">
-                         <button 
-                            onClick={(e) => onOpenSettingsPanel(e.currentTarget.getBoundingClientRect())} 
-                            className="w-8 h-8 p-1 text-parchment-dark hover:text-brand-gold transition-colors duration-200"
-                            aria-label="Open Settings"
-                        >
-                            <SettingsIcon />
-                        </button>
-                        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                            Settings
-                        </div>
-                    </div>
-                    <div className="relative group">
                          <button 
                             onClick={onExitGame} 
                             className="w-8 h-8 p-1 text-parchment-dark hover:text-brand-red transition-colors duration-200"

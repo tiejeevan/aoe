@@ -24,7 +24,6 @@ interface BuildingManagementPanelProps {
     onAdvanceAge: () => void;
     activeTasks: GameTask[];
     anchorRect: DOMRect | null;
-    panelOpacity: number;
 }
 
 
@@ -119,7 +118,7 @@ const CostDisplay: React.FC<{ cost: { [key in keyof Resources]?: number }, resou
 
 
 const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) => {
-    const { isOpen, onClose, panelState, buildings, buildingList, onUpdateBuilding, onDemolishBuilding, onTrainUnits, onTrainVillagers, resources, population, unitList, onAdvanceAge, activeTasks, anchorRect, panelOpacity } = props;
+    const { isOpen, onClose, panelState, buildings, buildingList, onUpdateBuilding, onDemolishBuilding, onTrainUnits, onTrainVillagers, resources, population, unitList, onAdvanceAge, activeTasks, anchorRect } = props;
     
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ panelState, buildings, anchorRect });
@@ -178,7 +177,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const canAffordVillagers = resources.food >= totalVillagerCost.food;
     const canTrainVillagers = canAffordVillagers && hasPopCapacity && !activeVillagerTask;
 
-    const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `${currentAnchor.left}px`, transformOrigin: 'top left', '--panel-opacity': panelOpacity } as React.CSSProperties;
+    const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `${currentAnchor.left}px`, transformOrigin: 'top left' } as React.CSSProperties;
 
     // --- Tooltip Text Generation ---
     const getTrainUnitTooltip = () => {

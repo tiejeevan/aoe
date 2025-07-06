@@ -3,7 +3,7 @@ import type { UINotification } from '../types';
 
 interface NotificationProps {
     notification: UINotification;
-    onClose: () => void;
+    onClose: (id: string) => void;
 }
 
 const Notification: React.FC<NotificationProps> = ({ notification, onClose }) => {
@@ -17,7 +17,7 @@ const Notification: React.FC<NotificationProps> = ({ notification, onClose }) =>
         }, 4500); // Start exit animation 0.5s before removal
 
         autoCloseTimerRef.current = window.setTimeout(() => {
-            onClose();
+            onClose(notification.id);
         }, 5000); // Remove after 5s
 
         return () => {
@@ -26,7 +26,7 @@ const Notification: React.FC<NotificationProps> = ({ notification, onClose }) =>
                 window.clearTimeout(autoCloseTimerRef.current);
             }
         };
-    }, [onClose]);
+    }, [onClose, notification.id]);
 
     // Handler for the manual close button
     const handleManualClose = () => {
@@ -39,7 +39,7 @@ const Notification: React.FC<NotificationProps> = ({ notification, onClose }) =>
         setIsExiting(true);
         
         // Remove the component after the animation completes (500ms duration)
-        window.setTimeout(() => onClose(), 500);
+        window.setTimeout(() => onClose(notification.id), 500);
     };
 
     return (
@@ -80,7 +80,7 @@ const NotificationManager: React.FC<NotificationManagerProps> = ({ notifications
                 <Notification
                     key={notification.id}
                     notification={notification}
-                    onClose={() => onRemoveNotification(notification.id)}
+                    onClose={onRemoveNotification}
                 />
             ))}
         </div>

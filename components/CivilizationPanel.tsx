@@ -30,11 +30,25 @@ const CivilizationPanel: React.FC<CivilizationPanelProps> = ({ isOpen, onClose, 
 
     const { civilization: currentCiv, anchorRect: currentAnchor } = currentData;
     
-    const panelStyle: React.CSSProperties = {
-        top: `${currentAnchor.bottom + 8}px`,
-        left: `${currentAnchor.left}px`,
-        transformOrigin: 'top left',
-    } as React.CSSProperties;
+    const panelWidth = 384; // from w-96
+    const panelGap = 8;
+
+    const panelStyle: React.CSSProperties = {};
+    
+    panelStyle.top = `${currentAnchor.bottom + panelGap}px`;
+
+    let leftPos = currentAnchor.left;
+    if (leftPos + panelWidth > window.innerWidth - panelGap) {
+        leftPos = window.innerWidth - panelWidth - panelGap;
+        panelStyle.transformOrigin = 'top right';
+    } else {
+        panelStyle.transformOrigin = 'top left';
+    }
+    if (leftPos < panelGap) {
+        leftPos = panelGap;
+    }
+    panelStyle.left = `${leftPos}px`;
+
 
     return (
         <div 

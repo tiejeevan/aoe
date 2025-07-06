@@ -177,7 +177,32 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const canAffordVillagers = resources.food >= totalVillagerCost.food;
     const canTrainVillagers = canAffordVillagers && hasPopCapacity && !activeVillagerTask;
 
-    const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `${currentAnchor.left}px`, transformOrigin: 'top left' } as React.CSSProperties;
+    const panelWidth = 384; // from w-96
+    const panelHeightEstimate = 400; // A safe estimate
+    const panelGap = 8;
+
+    const panelStyle: React.CSSProperties = {};
+
+    const spaceBelow = window.innerHeight - currentAnchor.bottom;
+    const spaceAbove = currentAnchor.top;
+
+    if (spaceBelow < panelHeightEstimate && spaceAbove > spaceBelow) {
+        panelStyle.bottom = `${window.innerHeight - currentAnchor.top + panelGap}px`;
+        panelStyle.transformOrigin = 'bottom center';
+    } else {
+        panelStyle.top = `${currentAnchor.bottom + panelGap}px`;
+        panelStyle.transformOrigin = 'top center';
+    }
+
+    let leftPos = currentAnchor.left + currentAnchor.width / 2 - panelWidth / 2;
+    if (leftPos + panelWidth > window.innerWidth - panelGap) {
+        leftPos = window.innerWidth - panelWidth - panelGap;
+    }
+    if (leftPos < panelGap) {
+        leftPos = panelGap;
+    }
+    panelStyle.left = `${leftPos}px`;
+
 
     // --- Tooltip Text Generation ---
     const getTrainUnitTooltip = () => {

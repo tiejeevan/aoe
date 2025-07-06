@@ -64,12 +64,24 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
     const { anchorRect: currentAnchor } = currentData;
     if (!currentAnchor) return null;
 
+    const panelWidth = 288; // from w-72
+    const panelGap = 8;
+
     const panelStyle: React.CSSProperties = {
-        bottom: `${window.innerHeight - currentAnchor.top + 8}px`,
-        left: `${currentAnchor.left}px`,
-        transformOrigin: 'bottom left',
+        transformOrigin: 'bottom center',
         maxHeight: `${currentAnchor.top - 24}px`,
-    } as React.CSSProperties;
+    };
+    
+    panelStyle.bottom = `${window.innerHeight - currentAnchor.top + panelGap}px`;
+
+    let leftPos = currentAnchor.left + currentAnchor.width / 2 - panelWidth / 2;
+    if (leftPos + panelWidth > window.innerWidth - panelGap) {
+        leftPos = window.innerWidth - panelWidth - panelGap;
+    }
+    if (leftPos < panelGap) {
+        leftPos = panelGap;
+    }
+    panelStyle.left = `${leftPos}px`;
     
     const totalBuildings = Object.values(buildingCounts).reduce((a, b) => a + b, 0);
 

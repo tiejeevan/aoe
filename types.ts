@@ -79,13 +79,20 @@ export interface GameStatePayload {
     buildings: { [key in BuildingType]?: number };
 }
 
+export type BuildingCosts = { [key in keyof Resources]?: number };
+
+export interface EventEffect {
+    resource: keyof Resources | 'none';
+    amount: number | [number, number]; // e.g., 50 or [50, 100]
+    log: string;
+}
+
 export interface GameEventChoice {
     text: string;
-    effects: {
-        resource: keyof Resources | 'none';
-        amount: number;
-        log: string;
-    }
+    cost?: BuildingCosts;
+    successChance?: number; // 0-1, undefined means 100%
+    successEffects: EventEffect;
+    failureEffects?: EventEffect;
 }
 
 export interface GameEvent {
@@ -100,8 +107,6 @@ export interface GameLogEntry {
     message: string;
     icon: LogIconType;
 }
-
-export type BuildingCosts = { [key in keyof Resources]?: number };
 
 export interface BuildingInfo {
     id: BuildingType;

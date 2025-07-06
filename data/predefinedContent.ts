@@ -40,30 +40,70 @@ export const PREDEFINED_BANNER_URLS: string[] = [
 
 export const PREDEFINED_EVENTS: GameEvent[] = [
     {
-        message: "A sudden downpour has made the forests damp and difficult to work in, but the fields are thriving.",
+        message: "A traveling merchant has arrived, offering a bulk discount on wood.",
         choices: [
-            { text: "Focus on the farms", effects: { resource: 'food', amount: 100, log: "Your focus on farming yields a small surplus." } },
-            { text: "Press on with logging", effects: { resource: 'wood', amount: -50, log: "Wet wood and difficult conditions lead to a loss of resources." } }
+            { 
+                text: "Buy 100 Wood", 
+                cost: { gold: 40 },
+                successEffects: { resource: 'wood', amount: 100, log: "The deal is made. The wood is added to your stockpile." } 
+            },
+            { 
+                text: "Politely decline", 
+                successEffects: { resource: 'none', amount: 0, log: "You send the merchant on their way." } 
+            }
         ]
     },
     {
-        message: "Scouts have discovered a small, unguarded gold deposit in the nearby hills.",
+        message: "Your scouts have found an ancient, treasure-filled ruin. It seems risky to explore.",
         choices: [
-            { text: "Mine it immediately", effects: { resource: 'gold', amount: 150, log: "You successfully secured the extra gold." } },
-            { text: "Leave it for later", effects: { resource: 'none', amount: 0, log: "You decide not to risk sending workers so far away." } }
+            { 
+                text: "Send an expedition (70% success)",
+                cost: { food: 50 },
+                successChance: 0.7,
+                successEffects: { resource: 'gold', amount: [150, 250], log: "Success! Your explorers return with a hoard of ancient gold." },
+                failureEffects: { resource: 'food', amount: 0, log: "The expedition fails, and some supplies are lost, but everyone returns safely." }
+            },
+            { 
+                text: "Leave it be",
+                successEffects: { resource: 'none', amount: 0, log: "You decide the potential treasure is not worth the risk." }
+            }
         ]
     },
     {
-        message: "A traveling mystic offers to bless your villagers, promising increased hardiness for a small donation.",
+        message: "Unusually rich soil has been discovered nearby. A perfect place for a temporary farm.",
         choices: [
-            { text: "Pay the mystic (50 Gold)", effects: { resource: 'gold', amount: -50, log: "Your villagers feel invigorated, though your treasury is lighter." } },
-            { text: "Decline the offer", effects: { resource: 'none', amount: 0, log: "You send the mystic on their way." } }
+            { 
+                text: "Exploit the fertile ground", 
+                successEffects: { resource: 'food', amount: [200, 300], log: "Your workers quickly establish a farm and bring in a massive surplus of food." } 
+            }
         ]
     },
     {
-        message: "A vein of poor-quality stone has been discovered in your quarry, slowing down operations.",
+        message: "A fire breaks out in one of your storage huts!",
         choices: [
-            { text: "A necessary setback.", effects: { resource: 'stone', amount: -75, log: "You lose some stone while clearing the poor-quality vein." } }
+            { 
+                text: "Organize a bucket brigade (80% success)",
+                successChance: 0.8,
+                successEffects: { resource: 'wood', amount: -25, log: "The fire is quickly put out, with only minor losses." },
+                failureEffects: { resource: 'wood', amount: [-100, -150], log: "The fire rages out of control before being contained, destroying a large amount of wood." }
+            },
+            {
+                text: "Prioritize saving villagers",
+                successEffects: { resource: 'wood', amount: [-80, -120], log: "Everyone is safe, but the storage hut and its contents are mostly lost." }
+            }
+        ]
+    },
+    {
+        message: "A neighboring clan sends an envoy with a gift to foster good relations.",
+        choices: [
+            {
+                text: "Accept the gift of stone",
+                successEffects: { resource: 'stone', amount: 75, log: "You accept the gift, strengthening ties with your neighbors." }
+            },
+             {
+                text: "Accept the gift of food",
+                successEffects: { resource: 'food', amount: 100, log: "You accept the gift, a welcome addition to your stores." }
+            }
         ]
     }
 ];

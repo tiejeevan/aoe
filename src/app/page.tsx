@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, ConstructingBuilding, TaskType, ResourceNode, ResourceNodeType, PlayerActionState } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, ConstructingBuilding, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
@@ -79,8 +79,8 @@ const GamePage: React.FC = () => {
     const [settingsPanelState, setSettingsPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
     const [civPanelState, setCivPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
 
-
     const deltaTimeoutRef = useRef<{ [key in keyof Resources]?: number }>({});
+    const eventTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const population = {
         current: units.villagers.length + units.military.length,
@@ -162,6 +162,14 @@ const GamePage: React.FC = () => {
         setActivityStatus('A new event requires your attention!');
     }, [civilization, currentEvent, activeTasks.length]);
     
+    const scheduleNextEvent = useCallback(() => {
+        if (eventTimerRef.current) {
+            clearTimeout(eventTimerRef.current);
+        }
+        const nextEventTime = (45 + Math.random() * 45) * 1000; // 45-90 seconds
+        eventTimerRef.current = setTimeout(() => handleNewEvent(), nextEventTime);
+    }, [handleNewEvent]);
+
     const generateResourceNodes = (existingPositions: Set<string>): ResourceNode[] => {
         const nodes: ResourceNode[] = [];
         const types: ResourceNodeType[] = ['food', 'wood', 'gold', 'stone'];
@@ -318,7 +326,7 @@ const GamePage: React.FC = () => {
     const handleTaskCompletion = useCallback((task: GameTask) => {
         switch (task.type) {
             case 'build': {
-                const { buildingType, position, villagerIds } = task.payload!;
+                const { buildingType, villagerIds } = task.payload!;
                 const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
                 const [name] = getRandomNames('building', 1);
                 const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
@@ -411,19 +419,71 @@ const GamePage: React.FC = () => {
 
     useEffect(() => {
         if (gameState === GameStatus.PLAYING && !currentEvent && !playerAction && activeTasks.length === 0) {
-            const timer = setTimeout(() => handleNewEvent(), 30000);
-            return () => clearTimeout(timer);
+            scheduleNextEvent();
+        } else if (eventTimerRef.current) {
+            clearTimeout(eventTimerRef.current);
         }
-    }, [gameState, currentEvent, handleNewEvent, playerAction, activeTasks]);
 
-    const handleEventChoice = (choice: GameEvent['choices'][0]) => {
-        addToLog(`Choice: ${choice.text}.`, 'event');
-        setActivityStatus(choice.effects.log);
-        addToLog(choice.effects.log, choice.effects.resource !== 'none' ? choice.effects.resource as LogIconType : 'system');
-        if (choice.effects.resource !== 'none') {
-            updateResources({ [choice.effects.resource]: choice.effects.amount });
+        return () => {
+            if (eventTimerRef.current) {
+                clearTimeout(eventTimerRef.current);
+            }
+        };
+    }, [gameState, currentEvent, playerAction, activeTasks.length, scheduleNextEvent]);
+
+    const handleEventChoice = (choice: GameEventChoice) => {
+        addToLog(`Decision: "${choice.text}"`, 'event');
+
+        // 1. Check and apply cost
+        if (choice.cost) {
+            const missingRes: string[] = [];
+            for (const key in choice.cost) {
+                const resKey = key as keyof Resources;
+                if (resources[resKey] < (choice.cost[resKey] || 0)) {
+                    missingRes.push(resKey);
+                }
+            }
+            if (missingRes.length > 0) {
+                addNotification(`You lack the required resources: ${missingRes.join(', ')}.`);
+                return;
+            }
+            const negativeCost: ResourceDeltas = {};
+            for (const key in choice.cost) {
+                const resKey = key as keyof Resources;
+                negativeCost[resKey] = -(choice.cost[resKey] || 0);
+            }
+            updateResources(negativeCost);
         }
+        
+        // 2. Determine success
+        const isSuccess = choice.successChance === undefined || Math.random() < choice.successChance;
+        const effects = isSuccess ? choice.successEffects : choice.failureEffects;
+
+        if (!effects) { // Handle cases with no failure effect defined
+            setCurrentEvent(null);
+            scheduleNextEvent();
+            return;
+        }
+
+        // 3. Calculate resource change
+        let amount = 0;
+        if (Array.isArray(effects.amount)) {
+            const [min, max] = effects.amount;
+            amount = Math.floor(Math.random() * (max - min + 1)) + min;
+        } else {
+            amount = effects.amount;
+        }
+        
+        // 4. Apply effects
+        if (effects.resource !== 'none' && amount !== 0) {
+            updateResources({ [effects.resource]: amount });
+        }
+        
+        // 5. Log and update UI
+        addToLog(effects.log, effects.resource !== 'none' ? effects.resource : 'system');
+        setActivityStatus(effects.log);
         setCurrentEvent(null);
+        scheduleNextEvent();
     };
 
     const handleInitiateBuild = (villagerId: string, rect: DOMRect) => {

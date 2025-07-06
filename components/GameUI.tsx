@@ -152,6 +152,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                             mapDimensions={mapDimensions}
                             buildingList={buildingList}
                             resourceNodes={resourceNodes}
+                            units={units}
                             onOpenAssignmentPanel={onOpenAssignmentPanel}
                             onOpenConstructionPanel={onOpenConstructionPanel}
                             gatherInfo={gatherInfo}

@@ -77,6 +77,8 @@ const GamePage: React.FC = () => {
 
     const deltaTimeoutRef = useRef<{ [key in keyof Resources]?: number }>({});
     const eventTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const lastTickRef = useRef<number>(Date.now());
+    const animationFrameRef = useRef<number>();
 
     const population = {
         current: units.villagers.length + units.military.length,
@@ -210,13 +212,20 @@ const GamePage: React.FC = () => {
     
     // Game Loop
     useEffect(() => {
-        if (gameState !== GameStatus.PLAYING) return;
-        const gameLoop = setInterval(() => {
+        if (gameState !== GameStatus.PLAYING) {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            return;
+        }
+
+        const gameLoop = () => {
             const now = Date.now();
+            const deltaTime = now - lastTickRef.current;
+            lastTickRef.current = now;
+
             let completedTasks: GameTask[] = [];
             let resourceDeltasThisTick: ResourceDeltas = {};
 
-            const stillActiveTasks = activeTasks.map(task => {
+            const tasksInProgress = activeTasks.map(task => {
                 if (now >= task.startTime + task.duration) {
                     completedTasks.push(task);
                     return null;
@@ -224,16 +233,30 @@ const GamePage: React.FC = () => {
                 
                 if (task.type === 'gather') {
                     const node = resourceNodes.find(n => n.id === task.payload?.resourceNodeId);
-                    const villagerCount = task.payload?.villagerIds?.length || 0;
+                    const assignedVillagers = units.villagers.filter(v => v.currentTask === task.id);
+                    const villagerCount = assignedVillagers.length;
                     
                     if (!node || villagerCount === 0) {
-                        completedTasks.push(task); // Orphaned or empty gather task, mark for removal
+                        completedTasks.push(task); // Orphaned or empty gather task
                         return null; 
                     }
 
-                    const gatherRatePerVillagerPerSecond = GATHER_INFO[node.type].rate;
-                    const amountGatheredThisTick = gatherRatePerVillagerPerSecond * villagerCount;
-
+                    const baseRatePerSecond = GATHER_INFO[node.type].rate;
+                    let bonusMultiplier = 1;
+                    if (civilization) {
+                        const bonusString = civilization.bonus.toLowerCase();
+                        const resourceString = node.type.toLowerCase();
+                        if (bonusString.includes(resourceString)) {
+                            const match = bonusString.match(/(\d+)%/);
+                            if (match && match[1]) {
+                                bonusMultiplier = 1 + (parseInt(match[1], 10) / 100);
+                            }
+                        }
+                    }
+                    
+                    const finalRatePerSecond = baseRatePerSecond * bonusMultiplier;
+                    const amountGatheredThisTick = (finalRatePerSecond / 1000) * deltaTime * villagerCount;
+                    
                     resourceDeltasThisTick[node.type] = (resourceDeltasThisTick[node.type] || 0) + amountGatheredThisTick;
                 }
 
@@ -241,16 +264,8 @@ const GamePage: React.FC = () => {
 
             }).filter(Boolean) as GameTask[];
             
-            // Update resource nodes separately to avoid race conditions with state
             if (Object.keys(resourceDeltasThisTick).length > 0) {
-                setResources(prevRes => {
-                    const newResources = { ...prevRes };
-                    for(const key in resourceDeltasThisTick) {
-                        const resKey = key as keyof Resources;
-                        newResources[resKey] += resourceDeltasThisTick[resKey]!;
-                    }
-                    return newResources;
-                });
+                updateResources(resourceDeltasThisTick);
 
                 setResourceNodes(prevNodes => {
                     const newNodes = prevNodes.map(node => {
@@ -258,10 +273,12 @@ const GamePage: React.FC = () => {
                         if (amountToDecrement) {
                             const newAmount = node.amount - amountToDecrement;
                             if (newAmount <= 0) {
-                                addToLog(`${node.assignedVillagers.length} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
+                                const taskId = `gather-${node.id}`;
+                                const assigned = units.villagers.filter(v => v.currentTask === taskId);
+                                addToLog(`${assigned.length} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
                                 setActivityStatus(`A ${node.type} source has been fully depleted.`);
 
-                                const gatherTask = stillActiveTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === node.id);
+                                const gatherTask = tasksInProgress.find(t => t.id === taskId);
                                 if(gatherTask) completedTasks.push(gatherTask);
 
                                 return null;
@@ -275,16 +292,22 @@ const GamePage: React.FC = () => {
                 });
             }
 
-            const finalActiveTasks = stillActiveTasks.filter(t => !completedTasks.some(ct => ct.id === t.id));
+            const finalActiveTasks = tasksInProgress.filter(t => !completedTasks.some(ct => ct.id === t.id));
             setActiveTasks(finalActiveTasks);
 
             if (completedTasks.length > 0) {
                 completedTasks.forEach(handleTaskCompletion);
             }
-        }, 1000);
+            
+            animationFrameRef.current = requestAnimationFrame(gameLoop);
+        };
 
-        return () => clearInterval(gameLoop);
-    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog]);
+        animationFrameRef.current = requestAnimationFrame(gameLoop);
+
+        return () => {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        };
+    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog, updateResources, units.villagers, civilization]);
 
 
     const handleNewEvent = useCallback(() => {
@@ -326,7 +349,7 @@ const GamePage: React.FC = () => {
             const type = types[Math.floor(Math.random() * types.length)];
             const amount = Math.floor(Math.random() * (2500 - 500 + 1)) + 500;
 
-            nodes.push({ id: `${Date.now()}-node-${i}`, type, position: pos, amount, assignedVillagers: [] });
+            nodes.push({ id: `${Date.now()}-node-${i}`, type, position: pos, amount });
         }
         return nodes;
     };
@@ -765,10 +788,6 @@ const GamePage: React.FC = () => {
         const taskId = `gather-${nodeId}`;
         const existingTask = activeTasks.find(t => t.id === taskId);
     
-        setResourceNodes(prevNodes => 
-            prevNodes.map(n => n.id === nodeId ? {...n, assignedVillagers: [...new Set([...n.assignedVillagers, ...villagerIdsToAssign])]} : n)
-        );
-        
         if (unlimitedResources) {
             updateResources({ [targetNode.type]: targetNode.amount });
             addToLog(`${cappedCount} villager(s) instantly gathered ${Math.floor(targetNode.amount)} ${targetNode.type}.`, targetNode.type);
@@ -780,7 +799,7 @@ const GamePage: React.FC = () => {
                     payload: { ...t.payload, villagerIds: [...new Set([...t.payload!.villagerIds!, ...villagerIdsToAssign])] }
                 } : t));
             } else {
-                 const newTask: GameTask = { id: taskId, type: 'gather', startTime: Date.now(), duration: 86400000, payload: { resourceNodeId: nodeId, villagerIds: villagerIdsToAssign }}; // Duration is arbitrary
+                 const newTask: GameTask = { id: taskId, type: 'gather', startTime: Date.now(), duration: 999999999, payload: { resourceNodeId: nodeId, villagerIds: villagerIdsToAssign }}; // Duration is arbitrary
                  setActiveTasks(prev => [...prev, newTask]);
             }
             setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagerIdsToAssign.includes(v.id) ? {...v, currentTask: taskId} : v)}));
@@ -793,15 +812,16 @@ const GamePage: React.FC = () => {
 
     const handleRecallVillagers = (targetId: string, count: number, type: 'resource' | 'construction') => {
         if (type === 'resource') {
+            const taskId = `gather-${targetId}`;
             const node = resourceNodes.find(n => n.id === targetId);
-            if (!node || (node.assignedVillagers || []).length < count) return;
+            const assignedVillagers = units.villagers.filter(v => v.currentTask === taskId);
+            
+            if (!node || assignedVillagers.length < count) return;
     
-            const villagersToRecall = node.assignedVillagers.slice(node.assignedVillagers.length - count);
+            const villagersToRecall = assignedVillagers.slice(assignedVillagers.length - count).map(v => v.id);
             setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToRecall.includes(v.id) ? {...v, currentTask: null} : v)}));
-            setResourceNodes(prev => prev.map(n => n.id === targetId ? { ...n, assignedVillagers: n.assignedVillagers.filter(id => !villagersToRecall.includes(id)) } : n));
     
             setActiveTasks(prev => {
-                const taskId = `gather-${targetId}`;
                 const taskIndex = prev.findIndex(t => t.id === taskId);
                 if (taskIndex === -1) return prev;
                 
@@ -1131,6 +1151,7 @@ const GamePage: React.FC = () => {
                             onRecallVillagers={handleRecallVillagers}
                             gatherInfo={GATHER_INFO}
                             buildingList={BUILDINGS_INFO}
+                            units={units}
                             anchorRect={assignmentPanelState.anchorRect}
                         />
                         <CivilizationPanel

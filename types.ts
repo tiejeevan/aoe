@@ -139,7 +139,6 @@ export interface ResourceNode {
   type: ResourceNodeType;
   position: { x: number; y: number; };
   amount: number;
-  assignedVillagers: string[];
 }
 
 export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' | 'advance_age';

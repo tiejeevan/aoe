@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingInfo, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
+import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingInfo, PlayerActionState, ResourceNode, ResourceNodeType, Units, Villager } from '../types';
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 import { VillagerIcon } from './icons/ResourceIcons';
@@ -32,17 +32,17 @@ const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingInfo
     );
 };
 
-const ResourceNodeTooltip: React.FC<{ node: ResourceNode; gatherInfo: Record<ResourceNodeType, { rate: number }> }> = ({ node, gatherInfo }) => {
-    const gatherRate = node.assignedVillagers.length > 0 ? node.assignedVillagers.length * gatherInfo[node.type].rate : 0;
+const ResourceNodeTooltip: React.FC<{ node: ResourceNode; gatherInfo: Record<ResourceNodeType, { rate: number }>; villagerCount: number }> = ({ node, gatherInfo, villagerCount }) => {
+    const gatherRate = villagerCount > 0 ? villagerCount * gatherInfo[node.type].rate : 0;
     
     return (
         <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
             <p className="capitalize font-bold">{node.type}</p>
             <p>Amount: {Math.floor(node.amount)}</p>
-            {node.assignedVillagers.length > 0 && (
+            {villagerCount > 0 && (
                 <>
                     <hr className="border-stone-light/20 my-1" />
-                    <p>Workers: {node.assignedVillagers.length}</p>
+                    <p>Workers: {villagerCount}</p>
                     <p>Rate: {gatherRate.toFixed(1)}/s</p>
                 </>
             )}
@@ -61,12 +61,13 @@ interface GameMapProps {
     mapDimensions: { width: number; height: number; };
     buildingList: BuildingInfo[];
     resourceNodes: ResourceNode[];
+    units: Units;
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
     onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
 }
 
-const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {
+const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, units, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {
     const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number; } | null>(null);
 
     const constructionTasks = useMemo(() => activeTasks.filter(t => t.type === 'build'), [activeTasks]);
@@ -141,7 +142,8 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                 const resourceNode = getResourceNodeAt(x, y);
                 const isOccupied = !!building || !!constructionTask || !!resourceNode;
                 
-                const gatherTask = resourceNode ? activeTasks.find(t => t.id === resourceNode.id) : undefined;
+                const gatherTask = resourceNode ? activeTasks.find(t => t.id === `gather-${resourceNode.id}`) : undefined;
+                const assignedVillagerCount = resourceNode ? units.villagers.filter(v => v.currentTask === `gather-${resourceNode.id}`).length : 0;
                 const buildingInfo = constructionTask ? buildingList.find(b => b.id === constructionTask.payload?.buildingType) : undefined;
 
                 let cellClass = "bg-stone-dark/20 hover:bg-stone-light/10 transition-colors duration-150";
@@ -204,16 +206,16 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                         {resourceNode && (
                             <div className="absolute inset-0 p-1.5 text-parchment-light/80 flex flex-col items-center justify-center group">
                                 {iconMap[resourceNode.type]}
-                                <ResourceNodeTooltip node={resourceNode} gatherInfo={gatherInfo} />
+                                <ResourceNodeTooltip node={resourceNode} gatherInfo={gatherInfo} villagerCount={assignedVillagerCount} />
                                 {gatherTask && (
                                     <div className="absolute bottom-0.5 w-10/12 h-1.5">
                                         <ProgressBar startTime={gatherTask.startTime} duration={gatherTask.duration}/>
                                     </div>
                                 )}
-                                {resourceNode.assignedVillagers.length > 0 && (
+                                {assignedVillagerCount > 0 && (
                                     <div className="absolute top-0.5 right-0.5 flex items-center bg-stone-dark/80 rounded-full px-1.5 py-0.5 text-xs text-brand-blue z-10">
                                         <div className="w-3 h-3"><VillagerIcon /></div>
-                                        <span className="ml-1 font-bold">{resourceNode.assignedVillagers.length}</span>
+                                        <span className="ml-1 font-bold">{assignedVillagerCount}</span>
                                     </div>
                                 )}
                             </div>

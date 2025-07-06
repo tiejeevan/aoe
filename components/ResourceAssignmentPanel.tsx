@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { ResourceNode, ResourceNodeType, GameTask, BuildingInfo } from '../types';
+import type { ResourceNode, ResourceNodeType, GameTask, BuildingInfo, Units } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, VillagerIcon, ClockIcon, GatherIcon, BuildIcon } from './icons/ResourceIcons';
 import { iconMap } from './GameUI';
 import { Undo2 } from 'lucide-react';
@@ -14,6 +14,7 @@ interface ResourceAssignmentPanelProps {
     onRecallVillagers: (targetId: string, count: number, type: 'resource' | 'construction') => void;
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
     buildingList: BuildingInfo[];
+    units: Units;
     anchorRect: DOMRect | null;
 }
 
@@ -29,36 +30,37 @@ const InfoIcon: React.FC<{ icon: React.ReactNode; value: string | number; toolti
 
 
 const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) => {
-    const { isOpen, onClose, assignmentTarget, idleVillagerCount, onAssignVillagers, onRecallVillagers, gatherInfo, buildingList, anchorRect } = props;
+    const { isOpen, onClose, assignmentTarget, idleVillagerCount, onAssignVillagers, onRecallVillagers, gatherInfo, buildingList, units, anchorRect } = props;
     
     // --- Hooks ---
     // All hooks must be called unconditionally at the top level.
     const [assignCount, setAssignCount] = useState(1);
     const [recallCount, setRecallCount] = useState(1);
     const [isClosing, setIsClosing] = useState(false);
-    const [currentData, setCurrentData] = useState({ assignmentTarget, anchorRect });
+    const [currentData, setCurrentData] = useState({ assignmentTarget, anchorRect, units });
 
     // Effect to cache props for the closing animation
     useEffect(() => {
         if (isOpen || isClosing) {
-            setCurrentData({ assignmentTarget, anchorRect });
+            setCurrentData({ assignmentTarget, anchorRect, units });
         }
-    }, [assignmentTarget, anchorRect, isOpen, isClosing]);
+    }, [assignmentTarget, anchorRect, units, isOpen, isClosing]);
 
-    const { assignmentTarget: currentTarget, anchorRect: currentAnchor } = currentData;
+    const { assignmentTarget: currentTarget, anchorRect: currentAnchor, units: currentUnits } = currentData;
     
     const assignedCount = useMemo(() => {
-        if (!currentTarget) return 0;
+        if (!currentTarget || !currentUnits) return 0;
         const isResourceNode = 'amount' in currentTarget;
         if (isResourceNode) {
-            return (currentTarget.assignedVillagers || []).length;
+            const taskId = `gather-${currentTarget.id}`;
+            return currentUnits.villagers.filter(v => v.currentTask === taskId).length;
         }
         const isConstructionTask = 'type' in currentTarget && currentTarget.type === 'build';
         if (isConstructionTask) {
             return (currentTarget.payload?.villagerIds || []).length;
         }
         return 0;
-    }, [currentTarget]);
+    }, [currentTarget, currentUnits]);
 
     // Effect to reset slider values when the panel opens or the target changes
     useEffect(() => {
@@ -93,7 +95,7 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     // --- Conditional Rendering ---
     // Early returns must happen AFTER all hooks are called.
     if (!isOpen && !isClosing) return null;
-    if (!currentTarget || !currentAnchor) return null;
+    if (!currentTarget || !currentAnchor || !currentUnits) return null;
 
     // --- Render Logic ---
     const isConstruction = 'type' in currentTarget && currentTarget.type === 'build';
@@ -106,16 +108,17 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     
     if (isResource) {
         const node = currentTarget as ResourceNode;
-        const assignedVillagers = node.assignedVillagers || [];
+        const taskId = `gather-${node.id}`;
+        const assignedVillagersCount = currentUnits.villagers.filter(v => v.currentTask === taskId).length;
         title = `Gather ${node.type}`;
         const IconComponent = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
         MainIcon = IconComponent ? <IconComponent /> : <GatherIcon />;
         const currentRateInfo = gatherInfo[node.type];
-        const currentRate = assignedVillagers.length * (currentRateInfo ? currentRateInfo.rate : 0);
+        const currentRate = assignedVillagersCount * (currentRateInfo ? currentRateInfo.rate : 0);
         InfoIcons = (
             <>
                 <InfoIcon icon={MainIcon} value={Math.floor(node.amount)} tooltip="Remaining Amount" />
-                <InfoIcon icon={<VillagerIcon />} value={`${assignedVillagers.length}`} tooltip="Assigned Workers" />
+                <InfoIcon icon={<VillagerIcon />} value={`${assignedVillagersCount}`} tooltip="Assigned Workers" />
                 <InfoIcon icon={<ClockIcon />} value={`${currentRate.toFixed(1)}/s`} tooltip="Current Gather Rate" />
             </>
         );

@@ -18,6 +18,12 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
         }
     };
     
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleStart();
+        }
+    };
+
     return (
         <div className="text-center bg-stone-dark p-8 rounded-lg shadow-2xl border-2 border-stone-light w-full max-w-2xl">
             <h1 className="text-6xl font-serif text-parchment-light mb-2 tracking-wider">Gemini Empires</h1>
@@ -28,9 +34,11 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                     <input
                         type="text"
                         value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
+                        onChange={(e) => setNewName(e.target.value.toUpperCase())}
+                        onKeyDown={handleKeyDown}
                         placeholder="At least 4 characters..."
-                        className="bg-parchment-dark text-stone-dark placeholder-stone-light w-full max-w-sm mx-auto text-center font-sans text-xl p-3 rounded-lg border-2 border-stone-light focus:border-brand-gold focus:outline-none"
+                        className="bg-parchment-dark text-stone-dark placeholder-stone-light w-full max-w-sm mx-auto text-center font-sans text-xl p-3 rounded-lg border-2 border-stone-light focus:border-brand-gold focus:outline-none uppercase"
+                        maxLength={20}
                     />
                     <div className="flex gap-4 justify-center mt-6">
                          <button

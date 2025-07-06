@@ -86,7 +86,7 @@ export const getAllSaveNames = async (): Promise<string[]> => {
     }
 }
 
-export const clearGameState = async (saveName: string): Promise<void> => {
+export const deleteGameState = async (saveName: string): Promise<void> => {
     try {
         const db = await openDB();
         const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -98,6 +98,6 @@ export const clearGameState = async (saveName: string): Promise<void> => {
             transaction.onerror = () => reject(transaction.error);
         });
     } catch (error) {
-        console.error("Failed to clear game state:", error);
+        console.error("Failed to delete game state:", error);
     }
 };

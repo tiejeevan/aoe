@@ -4,7 +4,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, ConstructingBuilding, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames } from '@/services/dbService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import GameUI from '@/components/GameUI';
 import StartScreen from '@/components/StartScreen';
@@ -911,6 +911,12 @@ const GamePage: React.FC = () => {
         setGameState(GameStatus.MENU);
     };
 
+    const handleDeleteGame = async (saveName: string) => {
+        await deleteGameState(saveName);
+        await fetchSaves();
+        addNotification(`Deleted saga: "${saveName}"`);
+    };
+
     const handleToggleUnlimitedResources = () => {
         const newMode = !unlimitedResources;
         setUnlimitedResources(newMode);
@@ -990,7 +996,7 @@ const GamePage: React.FC = () => {
     const renderContent = () => {
         switch (gameState) {
             case GameStatus.MENU:
-                return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} />;
+                return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
             case GameStatus.LOADING:
                 return <LoadingScreen />;
             case GameStatus.PLAYING:
@@ -1112,7 +1118,7 @@ const GamePage: React.FC = () => {
                     </>
                 );
             default:
-                return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} />;
+                return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
         }
     };
 

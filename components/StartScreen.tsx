@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 
 interface StartScreenProps {
     onNewGame: (name: string) => void;
     onResumeGame: (name: string) => void;
     savedGames: string[];
+    onDeleteGame: (name: string) => void;
 }
 
-const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, savedGames }) => {
+const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, savedGames, onDeleteGame }) => {
     const [isNaming, setIsNaming] = useState(false);
     const [newName, setNewName] = useState('');
 
@@ -55,13 +57,24 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                                 <h3 className="text-xl font-serif text-brand-gold mb-2">Resume a Saga</h3>
                                 <div className="flex flex-col gap-3 max-h-48 overflow-y-auto bg-black/20 p-2 rounded-md">
                                     {savedGames.map(name => (
-                                        <button
-                                            key={name}
-                                            onClick={() => onResumeGame(name)}
-                                            className="w-full bg-brand-green/80 hover:bg-brand-green text-white font-bold py-2 px-4 rounded-md text-lg font-sans transition-colors duration-200"
-                                        >
-                                            {name}
-                                        </button>
+                                        <div key={name} className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => onResumeGame(name)}
+                                                className="flex-grow bg-brand-green/80 hover:bg-brand-green text-white font-bold py-2 px-4 rounded-md text-lg font-sans transition-colors duration-200 text-left"
+                                            >
+                                                {name}
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteGame(name);
+                                                }}
+                                                className="p-2 bg-stone-light/50 hover:bg-brand-red text-parchment-light rounded-md transition-colors"
+                                                aria-label={`Delete ${name}`}
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
                                     ))}
                                 </div>
                             </div>

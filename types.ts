@@ -30,6 +30,7 @@ export type ResourceDeltas = Partial<Resources>;
 export interface Villager {
     id: string;
     name: string;
+    currentTask: string | null; // null if idle, otherwise the ID of the GameTask
 }
 
 export type MilitaryUnitType = 'swordsman' | 'archer' | 'knight' | 'catapult';

@@ -110,7 +110,7 @@ const GamePage: React.FC = () => {
 
     const addNotification = useCallback((message: string) => {
         const id = `${Date.now()}-${Math.random()}`;
-        setNotifications(prev => [...prev, { id, message }]);
+        setNotifications(prev => [{ id, message }]);
     }, []);
 
     const removeNotification = useCallback((id: string) => {
@@ -149,6 +149,16 @@ const GamePage: React.FC = () => {
     }, []);
 
     const handleTaskCompletion = useCallback((task: GameTask) => {
+        // Free up any villagers that were assigned to this task
+        if (task.payload?.villagerIds && task.payload.villagerIds.length > 0) {
+            setUnits(prev => ({
+                ...prev,
+                villagers: prev.villagers.map(v => 
+                    task.payload!.villagerIds!.includes(v.id) ? { ...v, currentTask: null } : v
+                )
+            }));
+        }
+
         switch (task.type) {
             case 'build': {
                 const { buildingType, villagerIds, position } = task.payload!;
@@ -165,15 +175,13 @@ const GamePage: React.FC = () => {
                 break;
             }
             case 'gather': {
-                // This is now handled by the game loop depleting the node.
-                // handleTaskCompletion for gather is only called when the node is gone.
-                // The villagers assigned are now idle.
+                // Villagers are freed above. Nothing else to do here as the resource node depletion is handled in the game loop.
                 break;
             }
             case 'train_villager': {
                 const { count } = task.payload!;
                 const newVillagerNames = getRandomNames('villager', count!);
-                const newVillagers: Villager[] = newVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name }));
+                const newVillagers: Villager[] = newVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
                 setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
                 addToLog(`${count} new villager(s) have joined your settlement.`, 'villager');
                 setActivityStatus(`${count} new villager(s) are ready to work.`);
@@ -334,7 +342,7 @@ const GamePage: React.FC = () => {
         setCivilization(civ);
         setResources({ food: 200, wood: 150, gold: 50, stone: 100 });
         const initialVillagerNames = getRandomNames('villager', 3);
-        const initialVillagers: Villager[] = initialVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name }));
+        const initialVillagers: Villager[] = initialVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
         setUnits({ villagers: initialVillagers, military: [] });
         const [initialTCName] = getRandomNames('building', 1);
         const tcPosition = { x: Math.floor(MAP_DIMENSIONS.width / 2), y: Math.floor(MAP_DIMENSIONS.height / 2) };
@@ -353,26 +361,35 @@ const GamePage: React.FC = () => {
         fetchSaves();
     };
 
-    const getVillagerTaskDetails = useCallback((villagerId: string): string => {
-        const task = activeTasks.find(t => t.payload?.villagerIds?.includes(villagerId));
+    const isVillagerBusy = useCallback((villagerId: string): boolean => {
+        const villager = units.villagers.find(v => v.id === villagerId);
+        return !!villager?.currentTask;
+    }, [units.villagers]);
 
-        if (task) {
-            if (task.type === 'build') {
-                const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType);
-                return `Busy: Constructing ${buildingInfo?.name || 'a building'}`;
-            }
-            if (task.type === 'gather') {
-                const node = resourceNodes.find(n => n.id === task.payload!.resourceNodeId);
-                return `Busy: Gathering ${node?.type || 'resources'}`;
-            }
+    const getVillagerTaskDetails = useCallback((villagerId: string): string => {
+        const villager = units.villagers.find(v => v.id === villagerId);
+        if (!villager || !villager.currentTask) {
+            return 'Idle';
+        }
+        
+        const task = activeTasks.find(t => t.id === villager.currentTask);
+        if (!task) {
+            // This case can happen briefly if a task completes but state hasn't fully updated.
+            // Or it can indicate a bug if it persists.
+            return 'Idle (Finalizing Task)';
+        }
+
+        if (task.type === 'build') {
+            const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType);
+            return `Busy: Constructing ${buildingInfo?.name || 'a building'}`;
+        }
+        if (task.type === 'gather') {
+            const node = resourceNodes.find(n => n.id === task.payload!.resourceNodeId);
+            return `Busy: Gathering ${node?.type || 'resources'}`;
         }
         
         return 'Idle';
-    }, [activeTasks, resourceNodes]);
-
-    const isVillagerBusy = useCallback((villagerId: string) => {
-        return getVillagerTaskDetails(villagerId) !== 'Idle';
-    }, [getVillagerTaskDetails]);
+    }, [activeTasks, resourceNodes, units.villagers]);
 
     const handleResumeGame = async (saveName: string) => {
         const savedState = await loadGameState(saveName) as FullGameState;
@@ -382,15 +399,33 @@ const GamePage: React.FC = () => {
             setCivilization(savedState.civilization);
             setResources(savedState.resources);
             
+            // Migrate units data structure if necessary
+            let savedUnits = savedState.units || { villagers: [], military: [] };
             if ((savedState.units as any)?.soldiers) {
                  const migratedMilitary: MilitaryUnit[] = (savedState.units as any).soldiers.map((s: any) => ({ ...s, unitType: 'swordsman' }));
-                 setUnits({ villagers: savedState.units.villagers || [], military: migratedMilitary });
-            } else {
-                 setUnits(savedState.units || { villagers: [], military: [] });
+                 savedUnits = { villagers: savedUnits.villagers || [], military: migratedMilitary };
             }
+            // Migrate villagers to include currentTask
+            const migratedVillagers = savedUnits.villagers.map(v => ({...v, currentTask: v.currentTask !== undefined ? v.currentTask : null}));
+            const migratedTasks = (savedState.activeTasks || []).map(t => {
+                if (t.type === 'build' && !t.payload?.villagerIds) {
+                    return { ...t, payload: { ...t.payload, villagerIds: [] } };
+                }
+                return t;
+            });
+             // Back-fill currentTask for older saves
+            migratedTasks.forEach(task => {
+                if(task.payload?.villagerIds) {
+                    task.payload.villagerIds.forEach(vid => {
+                        const villager = migratedVillagers.find(v => v.id === vid);
+                        if(villager) villager.currentTask = task.id;
+                    });
+                }
+            });
+            setUnits({ ...savedUnits, villagers: migratedVillagers });
             
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
-            const constructionTasks = (savedState.activeTasks || []).filter(t => t.type === 'build');
+            const constructionTasks = (migratedTasks).filter(t => t.type === 'build');
             const occupiedCells = new Set([
                 ...Object.values(finalBuildings).flat().map((b: any) => `${b.position.x},${b.position.y}`),
                 ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)
@@ -431,13 +466,6 @@ const GamePage: React.FC = () => {
 
             setCurrentAge(savedState.currentAge);
             setGameLog(savedState.gameLog);
-            
-            const migratedTasks = (savedState.activeTasks || []).map(t => {
-                if (t.type === 'build' && !t.payload?.villagerIds) {
-                    return { ...t, payload: { ...t.payload, villagerIds: [] } };
-                }
-                return t;
-            });
             setActiveTasks(migratedTasks);
             
             setCurrentEvent(null);
@@ -592,6 +620,7 @@ const GamePage: React.FC = () => {
                 payload: taskPayload
             };
             setActiveTasks(prev => [...prev, newTask]);
+            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => v.id === villagerId ? {...v, currentTask: taskId} : v)}));
             setActivityStatus(`${builder.name} has started constructing a ${buildingInfo.name}.`);
             addToLog(`${builder.name} began construction of a new ${buildingInfo.name}.`, buildingType);
         }
@@ -722,7 +751,7 @@ const GamePage: React.FC = () => {
     };
 
     const handleAssignVillagersToNode = (nodeId: string, count: number) => {
-        const idleVillagers = units.villagers.filter(v => !isVillagerBusy(v.id));
+        const idleVillagers = units.villagers.filter(v => !v.currentTask);
         if (count <= 0) return;
         let cappedCount = Math.min(count, idleVillagers.length);
         if (cappedCount === 0) { addNotification("No idle villagers available."); return; }
@@ -733,25 +762,28 @@ const GamePage: React.FC = () => {
         const targetNode = resourceNodes.find(n => n.id === nodeId);
         if (!targetNode) return;
     
+        const taskId = `gather-${nodeId}`;
+        const existingTask = activeTasks.find(t => t.id === taskId);
+    
         setResourceNodes(prevNodes => 
             prevNodes.map(n => n.id === nodeId ? {...n, assignedVillagers: [...new Set([...n.assignedVillagers, ...villagerIdsToAssign])]} : n)
         );
         
-        if (unlimitedResources) { // Instant gather for test mode
+        if (unlimitedResources) {
             updateResources({ [targetNode.type]: targetNode.amount });
             addToLog(`${cappedCount} villager(s) instantly gathered ${Math.floor(targetNode.amount)} ${targetNode.type}.`, targetNode.type);
             setResourceNodes(prev => prev.filter(n => n.id !== nodeId));
         } else {
-            const existingTask = activeTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === nodeId);
             if (existingTask) {
-                setActiveTasks(prev => prev.map(t => t.id === existingTask.id ? {
+                setActiveTasks(prev => prev.map(t => t.id === taskId ? {
                     ...t,
                     payload: { ...t.payload, villagerIds: [...new Set([...t.payload!.villagerIds!, ...villagerIdsToAssign])] }
                 } : t));
             } else {
-                 const newTask: GameTask = { id: `gather-${nodeId}`, type: 'gather', startTime: Date.now(), duration: 86400000, payload: { resourceNodeId: nodeId, villagerIds: villagerIdsToAssign }}; // Duration is arbitrary, loop handles completion
+                 const newTask: GameTask = { id: taskId, type: 'gather', startTime: Date.now(), duration: 86400000, payload: { resourceNodeId: nodeId, villagerIds: villagerIdsToAssign }}; // Duration is arbitrary
                  setActiveTasks(prev => [...prev, newTask]);
             }
+            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagerIdsToAssign.includes(v.id) ? {...v, currentTask: taskId} : v)}));
         }
     
         addToLog(`${cappedCount} villager(s) assigned to gather ${targetNode.type}.`, targetNode.type);
@@ -765,10 +797,12 @@ const GamePage: React.FC = () => {
             if (!node || (node.assignedVillagers || []).length < count) return;
     
             const villagersToRecall = node.assignedVillagers.slice(node.assignedVillagers.length - count);
+            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToRecall.includes(v.id) ? {...v, currentTask: null} : v)}));
             setResourceNodes(prev => prev.map(n => n.id === targetId ? { ...n, assignedVillagers: n.assignedVillagers.filter(id => !villagersToRecall.includes(id)) } : n));
     
             setActiveTasks(prev => {
-                const taskIndex = prev.findIndex(t => t.type === 'gather' && t.payload?.resourceNodeId === targetId);
+                const taskId = `gather-${targetId}`;
+                const taskIndex = prev.findIndex(t => t.id === taskId);
                 if (taskIndex === -1) return prev;
                 
                 const task = prev[taskIndex];
@@ -792,6 +826,8 @@ const GamePage: React.FC = () => {
                 addNotification("Cannot recall the last builder. This would cancel the project.");
                 return;
             }
+
+            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToRecall.includes(v.id) ? {...v, currentTask: null} : v)}));
     
             const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType)!;
             const totalWork = buildingInfo.buildTime * 1000;
@@ -817,12 +853,13 @@ const GamePage: React.FC = () => {
     };
 
     const handleAssignVillagersToConstruction = (constructionId: string, count: number) => {
-        const idleVillagers = units.villagers.filter(v => !isVillagerBusy(v.id));
+        const idleVillagers = units.villagers.filter(v => !v.currentTask);
         if (count <= 0) return;
         let cappedCount = Math.min(count, idleVillagers.length);
         if (cappedCount === 0) { addNotification("No idle villagers available to assist."); return; }
 
-        const villagersToAssign = idleVillagers.slice(0, cappedCount).map(v => v.id);
+        const villagersToAssign = idleVillagers.slice(0, cappedCount);
+        const villagerIdsToAssign = villagersToAssign.map(v => v.id);
         const task = activeTasks.find(t => t.id === constructionId);
 
         if (!task || task.type !== 'build') return;
@@ -841,7 +878,9 @@ const GamePage: React.FC = () => {
         const newWorkerCount = oldWorkerCount + cappedCount;
         const newRemainingDuration = workRemaining / newWorkerCount;
         
-        const updatedVillagerIds = [...task.payload!.villagerIds!, ...villagersToAssign];
+        const updatedVillagerIds = [...task.payload!.villagerIds!, ...villagerIdsToAssign];
+
+        setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagerIdsToAssign.includes(v.id) ? {...v, currentTask: constructionId} : v)}));
 
         setActiveTasks(prev => prev.map(t => t.id === constructionId ? {
             ...t,
@@ -909,9 +948,13 @@ const GamePage: React.FC = () => {
             addNotification("Test Mode: ON - All active tasks completed.");
 
             const depletedNodeIds = new Set<string>();
+            const tasksToComplete = [...activeTasks];
             
-            // Process and complete all active tasks
-            activeTasks.forEach(task => {
+            // Clear the task queue immediately
+            setActiveTasks([]);
+
+            // Process and complete all previously active tasks
+            tasksToComplete.forEach(task => {
                 if (task.type === 'gather') {
                     if (task.payload?.resourceNodeId) {
                         depletedNodeIds.add(task.payload.resourceNodeId);
@@ -920,18 +963,15 @@ const GamePage: React.FC = () => {
                             addToLog(`Instantly gathered all ${node.type} from a depleted source.`, node.type);
                         }
                     }
-                } else {
-                    handleTaskCompletion(task);
                 }
+                // Complete all tasks, which also handles freeing villagers
+                handleTaskCompletion(task);
             });
 
             // Remove depleted resource nodes
             if (depletedNodeIds.size > 0) {
                 setResourceNodes(prev => prev.filter(n => !depletedNodeIds.has(n.id)));
             }
-            
-            // Clear the task queue
-            setActiveTasks([]);
 
         } else {
             // Test mode is being turned OFF
@@ -945,7 +985,7 @@ const GamePage: React.FC = () => {
         return acc;
     }, {} as Record<BuildingType, number>);
     
-    const idleVillagerCount = units.villagers.filter(v => !isVillagerBusy(v.id)).length;
+    const idleVillagerCount = units.villagers.filter(v => !v.currentTask).length;
     
     const assignmentTarget = assignmentPanelState.targetType === 'resource'
         ? resourceNodes.find(n => n.id === assignmentPanelState.targetId)

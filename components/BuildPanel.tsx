@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import type { BuildingInfo, BuildingType, Resources, BuildingCosts } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, BarracksIcon, HouseIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, TownCenterIcon, ClockIcon } from './icons/ResourceIcons';
@@ -70,67 +69,6 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
         }, 300);
     };
 
-    useEffect(() => {
-        const styleId = 'sci-fi-panel-styles';
-        if (document.getElementById(styleId)) return;
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.innerHTML = `
-            .sci-fi-panel-popup {
-                position: relative;
-                background: rgb(10, 10, 15);
-                border: 1px solid rgba(69, 133, 136, 0.5);
-                box-shadow: 0 0 25px rgba(69, 133, 136, 0.4), inset 0 0 20px rgba(69, 133, 136, 0.2);
-                clip-path: polygon(0 20px, 20px 0, calc(100% - 20px) 0, 100% 20px, 100% calc(100% - 20px), calc(100% - 20px) 100%, 20px 100%, 0 calc(100% - 20px));
-                color: #c9d1d9; /* Brighter base text color */
-                text-shadow: 
-                    0 0 3px rgba(173, 216, 230, 0.2),
-                    0 0 5px rgba(69, 133, 136, 0.5);
-            }
-            .sci-fi-panel-popup h2, .sci-fi-panel-popup h3, .sci-fi-panel-popup .text-brand-gold {
-                color: #d79921;
-                text-shadow: 0 0 5px rgba(215, 153, 33, 0.6), 0 0 10px rgba(215, 153, 33, 0.3);
-            }
-            .sci-fi-panel-popup .text-brand-red {
-                color: #fb4934;
-                text-shadow: 0 0 5px rgba(251, 73, 52, 0.6), 0 0 10px rgba(251, 73, 52, 0.3);
-            }
-            .sci-fi-panel-popup .text-brand-blue {
-                color: #83a598;
-                text-shadow: 0 0 5px rgba(131, 165, 152, 0.6), 0 0 10px rgba(131, 165, 152, 0.3);
-            }
-            .sci-fi-panel-popup .text-parchment-dark {
-                color: #a89984;
-            }
-            .sci-fi-grid {
-                background-color: black;
-                background-image:
-                linear-gradient(rgba(69, 133, 136, 0.15) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(69, 133, 136, 0.15) 1px, transparent 1px);
-                background-size: 20px 20px;
-            }
-            .sci-fi-unit-row { background: rgba(0,0,0,0.3); border-radius: 0.25rem; padding: 0.5rem 0.75rem; border: 1px solid rgba(69, 133, 136, 0.3); transition: all 0.2s ease-in-out; }
-            .sci-fi-unit-row:hover { background: rgba(69, 133, 136, 0.15); border-color: rgba(69, 133, 136, 0.7); }
-            .sci-fi-unit-row.busy { opacity: 0.6; background: rgba(0,0,0,0.5); }
-            .sci-fi-unit-row.busy .sci-fi-action-button { pointer-events: none; }
-            .sci-fi-unit-row.editing { background: rgba(69, 133, 136, 0.1); border-color: rgba(69, 133, 136, 0.6); }
-            .sci-fi-input { background: rgba(0,0,0,0.4); border: 1px solid rgba(69, 133, 136, 0.5); color: #c9d1d9; border-radius: 0.25rem; padding: 0.25rem 0.5rem; font-size: 0.875rem; }
-            .sci-fi-input:focus { outline: none; border-color: rgba(131, 207, 255, 0.8); box-shadow: 0 0 5px rgba(131, 207, 255, 0.5); }
-            .sci-fi-action-button { padding: 0.375rem; border-radius: 9999px; transition: all 0.2s ease-in-out; color: #bdae93; }
-            .sci-fi-action-button:not(:disabled):hover { color: #a7f3d0; background: rgba(69, 133, 136, 0.3); transform: scale(1.1); text-shadow: 0 0 5px rgba(167, 243, 208, 0.5); }
-            .sci-fi-action-button:disabled { color: rgba(102, 92, 84, 0.5); cursor: not-allowed; }
-            .sci-fi-close-button { color: #bdae93; transition: all 0.2s ease-in-out; text-shadow: none; }
-            .sci-fi-close-button:hover { color: #fb4934; transform: rotate(90deg) scale(1.1); text-shadow: 0 0 5px rgba(251, 73, 52, 0.5); }
-            .sci-fi-button { background: rgba(0,0,0,0.4); border: 1px solid rgba(69, 133, 136, 0.5); color: #c9d1d9; padding: 0.5rem 1rem; font-weight: bold; transition: all 0.2s ease-in-out; text-shadow: 0 0 5px rgba(100, 180, 180, 0.5); }
-            .sci-fi-button:not(:disabled):hover { background: rgba(69, 133, 136, 0.2); border-color: #a7f3d0; text-shadow: 0 0 8px rgba(167, 243, 208, 0.7); }
-            .sci-fi-button:disabled { background: rgba(0,0,0,0.2); color: #665c54; border-color: #504945; cursor: not-allowed; text-shadow: none; }
-            input[type=range].sci-fi-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; outline: none; border: 1px solid rgba(69, 133, 136, 0.5); }
-            input[type=range].sci-fi-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; background: #a7f3d0; cursor: pointer; border-radius: 50%; border: 1px solid rgba(13, 33, 51, 0.8); box-shadow: 0 0 5px rgba(167, 243, 208, 0.5); }
-            input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; background: #a7f3d0; cursor: pointer; border-radius: 50%; border: 1px solid rgba(13, 33, 51, 0.8); box-shadow: 0 0 5px rgba(167, 243, 208, 0.5); }
-        `;
-        document.head.appendChild(style);
-    }, []);
-    
     if (!isOpen && !isClosing) return null;
     
     const { anchorRect: currentAnchor } = currentData;

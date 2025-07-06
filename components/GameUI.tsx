@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon, SettingsIcon } from './icons/ResourceIcons';
@@ -103,23 +102,6 @@ const GameUI: React.FC<GameUIProps> = (props) => {
     const {
         civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, resourceNodes, onOpenAssignmentPanel, gatherInfo
     } = props;
-    
-    React.useEffect(() => {
-        const styleId = 'game-ui-styles';
-        if (document.getElementById(styleId)) return;
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.innerHTML = `
-        @keyframes fade-up-out {
-            0% { transform: translateY(0); opacity: 1; }
-            100% { transform: translateY(-20px); opacity: 0; }
-        }
-        .animate-fade-up-out {
-            animation: fade-up-out 1.5s ease-out forwards;
-        }
-        `;
-        document.head.appendChild(style);
-    }, []);
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
         const buildingType = key as BuildingType;

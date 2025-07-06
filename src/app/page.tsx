@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -71,7 +72,7 @@ const GamePage: React.FC = () => {
     const [buildPanelState, setBuildPanelState] = useState<{ isOpen: boolean; villagerId: string | null; anchorRect: DOMRect | null }>({ isOpen: false, villagerId: null, anchorRect: null });
     const [unitManagementPanel, setUnitManagementPanel] = useState<{ isOpen: boolean; type: 'villagers' | 'military' | null; anchorRect: DOMRect | null; }>({ isOpen: false, type: null, anchorRect: null });
     const [buildingManagementPanel, setBuildingManagementPanel] = useState<{ isOpen: boolean; type: BuildingType | null; instanceId?: string; anchorRect: DOMRect | null; }>({ isOpen: false, type: null, anchorRect: null });
-    const [assignmentPanelState, setAssignmentPanelState] = useState<{ isOpen: boolean; nodeId: string | null; anchorRect: DOMRect | null; }>({ isOpen: false, nodeId: null, anchorRect: null });
+    const [assignmentPanelState, setAssignmentPanelState] = useState<{ isOpen: boolean; targetId: string | null; targetType: 'resource' | 'construction' | null; anchorRect: DOMRect | null; }>({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     const [settingsPanelState, setSettingsPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
 
 
@@ -213,18 +214,19 @@ const GamePage: React.FC = () => {
     };
 
     const getVillagerTaskDetails = useCallback((villagerId: string): string => {
-        const buildTask = activeTasks.find(task => task.type === 'build' && task.payload?.villagerId === villagerId);
-        if (buildTask) {
-            const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildTask.payload!.buildingType);
-            return `Busy: Constructing ${buildingInfo?.name || 'a building'}`;
-        }
+        const task = activeTasks.find(t => t.payload?.villagerIds?.includes(villagerId));
 
-        for (const node of resourceNodes) {
-            if (node.assignedVillagers.includes(villagerId)) {
-                return `Busy: Gathering ${node.type}`;
+        if (task) {
+            if (task.type === 'build') {
+                const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType);
+                return `Busy: Constructing ${buildingInfo?.name || 'a building'}`;
+            }
+            if (task.type === 'gather') {
+                const node = resourceNodes.find(n => n.id === task.payload!.resourceNodeId);
+                return `Busy: Gathering ${node?.type || 'resources'}`;
             }
         }
-
+        
         return 'Idle';
     }, [activeTasks, resourceNodes]);
 
@@ -286,8 +288,20 @@ const GamePage: React.FC = () => {
 
             setCurrentAge(savedState.currentAge);
             setGameLog(savedState.gameLog);
-            setActiveTasks(savedState.activeTasks || []);
-            setConstructingBuildings(savedState.constructingBuildings || []);
+            setActiveTasks((savedState.activeTasks || []).map(t => {
+                // Migration for old save format
+                if (t.type === 'build' && t.payload?.villagerId) {
+                    return { ...t, payload: { ...t.payload, villagerIds: [t.payload.villagerId], villagerId: undefined } };
+                }
+                return t;
+            }));
+            setConstructingBuildings((savedState.constructingBuildings || []).map(c => {
+                 // Migration for old save format
+                if ((c as any).villagerId) {
+                    return { ...c, villagerIds: [(c as any).villagerId], villagerId: undefined };
+                }
+                return c;
+            }));
             
             setCurrentEvent(null);
             setActivityStatus('Welcome back to your saga.');
@@ -300,18 +314,17 @@ const GamePage: React.FC = () => {
     const handleTaskCompletion = useCallback((task: GameTask) => {
         switch (task.type) {
             case 'build': {
-                const { buildingType, villagerId, position } = task.payload!;
+                const { buildingType, position, villagerIds } = task.payload!;
                 const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
-                const builder = units.villagers.find(v => v.id === villagerId);
                 const [name] = getRandomNames('building', 1);
                 const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
                 
                 setConstructingBuildings(prev => prev.filter(b => b.id !== task.id));
                 setBuildings(p => ({ ...p, [buildingType!]: [...p[buildingType!], newBuilding] }));
                 
-                if (builder) {
-                    addToLog(`${builder.name} has constructed ${name}, a new ${buildingInfo.name}.`, buildingType!);
-                    setActivityStatus(`Construction of ${name} by ${builder.name} is complete.`);
+                if (villagerIds && villagerIds.length > 0) {
+                    addToLog(`${villagerIds.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingType!);
+                    setActivityStatus(`Construction of ${name} is complete.`);
                 }
                 break;
             }
@@ -366,7 +379,7 @@ const GamePage: React.FC = () => {
                 break;
             }
         }
-    }, [units.villagers, currentAge, updateResources]);
+    }, [currentAge, updateResources]);
 
     // Game Loop
     useEffect(() => {
@@ -464,12 +477,13 @@ const GamePage: React.FC = () => {
         }
         
         const buildTime = buildingInfo.buildTime * 1000;
-        const taskPayload = { buildingType, villagerId, position };
+        const taskPayload = { buildingType, villagerIds: [villagerId], position };
+
         if (unlimitedResources) {
             handleTaskCompletion({ id: `${Date.now()}-instant-build`, type: 'build', startTime: 0, duration: 0, payload: taskPayload });
         } else {
             const taskId = `${Date.now()}-build-${buildingType}`;
-            const newConstruction: ConstructingBuilding = { id: taskId, type: buildingType, position, villagerId };
+            const newConstruction: ConstructingBuilding = { id: taskId, type: buildingType, position, villagerIds: [villagerId] };
             setConstructingBuildings(prev => [...prev, newConstruction]);
 
             const newTask: GameTask = {
@@ -607,70 +621,112 @@ const GamePage: React.FC = () => {
 
     const handleAssignVillagersToNode = (nodeId: string, count: number) => {
         const idleVillagers = units.villagers.filter(v => !isVillagerBusy(v.id));
-    
         if (count <= 0) return;
-    
-        let cappedCount = count;
-        if (count > idleVillagers.length) {
-            addNotification(`Only ${idleVillagers.length} idle villagers are available.`);
-            cappedCount = idleVillagers.length;
-        }
-    
-        if (cappedCount === 0) return;
+        let cappedCount = Math.min(count, idleVillagers.length);
+        if (cappedCount === 0) { addNotification("No idle villagers available."); return; }
     
         const villagersToAssign = idleVillagers.slice(0, cappedCount);
         const villagerIdsToAssign = villagersToAssign.map(v => v.id);
     
         const targetNode = resourceNodes.find(n => n.id === nodeId);
-        if (!targetNode) {
-            console.error(`Assign action failed: Could not find resource node with id ${nodeId}`);
-            return;
-        }
-    
-        const finalNodeState: ResourceNode = {
-            ...targetNode,
-            assignedVillagers: [...new Set([...targetNode.assignedVillagers, ...villagerIdsToAssign])]
-        };
+        if (!targetNode) return;
     
         setResourceNodes(prevNodes => 
-            prevNodes.map(n => n.id === nodeId ? finalNodeState : n)
+            prevNodes.map(n => n.id === nodeId ? {...n, assignedVillagers: [...new Set([...n.assignedVillagers, ...villagerIdsToAssign])]} : n)
         );
-    
+        
         const existingTask = activeTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === nodeId);
-        const gatherRatePerVillager = GATHER_INFO[finalNodeState.type].rate;
-        const totalDurationForOneVillager = (finalNodeState.amount / gatherRatePerVillager) * 1000;
-        const numWorkers = finalNodeState.assignedVillagers.length;
-    
-        if (existingTask) {
-            const timeElapsed = Date.now() - existingTask.startTime;
-            const progressRatio = timeElapsed / existingTask.duration;
-            const newTotalDurationForNode = totalDurationForOneVillager / numWorkers;
-            const remainingWorkRatio = 1 - progressRatio;
-            const newRemainingDuration = newTotalDurationForNode * remainingWorkRatio;
-    
-            const updatedTask: GameTask = {
-                ...existingTask,
-                startTime: Date.now(),
-                duration: newRemainingDuration,
-                payload: { ...existingTask.payload, count: numWorkers }
-            };
-    
-            setActiveTasks(prevTasks => prevTasks.map(t => t.id === existingTask.id ? updatedTask : t));
+        const gatherRatePerVillager = GATHER_INFO[targetNode.type].rate;
+
+        if (unlimitedResources) { // Instant gather for test mode
+            updateResources({ [targetNode.type]: targetNode.amount });
+            addToLog(`${cappedCount} villager(s) instantly gathered ${Math.floor(targetNode.amount)} ${targetNode.type}.`, targetNode.type);
+            setResourceNodes(prev => prev.filter(n => n.id !== nodeId));
         } else {
-            const newDuration = totalDurationForOneVillager / numWorkers;
-            const newTask: GameTask = {
-                id: nodeId,
-                type: 'gather',
-                startTime: Date.now(),
-                duration: unlimitedResources ? 100 : newDuration,
-                payload: { resourceNodeId: nodeId, count: numWorkers }
-            };
-            setActiveTasks(prevTasks => [...prevTasks, newTask]);
+             const amountPerSecond = gatherRatePerVillager / 10;
+             const gatherInterval = setInterval(() => {
+                let nodeIsDepleted = false;
+                setResourceNodes(prev => prev.map(n => {
+                    if (n.id === nodeId) {
+                        const newAmount = n.amount - amountPerSecond;
+                        if (newAmount <= 0) {
+                            nodeIsDepleted = true;
+                            updateResources({ [n.type]: n.amount });
+                            addToLog(`${n.assignedVillagers.length} villager(s) depleted a ${n.type} source.`, n.type);
+                            return null;
+                        }
+                        updateResources({ [n.type]: amountPerSecond });
+                        return { ...n, amount: newAmount };
+                    }
+                    return n;
+                }).filter(Boolean) as ResourceNode[]);
+
+                if (nodeIsDepleted) {
+                     clearInterval(gatherInterval);
+                     setActiveTasks(prev => prev.filter(t => t.id !== `gather-${nodeId}`));
+                }
+             }, 100);
+            
+            const newTask: GameTask = { id: `gather-${nodeId}`, type: 'gather', startTime: Date.now(), duration: 99999999, payload: { resourceNodeId: nodeId, villagerIds: villagersToAssign.map(v=>v.id) }};
+            setActiveTasks(prev => [...prev.filter(t=> t.id !== `gather-${nodeId}`), newTask]);
         }
     
         addToLog(`${cappedCount} villager(s) assigned to gather ${targetNode.type}.`, targetNode.type);
         setActivityStatus(`${cappedCount} villager(s) are now gathering ${targetNode.type}.`);
-        setAssignmentPanelState({ isOpen: false, nodeId: null, anchorRect: null });
+        setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
+    };
+
+    const handleAssignVillagersToConstruction = (constructionId: string, count: number) => {
+        const idleVillagers = units.villagers.filter(v => !isVillagerBusy(v.id));
+        if (count <= 0) return;
+        let cappedCount = Math.min(count, idleVillagers.length);
+        if (cappedCount === 0) { addNotification("No idle villagers available to assist."); return; }
+
+        const villagersToAssign = idleVillagers.slice(0, cappedCount).map(v => v.id);
+        const task = activeTasks.find(t => t.id === constructionId);
+        const construction = constructingBuildings.find(c => c.id === constructionId);
+
+        if (!task || !construction) return;
+
+        const buildingInfo = BUILDINGS_INFO.find(b => b.id === construction.type);
+        if (!buildingInfo) return;
+
+        const baseDuration = buildingInfo.buildTime * 1000;
+        const oldWorkerCount = task.payload?.villagerIds?.length || 1;
+        
+        const timeElapsed = Date.now() - task.startTime;
+        const workDone = timeElapsed * oldWorkerCount;
+        const totalWork = baseDuration;
+        const workRemaining = Math.max(0, totalWork - workDone);
+        
+        const newWorkerCount = oldWorkerCount + cappedCount;
+        const newRemainingDuration = workRemaining / newWorkerCount;
+        
+        const updatedVillagerIds = [...task.payload!.villagerIds!, ...villagersToAssign];
+
+        setActiveTasks(prev => prev.map(t => t.id === constructionId ? {
+            ...t,
+            startTime: Date.now(),
+            duration: newRemainingDuration,
+            payload: { ...t.payload, villagerIds: updatedVillagerIds }
+        } : t));
+
+        setConstructingBuildings(prev => prev.map(c => c.id === constructionId ? {
+            ...c,
+            villagerIds: updatedVillagerIds
+        } : c));
+
+        addToLog(`${cappedCount} villager(s) are now assisting with the ${buildingInfo.name}.`, buildingInfo.id);
+        setActivityStatus(`Construction of the ${buildingInfo.name} is now faster.`);
+        setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
+    };
+
+    const handleAssignVillagers = (targetId: string, count: number) => {
+        if (assignmentPanelState.targetType === 'resource') {
+            handleAssignVillagersToNode(targetId, count);
+        } else if (assignmentPanelState.targetType === 'construction') {
+            handleAssignVillagersToConstruction(targetId, count);
+        }
     };
 
     const handleAdvanceAge = async () => {
@@ -721,13 +777,16 @@ const GamePage: React.FC = () => {
     }, {} as Record<BuildingType, number>);
     
     const idleVillagerCount = units.villagers.filter(v => !isVillagerBusy(v.id)).length;
-    const assignmentNode = resourceNodes.find(n => n.id === assignmentPanelState.nodeId) || null;
+    
+    const assignmentTarget = assignmentPanelState.targetType === 'resource'
+        ? resourceNodes.find(n => n.id === assignmentPanelState.targetId)
+        : constructingBuildings.find(c => c.id === assignmentPanelState.targetId);
 
     const closeAllPanels = () => {
         setUnitManagementPanel(p => p.isOpen ? { isOpen: false, type: null, anchorRect: null } : p);
         setBuildingManagementPanel(p => p.isOpen ? { isOpen: false, type: null, instanceId: undefined, anchorRect: null } : p);
         setBuildPanelState(p => p.isOpen ? { isOpen: false, villagerId: null, anchorRect: null } : p);
-        setAssignmentPanelState(p => p.isOpen ? { isOpen: false, nodeId: null, anchorRect: null } : p);
+        setAssignmentPanelState(p => p.isOpen ? { isOpen: false, targetId: null, targetType: null, anchorRect: null } : p);
         setSettingsPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
     };
 
@@ -771,7 +830,8 @@ const GamePage: React.FC = () => {
                             onExitGame={handleExitGame}
                             onOpenSettingsPanel={(rect) => { closeAllPanels(); setSettingsPanelState({ isOpen: true, anchorRect: rect }); }}
                             resourceNodes={resourceNodes}
-                            onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, nodeId, anchorRect: rect }); }}
+                            onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
+                            onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO}
                         />
                         <BuildPanel 
@@ -816,11 +876,12 @@ const GamePage: React.FC = () => {
                         />
                         <ResourceAssignmentPanel
                             isOpen={assignmentPanelState.isOpen}
-                            onClose={() => setAssignmentPanelState({ isOpen: false, nodeId: null, anchorRect: null })}
-                            node={assignmentNode}
+                            onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })}
+                            assignmentTarget={assignmentTarget || null}
                             idleVillagerCount={idleVillagerCount}
-                            onAssign={handleAssignVillagersToNode}
+                            onAssignVillagers={handleAssignVillagers}
                             gatherInfo={GATHER_INFO}
+                            buildingList={BUILDINGS_INFO}
                             anchorRect={assignmentPanelState.anchorRect}
                             panelOpacity={panelOpacity}
                         />

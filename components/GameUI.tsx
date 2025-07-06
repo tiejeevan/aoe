@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon, SettingsIcon } from './icons/ResourceIcons';
@@ -30,6 +31,7 @@ interface GameUIProps {
     onOpenSettingsPanel: (rect: DOMRect) => void;
     resourceNodes: ResourceNode[];
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
+    onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
 }
 
@@ -100,7 +102,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, resourceNodes, onOpenAssignmentPanel, gatherInfo
+        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -114,7 +116,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
         return acc;
     }, {} as Record<MilitaryUnitType, number>);
     
-    const busyVillagerCount = activeTasks.filter(t => t.type === 'build' || t.type === 'gather').length;
+    const busyVillagerCount = new Set(activeTasks.flatMap(t => t.payload?.villagerIds || [])).size;
 
     return (
         <div className="w-full h-full bg-stone-dark p-4 rounded-lg shadow-2xl border-2 border-stone-light flex flex-col space-y-4">
@@ -237,6 +239,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                         buildingList={buildingList}
                         resourceNodes={resourceNodes}
                         onOpenAssignmentPanel={onOpenAssignmentPanel}
+                        onOpenConstructionPanel={onOpenConstructionPanel}
                         gatherInfo={gatherInfo}
                     />
 

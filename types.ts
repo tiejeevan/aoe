@@ -1,4 +1,5 @@
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -11,7 +12,7 @@ export interface Civilization {
     lore: string;
     bonus: string;
     uniqueUnit: {
-        name: string;
+        name:string;
         description: string;
     };
     bannerUrl: string;
@@ -129,7 +130,7 @@ export interface ConstructingBuilding {
     id: string; // Corresponds to task ID
     type: BuildingType;
     position: { x: number; y: number; };
-    villagerId: string;
+    villagerIds: string[];
 }
 
 export type ResourceNodeType = 'food' | 'wood' | 'gold' | 'stone';
@@ -161,7 +162,7 @@ export interface GameTask {
         buildingType?: BuildingType;
         unitType?: MilitaryUnitType;
         count?: number;
-        villagerId?: string;
+        villagerIds?: string[];
         position?: { x: number; y: number };
         resourceNodeId?: string;
     };

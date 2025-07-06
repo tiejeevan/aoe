@@ -4,7 +4,7 @@ import type { Buildings, BuildingType, BuildingInstance, ConstructingBuilding, G
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 
-const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingInfo | undefined }> = ({ task, buildingInfo }) => {
+const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingInfo | undefined; builderCount: number }> = ({ task, buildingInfo, builderCount }) => {
     const [remainingTime, setRemainingTime] = useState(0);
 
     useEffect(() => {
@@ -23,8 +23,9 @@ const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingInfo
     if (!buildingInfo) return null;
 
     return (
-        <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+        <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
             <p>Constructing: {buildingInfo.name}</p>
+            <p>Builders: {builderCount}</p>
             <p>Time remaining: {remainingTime}s</p>
         </div>
     );
@@ -61,10 +62,11 @@ interface GameMapProps {
     buildingList: BuildingInfo[];
     resourceNodes: ResourceNode[];
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
+    onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
 }
 
-const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, onOpenAssignmentPanel, gatherInfo }) => {
+const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {
     const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number; } | null>(null);
 
     const occupiedCells = useMemo(() => {
@@ -139,7 +141,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                 const buildingInfo = construction ? buildingList.find(b => b.id === construction.type) : undefined;
 
                 let cellClass = "bg-stone-dark/20 hover:bg-stone-light/10 transition-colors duration-150";
-                if(resourceNode && !playerAction) {
+                if((resourceNode || construction) && !playerAction) {
                     cellClass += " cursor-pointer hover:bg-brand-blue/20";
                 }
                 
@@ -161,12 +163,16 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                         className={`relative group w-full aspect-square ${cellClass}`}
                         onMouseEnter={() => setHoveredCell({ x, y })}
                         onClick={(e) => {
-                            if (resourceNode && !playerAction) {
+                            if (playerAction) {
+                                handleCellClick(x, y);
+                                return;
+                            }
+                            if (resourceNode) {
                                 onOpenAssignmentPanel(resourceNode.id, e.currentTarget.getBoundingClientRect());
+                            } else if (construction) {
+                                onOpenConstructionPanel(construction.id, e.currentTarget.getBoundingClientRect());
                             } else if (building) {
                                 onBuildingClick(building, e.currentTarget.getBoundingClientRect());
-                            } else {
-                                handleCellClick(x, y);
                             }
                         }}
                     >
@@ -182,7 +188,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                             <div className="absolute inset-0 p-1 text-parchment-light opacity-60 flex flex-col justify-center items-center gap-1 group">
                                 {iconMap[construction.type]}
                                 {buildTask && <ProgressBar startTime={buildTask.startTime} duration={buildTask.duration} className="w-10/12 h-1.5"/>}
-                                {buildTask && buildingInfo && <ConstructionTooltip task={buildTask} buildingInfo={buildingInfo} />}
+                                {buildTask && buildingInfo && <ConstructionTooltip task={buildTask} buildingInfo={buildingInfo} builderCount={construction.villagerIds.length} />}
                             </div>
                         )}
                         {resourceNode && (

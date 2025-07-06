@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { ResourceNode, ResourceNodeType, GameTask, BuildingInfo } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, VillagerIcon, ClockIcon, GatherIcon, BuildIcon } from './icons/ResourceIcons';
 import { iconMap } from './GameUI';
@@ -31,17 +31,44 @@ const InfoIcon: React.FC<{ icon: React.ReactNode; value: string | number; toolti
 const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) => {
     const { isOpen, onClose, assignmentTarget, idleVillagerCount, onAssignVillagers, onRecallVillagers, gatherInfo, buildingList, anchorRect } = props;
     
+    // --- Hooks ---
+    // All hooks must be called unconditionally at the top level.
     const [assignCount, setAssignCount] = useState(1);
     const [recallCount, setRecallCount] = useState(1);
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ assignmentTarget, anchorRect });
-    
+
+    // Effect to cache props for the closing animation
     useEffect(() => {
         if (isOpen || isClosing) {
             setCurrentData({ assignmentTarget, anchorRect });
         }
     }, [assignmentTarget, anchorRect, isOpen, isClosing]);
+
+    const { assignmentTarget: currentTarget, anchorRect: currentAnchor } = currentData;
     
+    const assignedCount = useMemo(() => {
+        if (!currentTarget) return 0;
+        const isResourceNode = 'amount' in currentTarget;
+        if (isResourceNode) {
+            return (currentTarget.assignedVillagers || []).length;
+        }
+        const isConstructionTask = 'type' in currentTarget && currentTarget.type === 'build';
+        if (isConstructionTask) {
+            return (currentTarget.payload?.villagerIds || []).length;
+        }
+        return 0;
+    }, [currentTarget]);
+
+    // Effect to reset slider values when the panel opens or the target changes
+    useEffect(() => {
+        if (isOpen) {
+            setAssignCount(idleVillagerCount > 0 ? 1 : 0);
+            setRecallCount(assignedCount > 0 ? 1 : 0);
+        }
+    }, [isOpen, idleVillagerCount, assignedCount]);
+    
+    // --- Handlers ---
     const handleClose = () => {
         setIsClosing(true);
         setTimeout(() => {
@@ -51,39 +78,26 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     };
 
     const handleAssign = () => {
-        if (currentData.assignmentTarget && assignCount > 0) {
-            onAssignVillagers(currentData.assignmentTarget.id, assignCount);
+        if (currentTarget && assignCount > 0) {
+            onAssignVillagers(currentTarget.id, assignCount);
         }
     };
     
     const handleRecall = () => {
-        if (currentData.assignmentTarget && recallCount > 0) {
-            const type = 'amount' in currentData.assignmentTarget ? 'resource' : 'construction';
-            onRecallVillagers(currentData.assignmentTarget.id, recallCount, type);
+        if (currentTarget && recallCount > 0) {
+            const type = 'amount' in currentTarget ? 'resource' : 'construction';
+            onRecallVillagers(currentTarget.id, recallCount, type);
         }
     };
 
+    // --- Conditional Rendering ---
+    // Early returns must happen AFTER all hooks are called.
     if (!isOpen && !isClosing) return null;
-
-    const { assignmentTarget: currentTarget, anchorRect: currentAnchor } = currentData;
     if (!currentTarget || !currentAnchor) return null;
 
+    // --- Render Logic ---
     const isConstruction = 'type' in currentTarget && currentTarget.type === 'build';
     const isResource = 'amount' in currentTarget;
-
-    const assignedCount = isResource 
-        ? ((currentTarget as ResourceNode).assignedVillagers || []).length 
-        : isConstruction 
-        ? ((currentTarget as GameTask).payload?.villagerIds || []).length 
-        : 0;
-
-    useEffect(() => {
-        if (isOpen) {
-            setAssignCount(idleVillagerCount > 0 ? 1 : 0);
-            setRecallCount(assignedCount > 0 ? 1 : 0);
-        }
-    }, [isOpen, idleVillagerCount, assignedCount]);
-    
 
     let title = "Manage Workforce";
     let MainIcon: React.ReactNode = <GatherIcon />;

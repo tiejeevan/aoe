@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 
 interface StartScreenProps {
@@ -11,6 +11,13 @@ interface StartScreenProps {
 const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, savedGames, onDeleteGame }) => {
     const [isNaming, setIsNaming] = useState(false);
     const [newName, setNewName] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isNaming) {
+            inputRef.current?.focus();
+        }
+    }, [isNaming]);
 
     const handleStart = () => {
         if (newName.trim().length >= 4) {
@@ -32,6 +39,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                 <div className="mt-8">
                     <h2 className="text-2xl font-serif text-brand-gold mb-4">Name Your Saga</h2>
                     <input
+                        ref={inputRef}
                         type="text"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value.toUpperCase())}

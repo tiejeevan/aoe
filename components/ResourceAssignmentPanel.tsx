@@ -80,7 +80,7 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     if (!isOpen && !isClosing) return null;
 
     const { assignmentTarget: currentTarget, anchorRect: currentAnchor } = currentData;
-    if (!currentTarget) return null;
+    if (!currentTarget || !currentAnchor) return null;
 
     let title = "Manage Workforce";
     let MainIcon: React.ReactNode = <GatherIcon />;
@@ -119,10 +119,38 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
 
     const maxAssignable = idleVillagerCount;
     
-    const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `max(8px, ${currentAnchor.left - 144}px)`, transformOrigin: 'top center' } as React.CSSProperties;
+    const panelWidth = 320; // from w-80 class
+    const panelHeightEstimate = 350; // A safe estimate
+    const panelGap = 8;
+
+    const style: React.CSSProperties = {};
+
+    // Vertical positioning
+    const spaceBelow = window.innerHeight - currentAnchor.bottom;
+    const spaceAbove = currentAnchor.top;
+
+    if (spaceBelow < panelHeightEstimate && spaceAbove > spaceBelow) {
+        // Not enough space below, more space above. Position above.
+        style.bottom = `${window.innerHeight - currentAnchor.top + panelGap}px`;
+        style.transformOrigin = 'bottom center';
+    } else {
+        // Default to positioning below.
+        style.top = `${currentAnchor.bottom + panelGap}px`;
+        style.transformOrigin = 'top center';
+    }
+
+    // Horizontal positioning
+    let leftPos = currentAnchor.left + currentAnchor.width / 2 - panelWidth / 2;
+    if (leftPos + panelWidth > window.innerWidth - panelGap) {
+        leftPos = window.innerWidth - panelWidth - panelGap;
+    }
+    if (leftPos < panelGap) {
+        leftPos = panelGap;
+    }
+    style.left = `${leftPos}px`;
 
     return (
-        <div style={panelStyle} className={`fixed z-40 w-80 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
+        <div style={style} className={`fixed z-40 w-80 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
             <div className="sci-fi-panel-popup sci-fi-grid p-4">
                 <div className="flex justify-between items-center mb-3">
                     <div className="flex items-center gap-3">

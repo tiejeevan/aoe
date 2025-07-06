@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { Target } from 'lucide-react';
 
 export const FoodIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
@@ -84,7 +85,7 @@ export const TownCenterIcon: React.FC = () => (
 );
 
 export const ArcheryRangeIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="w-full h-full" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7v-2z"/><path d="M12 4c-3.86 0-7 3.14-7 7s3.14 7 7 7 7-3.14 7-7-3.14-7-7-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/><path d="M13 11.26V9.52c1.42.45 2.5 1.58 2.95 3H13v-1.24zM9.05 12.5c.45-1.42 1.58-2.5 3-2.95V12H9.05z" transform="rotate(45 12 12)"/></svg>
+    <Target className="w-full h-full" />
 );
 
 export const StableIcon: React.FC = () => (

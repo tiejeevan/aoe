@@ -3,6 +3,7 @@ import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon, SettingsIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
+import { ScrollText } from 'lucide-react';
 
 interface GameUIProps {
     civilization: Civilization;
@@ -29,6 +30,7 @@ interface GameUIProps {
     activeTasks: GameTask[];
     onExitGame: () => void;
     onOpenSettingsPanel: (rect: DOMRect) => void;
+    onOpenCivPanel: (rect: DOMRect) => void;
     resourceNodes: ResourceNode[];
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
     onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
@@ -97,12 +99,14 @@ export const iconMap: Record<LogIconType, React.ReactNode> = {
 };
 
 const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
-    return <div className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0">{iconMap[icon]}</div>;
+    const foundIcon = iconMap[icon];
+    if (!foundIcon) return null;
+    return <div className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0">{foundIcon}</div>;
 }
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
+        civilization, resources, units, buildings, population, currentAge, gameLog, currentEvent, onEventChoice, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, constructingBuildings, activeTasks, onExitGame, onOpenSettingsPanel, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -123,8 +127,20 @@ const GameUI: React.FC<GameUIProps> = (props) => {
             {/* Top Header */}
             <header className="flex justify-between items-center bg-black/20 p-2 rounded-lg">
                 <div className="flex items-center space-x-2 text-brand-gold">
-                    <div className="w-8 h-8"><AgeIcon/></div>
-                    <h2 className="text-2xl font-serif text-parchment-light">{currentAge}</h2>
+                    <div className="relative group">
+                         <button 
+                            onClick={(e) => onOpenCivPanel(e.currentTarget.getBoundingClientRect())} 
+                            className="flex items-center gap-2 text-brand-gold hover:text-yellow-400 transition-colors"
+                            aria-label="View Civilization Details"
+                        >
+                            <div className="w-8 h-8"><AgeIcon/></div>
+                            <h2 className="text-2xl font-serif text-parchment-light">{currentAge}</h2>
+                            <div className="w-5 h-5 text-parchment-dark/70 ml-1"><ScrollText /></div>
+                         </button>
+                         <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            Civilization Details
+                        </div>
+                    </div>
                 </div>
 
                 <HeaderStat icon={<PopulationIcon/>} value={`${population.current}/${population.capacity}`} tooltip="Population / Capacity" colorClass="text-brand-blue" />
@@ -166,28 +182,26 @@ const GameUI: React.FC<GameUIProps> = (props) => {
             <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Left Panel: Civ Info & Stats */}
                 <div className="md:col-span-1 bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col space-y-4">
-                    <div className="text-center">
-                        <img src={civilization.bannerUrl} alt={`${civilization.name} banner`} className="w-48 h-48 mx-auto rounded-md object-cover border-2 border-brand-gold shadow-lg" />
-                        <h1 className="text-3xl font-serif mt-2">{civilization.name}</h1>
-                    </div>
-                    <div className="text-sm text-parchment-dark p-2 bg-black/20 rounded">
-                        <p><strong>Bonus:</strong> {civilization.bonus}</p>
-                        <p className="mt-1"><strong>Unit:</strong> {civilization.uniqueUnit.name} - {civilization.uniqueUnit.description}</p>
-                    </div>
                     <div className="space-y-2">
                         <h4 className="font-serif text-parchment-dark mb-1">Population ({busyVillagerCount}/{units.villagers.length} Busy)</h4>
                         <StatBox icon={<VillagerIcon />} label="Villagers" value={units.villagers.length} colorClass="text-brand-blue" onActionClick={(e) => onOpenUnitPanel('villagers', e.currentTarget.getBoundingClientRect())} />
                         <h4 className="font-serif text-parchment-dark mb-1 mt-4">Military</h4>
                         <StatBox icon={<SwordIcon />} label="Total Military" value={units.military.length} colorClass="text-brand-red" onActionClick={(e) => onOpenUnitPanel('military', e.currentTarget.getBoundingClientRect())} />
                         <div className="pl-4 pt-1 space-y-1">
-                            {unitList.map(unitInfo => (
-                                militaryUnitCounts[unitInfo.id] > 0 &&
-                                <div key={unitInfo.id} className="flex items-center text-sm">
-                                    <div className="w-5 h-5 mr-2 text-parchment-dark">{iconMap[unitInfo.id]}</div>
-                                    <span className="flex-grow text-parchment-dark">{unitInfo.name}s</span>
-                                    <span className="font-bold">{militaryUnitCounts[unitInfo.id]}</span>
-                                </div>
-                            ))}
+                            {unitList.map(unitInfo => {
+                                if (militaryUnitCounts[unitInfo.id] > 0) {
+                                    const Icon = iconMap[unitInfo.id];
+                                    if (!Icon) return null;
+                                    return (
+                                        <div key={unitInfo.id} className="flex items-center text-sm">
+                                            <div className="w-5 h-5 mr-2 text-parchment-dark">{Icon}</div>
+                                            <span className="flex-grow text-parchment-dark">{unitInfo.name}s</span>
+                                            <span className="font-bold">{militaryUnitCounts[unitInfo.id]}</span>
+                                        </div>
+                                    )
+                                }
+                                return null;
+                            })}
                         </div>
                     </div>
                      <hr className="border-stone-light/20" />
@@ -209,11 +223,14 @@ const GameUI: React.FC<GameUIProps> = (props) => {
 
                                 const info = buildingList.find(b => b.id === type);
                                 if (!info) return null;
+                                
+                                const Icon = iconMap[type as BuildingType];
+                                if (!Icon) return null;
 
                                 return (
                                     <StatBox 
                                         key={type} 
-                                        icon={iconMap[type as BuildingType]} 
+                                        icon={Icon} 
                                         label={info.name}
                                         value={count > 0 ? count : '0'} 
                                         colorClass="text-parchment-dark" 

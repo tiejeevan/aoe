@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, BuildingInstance, UnitInfo, MilitaryUnitType, GameTask, ConstructingBuilding, TaskType, ResourceNode, ResourceNodeType, PlayerActionState } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, ConstructingBuilding, TaskType, ResourceNode, ResourceNodeType, PlayerActionState } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
@@ -15,6 +15,7 @@ import UnitManagementPanel from '@/components/UnitManagementPanel';
 import BuildingManagementPanel from '@/components/BuildingManagementPanel';
 import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
 import SettingsPanel from '@/components/SettingsPanel';
+import CivilizationPanel from '@/components/CivilizationPanel';
 
 const BUILDINGS_INFO: BuildingInfo[] = [
     { id: 'houses', name: 'House', description: 'Increases population capacity by 5.', cost: { wood: 50 }, isUnique: false, buildTime: 15 },
@@ -74,6 +75,7 @@ const GamePage: React.FC = () => {
     const [buildingManagementPanel, setBuildingManagementPanel] = useState<{ isOpen: boolean; type: BuildingType | null; instanceId?: string; anchorRect: DOMRect | null; }>({ isOpen: false, type: null, anchorRect: null });
     const [assignmentPanelState, setAssignmentPanelState] = useState<{ isOpen: boolean; targetId: string | null; targetType: 'resource' | 'construction' | null; anchorRect: DOMRect | null; }>({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     const [settingsPanelState, setSettingsPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
+    const [civPanelState, setCivPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
 
 
     const deltaTimeoutRef = useRef<{ [key in keyof Resources]?: number }>({});
@@ -788,6 +790,7 @@ const GamePage: React.FC = () => {
         setBuildPanelState(p => p.isOpen ? { isOpen: false, villagerId: null, anchorRect: null } : p);
         setAssignmentPanelState(p => p.isOpen ? { isOpen: false, targetId: null, targetType: null, anchorRect: null } : p);
         setSettingsPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
+        setCivPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
     }, []);
 
     useEffect(() => {
@@ -796,7 +799,8 @@ const GamePage: React.FC = () => {
                                    buildingManagementPanel.isOpen || 
                                    buildPanelState.isOpen || 
                                    assignmentPanelState.isOpen || 
-                                   settingsPanelState.isOpen;
+                                   settingsPanelState.isOpen ||
+                                   civPanelState.isOpen;
 
             if (!isAnyPanelOpen) {
                 return;
@@ -821,6 +825,7 @@ const GamePage: React.FC = () => {
         buildPanelState.isOpen,
         assignmentPanelState.isOpen,
         settingsPanelState.isOpen,
+        civPanelState.isOpen,
         closeAllPanels
     ]);
 
@@ -863,6 +868,7 @@ const GamePage: React.FC = () => {
                             activeTasks={activeTasks}
                             onExitGame={handleExitGame}
                             onOpenSettingsPanel={(rect) => { closeAllPanels(); setSettingsPanelState({ isOpen: true, anchorRect: rect }); }}
+                            onOpenCivPanel={(rect) => { closeAllPanels(); setCivPanelState({ isOpen: true, anchorRect: rect }); }}
                             resourceNodes={resourceNodes}
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
@@ -925,6 +931,13 @@ const GamePage: React.FC = () => {
                             anchorRect={settingsPanelState.anchorRect}
                             opacity={panelOpacity}
                             onOpacityChange={setPanelOpacity}
+                        />
+                        <CivilizationPanel
+                            isOpen={civPanelState.isOpen}
+                            onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })}
+                            civilization={civilization}
+                            anchorRect={civPanelState.anchorRect}
+                            panelOpacity={panelOpacity}
                         />
                     </>
                 );

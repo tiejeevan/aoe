@@ -36,10 +36,10 @@ const UNIT_INFO: UnitInfo[] = [
 ];
 
 const GATHER_INFO: Record<ResourceNodeType, { rate: number }> = {
-    food: { rate: 100 }, // Rates are now per 10 seconds for more intuitive numbers
-    wood: { rate: 80 },
-    gold: { rate: 50 },
-    stone: { rate: 60 },
+    food: { rate: 10 },
+    wood: { rate: 8 },
+    gold: { rate: 5 },
+    stone: { rate: 6 },
 }
 
 const initialBuildingsState: Buildings = {
@@ -223,7 +223,7 @@ const GamePage: React.FC = () => {
                         return null; 
                     }
 
-                    const gatherRatePerVillagerPerSecond = GATHER_INFO[node.type].rate / 10;
+                    const gatherRatePerVillagerPerSecond = GATHER_INFO[node.type].rate;
                     const amountGatheredThisTick = gatherRatePerVillagerPerSecond * villagerCount;
 
                     resourceDeltasThisTick[node.type] = (resourceDeltasThisTick[node.type] || 0) + amountGatheredThisTick;
@@ -432,11 +432,7 @@ const GamePage: React.FC = () => {
             setCurrentAge(savedState.currentAge);
             setGameLog(savedState.gameLog);
             
-            // Migration for old save formats
             const migratedTasks = (savedState.activeTasks || []).map(t => {
-                if ('constructingBuildings' in savedState && t.type === 'build' && t.payload?.villagerId) {
-                     return { ...t, payload: { ...t.payload, villagerIds: [t.payload.villagerId] } };
-                }
                 if (t.type === 'build' && !t.payload?.villagerIds) {
                     return { ...t, payload: { ...t.payload, villagerIds: [] } };
                 }
@@ -766,7 +762,7 @@ const GamePage: React.FC = () => {
     const handleRecallVillagers = (targetId: string, count: number, type: 'resource' | 'construction') => {
         if (type === 'resource') {
             const node = resourceNodes.find(n => n.id === targetId);
-            if (!node || node.assignedVillagers.length < count) return;
+            if (!node || (node.assignedVillagers || []).length < count) return;
     
             const villagersToRecall = node.assignedVillagers.slice(node.assignedVillagers.length - count);
             setResourceNodes(prev => prev.map(n => n.id === targetId ? { ...n, assignedVillagers: n.assignedVillagers.filter(id => !villagersToRecall.includes(id)) } : n));
@@ -881,7 +877,7 @@ const GamePage: React.FC = () => {
         }
         const duration = 60000;
         if(unlimitedResources) {
-            handleTaskCompletion({ id: 'instant', type: 'advance_age', startTime: 0, duration: 0 });
+            handleTaskCompletion({ id: 'instant', type: 'advance_age', startTime: 0, duration: 0, payload: {} });
         } else {
             const taskId = `${Date.now()}-advance_age`;
             const newTask: GameTask = { id: taskId, type: 'advance_age', startTime: Date.now(), duration };
@@ -906,10 +902,39 @@ const GamePage: React.FC = () => {
     const handleToggleUnlimitedResources = () => {
         const newMode = !unlimitedResources;
         setUnlimitedResources(newMode);
+
         if (newMode) {
+            // Test mode is being turned ON
             setResources({ food: 99999, wood: 99999, gold: 99999, stone: 99999 });
-            addNotification("Test Mode: ON");
+            addNotification("Test Mode: ON - All active tasks completed.");
+
+            const depletedNodeIds = new Set<string>();
+            
+            // Process and complete all active tasks
+            activeTasks.forEach(task => {
+                if (task.type === 'gather') {
+                    if (task.payload?.resourceNodeId) {
+                        depletedNodeIds.add(task.payload.resourceNodeId);
+                        const node = resourceNodes.find(n => n.id === task.payload.resourceNodeId);
+                        if (node) {
+                            addToLog(`Instantly gathered all ${node.type} from a depleted source.`, node.type);
+                        }
+                    }
+                } else {
+                    handleTaskCompletion(task);
+                }
+            });
+
+            // Remove depleted resource nodes
+            if (depletedNodeIds.size > 0) {
+                setResourceNodes(prev => prev.filter(n => !depletedNodeIds.has(n.id)));
+            }
+            
+            // Clear the task queue
+            setActiveTasks([]);
+
         } else {
+            // Test mode is being turned OFF
             addNotification("Test Mode: OFF");
         }
     };

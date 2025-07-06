@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Buildings, BuildingType, BuildingInstance, ConstructingBuilding, GameTask, BuildingInfo, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
+import { VillagerIcon } from './icons/ResourceIcons';
 
 const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingInfo | undefined; builderCount: number }> = ({ task, buildingInfo, builderCount }) => {
     const [remainingTime, setRemainingTime] = useState(0);
@@ -189,6 +190,12 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                                 {iconMap[construction.type]}
                                 {buildTask && <ProgressBar startTime={buildTask.startTime} duration={buildTask.duration} className="w-10/12 h-1.5"/>}
                                 {buildTask && buildingInfo && <ConstructionTooltip task={buildTask} buildingInfo={buildingInfo} builderCount={construction.villagerIds.length} />}
+                                {construction.villagerIds.length > 0 && (
+                                    <div className="absolute top-0.5 right-0.5 flex items-center bg-stone-dark/80 rounded-full px-1.5 py-0.5 text-xs text-brand-blue z-10">
+                                        <div className="w-3 h-3"><VillagerIcon /></div>
+                                        <span className="ml-1 font-bold">{construction.villagerIds.length}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         {resourceNode && (
@@ -198,6 +205,12 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, constructingBuildings, act
                                 {gatherTask && (
                                     <div className="absolute bottom-0.5 w-10/12 h-1.5">
                                         <ProgressBar startTime={gatherTask.startTime} duration={gatherTask.duration}/>
+                                    </div>
+                                )}
+                                {resourceNode.assignedVillagers.length > 0 && (
+                                    <div className="absolute top-0.5 right-0.5 flex items-center bg-stone-dark/80 rounded-full px-1.5 py-0.5 text-xs text-brand-blue z-10">
+                                        <div className="w-3 h-3"><VillagerIcon /></div>
+                                        <span className="ml-1 font-bold">{resourceNode.assignedVillagers.length}</span>
                                     </div>
                                 )}
                             </div>

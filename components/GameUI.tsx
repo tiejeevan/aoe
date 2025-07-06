@@ -3,7 +3,8 @@ import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameEvent, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, ConstructingBuilding, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon, SettingsIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
-import { ScrollText } from 'lucide-react';
+import { ScrollText, Layers, X } from 'lucide-react';
+import MapCommandBar from './MapCommandBar';
 
 interface GameUIProps {
     civilization: Civilization;
@@ -119,10 +120,10 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                 <HeaderStat icon={<PopulationIcon/>} value={`${population.current}/${population.capacity}`} tooltip="Population / Capacity" colorClass="text-brand-blue" />
 
                 <div className="flex items-center space-x-2">
-                    <HeaderStat icon={<FoodIcon/>} value={resources.food} delta={resourceDeltas.food} tooltip="Food" colorClass="text-brand-green"/>
-                    <HeaderStat icon={<WoodIcon/>} value={resources.wood} delta={resourceDeltas.wood} tooltip="Wood" colorClass="text-amber-700"/>
-                    <HeaderStat icon={<GoldIcon/>} value={resources.gold} delta={resourceDeltas.gold} tooltip="Gold" colorClass="text-brand-gold"/>
-                    <HeaderStat icon={<StoneIcon/>} value={resources.stone} delta={resourceDeltas.stone} tooltip="Stone" colorClass="text-gray-400"/>
+                    <HeaderStat icon={<FoodIcon/>} value={Math.floor(resources.food)} delta={resourceDeltas.food} tooltip="Food"/>
+                    <HeaderStat icon={<WoodIcon/>} value={Math.floor(resources.wood)} delta={resourceDeltas.wood} tooltip="Wood"/>
+                    <HeaderStat icon={<GoldIcon/>} value={Math.floor(resources.gold)} delta={resourceDeltas.gold} tooltip="Gold"/>
+                    <HeaderStat icon={<StoneIcon/>} value={Math.floor(resources.stone)} delta={resourceDeltas.stone} tooltip="Stone"/>
                     
                     <div className="relative group pl-4">
                          <button 
@@ -155,95 +156,30 @@ const GameUI: React.FC<GameUIProps> = (props) => {
             <div className="flex-grow grid grid-cols-1 gap-4">
                 {/* Center Panel: Map, Units, Events & Log */}
                 <div className="bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col gap-4">
-                     <GameMap
-                        buildings={buildings}
-                        constructingBuildings={constructingBuildings}
-                        activeTasks={activeTasks}
-                        playerAction={playerAction}
-                        onConfirmPlacement={onConfirmPlacement}
-                        onCancelPlayerAction={onCancelPlayerAction}
-                        onBuildingClick={onBuildingClick}
-                        mapDimensions={mapDimensions}
-                        buildingList={buildingList}
-                        resourceNodes={resourceNodes}
-                        onOpenAssignmentPanel={onOpenAssignmentPanel}
-                        onOpenConstructionPanel={onOpenConstructionPanel}
-                        gatherInfo={gatherInfo}
-                    />
-
-                    <div className="flex justify-center gap-4 -mt-2">
-                        {/* Villager Button */}
-                        <div className="relative group">
-                            <button 
-                                onClick={(e) => onOpenUnitPanel('villagers', e.currentTarget.getBoundingClientRect())}
-                                className="flex items-center gap-4 px-6 py-2 rounded-lg bg-stone-dark/60 border-2 border-stone-light/40 hover:bg-brand-blue/20 hover:border-brand-blue/70 transition-all duration-200"
-                            >
-                                <div className="w-10 h-10 text-brand-blue"><VillagerIcon /></div>
-                                <div className="text-left">
-                                    <p className="text-2xl font-bold">{units.villagers.length}</p>
-                                    <p className="text-xs text-parchment-dark -mt-1">Villagers</p>
-                                </div>
-                            </button>
-                            <div className="absolute bottom-full mb-2 w-max px-3 py-2 bg-stone-dark text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-left sci-fi-panel-popup">
-                                <p className="font-serif text-brand-gold text-base">Manage Villagers</p>
-                                <p className="text-sm text-parchment-dark">{busyVillagerCount} Busy / {units.villagers.length - busyVillagerCount} Idle</p>
-                                <hr className="border-stone-light/20 my-1" />
-                                <p className="text-xs italic text-parchment-dark/70">Click to manage individual villagers.</p>
-                            </div>
-                        </div>
-
-                        {/* Military Button */}
-                        <div className="relative group">
-                            <button 
-                                onClick={(e) => onOpenUnitPanel('military', e.currentTarget.getBoundingClientRect())}
-                                className="flex items-center gap-4 px-6 py-2 rounded-lg bg-stone-dark/60 border-2 border-stone-light/40 hover:bg-brand-red/20 hover:border-brand-red/70 transition-all duration-200"
-                            >
-                                <div className="w-10 h-10 text-brand-red"><SwordIcon /></div>
-                                 <div className="text-left">
-                                    <p className="text-2xl font-bold">{units.military.length}</p>
-                                    <p className="text-xs text-parchment-dark -mt-1">Military</p>
-                                </div>
-                            </button>
-                            <div className="absolute bottom-full mb-2 w-max px-3 py-2 bg-stone-dark text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-left sci-fi-panel-popup">
-                                <p className="font-serif text-brand-gold text-base">Manage Military</p>
-                                {units.military.length > 0 ? (
-                                    <div className="mt-1 space-y-0.5 text-sm text-parchment-dark">
-                                    {unitList.map(unitInfo => {
-                                            if (militaryUnitCounts[unitInfo.id] > 0) {
-                                                return (
-                                                    <p key={unitInfo.id}>{unitInfo.name}s: <span className="font-bold">{militaryUnitCounts[unitInfo.id]}</span></p>
-                                                )
-                                            }
-                                            return null;
-                                        })}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-parchment-dark">No military units trained.</p>
-                                )}
-                                <hr className="border-stone-light/20 my-1" />
-                                <p className="text-xs italic text-parchment-dark/70">Click to manage your forces.</p>
-                            </div>
-                        </div>
-                        
-                        {/* Buildings Button */}
-                        <div className="relative group">
-                            <button 
-                                onClick={(e) => onOpenAllBuildingsPanel(e.currentTarget.getBoundingClientRect())}
-                                className="flex items-center gap-4 px-6 py-2 rounded-lg bg-stone-dark/60 border-2 border-stone-light/40 hover:bg-brand-green/20 hover:border-brand-green/70 transition-all duration-200"
-                            >
-                                <div className="w-10 h-10 text-brand-green"><WatchTowerIcon /></div>
-                                <div className="text-left">
-                                    <p className="text-2xl font-bold">{totalBuildingsCount}</p>
-                                    <p className="text-xs text-parchment-dark -mt-1">Buildings</p>
-                                </div>
-                            </button>
-                            <div className="absolute bottom-full mb-2 w-max px-3 py-2 bg-stone-dark text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-left sci-fi-panel-popup">
-                                <p className="font-serif text-brand-gold text-base">Manage Buildings</p>
-                                <p className="text-sm text-parchment-dark">Click to see all your structures.</p>
-                            </div>
-                        </div>
+                     <div className="relative">
+                        <GameMap
+                            buildings={buildings}
+                            constructingBuildings={constructingBuildings}
+                            activeTasks={activeTasks}
+                            playerAction={playerAction}
+                            onConfirmPlacement={onConfirmPlacement}
+                            onCancelPlayerAction={onCancelPlayerAction}
+                            onBuildingClick={onBuildingClick}
+                            mapDimensions={mapDimensions}
+                            buildingList={buildingList}
+                            resourceNodes={resourceNodes}
+                            onOpenAssignmentPanel={onOpenAssignmentPanel}
+                            onOpenConstructionPanel={onOpenConstructionPanel}
+                            gatherInfo={gatherInfo}
+                        />
+                         <MapCommandBar
+                            onOpenUnitPanel={onOpenUnitPanel}
+                            onOpenAllBuildingsPanel={onOpenAllBuildingsPanel}
+                            villagerCount={units.villagers.length}
+                            militaryCount={units.military.length}
+                            buildingCount={totalBuildingsCount}
+                        />
                     </div>
-
 
                     <div className="flex flex-col flex-grow">
                         <h2 className="text-2xl font-serif text-center mb-1">Chronicles</h2>

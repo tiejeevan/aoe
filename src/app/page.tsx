@@ -37,10 +37,10 @@ const UNIT_INFO: UnitInfo[] = [
 ];
 
 const GATHER_INFO: Record<ResourceNodeType, { rate: number }> = {
-    food: { rate: 10 },
-    wood: { rate: 8 },
-    gold: { rate: 5 },
-    stone: { rate: 6 },
+    food: { rate: 100 }, // Rates are now per 10 seconds for more intuitive numbers
+    wood: { rate: 80 },
+    gold: { rate: 50 },
+    stone: { rate: 60 },
 }
 
 const initialBuildingsState: Buildings = {
@@ -122,9 +122,9 @@ const GamePage: React.FC = () => {
         setNotifications(prev => prev.filter(n => n.id !== id));
     }, []);
     
-    const addToLog = (message: string, icon: LogIconType) => {
+    const addToLog = useCallback((message: string, icon: LogIconType) => {
         setGameLog(prev => [{ id: `${Date.now()}-${Math.random()}`, message, icon }, ...prev.slice(0, 19)]);
-    };
+    }, []);
     
     const updateResources = useCallback((deltas: ResourceDeltas) => {
         setResources(prev => {
@@ -153,8 +153,142 @@ const GamePage: React.FC = () => {
         }
     }, []);
 
+    const handleTaskCompletion = useCallback((task: GameTask) => {
+        switch (task.type) {
+            case 'build': {
+                const { buildingType, villagerIds, position } = task.payload!;
+                const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
+                const [name] = getRandomNames('building', 1);
+                const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
+                
+                setConstructingBuildings(prev => prev.filter(b => b.id !== task.id));
+                setBuildings(p => ({ ...p, [buildingType!]: [...p[buildingType!], newBuilding] }));
+                
+                if (villagerIds && villagerIds.length > 0) {
+                    addToLog(`${villagerIds.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingType!);
+                    setActivityStatus(`Construction of ${name} is complete.`);
+                }
+                break;
+            }
+            case 'gather': {
+                // This is now handled by the game loop depleting the node.
+                // handleTaskCompletion for gather is only called when the node is gone.
+                // The villagers assigned are now idle.
+                break;
+            }
+            case 'train_villager': {
+                const { count } = task.payload!;
+                const newVillagerNames = getRandomNames('villager', count!);
+                const newVillagers: Villager[] = newVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name }));
+                setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
+                addToLog(`${count} new villager(s) have joined your settlement.`, 'villager');
+                setActivityStatus(`${count} new villager(s) are ready to work.`);
+                break;
+            }
+            case 'train_military': {
+                 const { unitType, count } = task.payload!;
+                 const unitInfo = UNIT_INFO.find(u => u.id === unitType)!;
+                 const newUnitNames = getRandomNames('soldier', count!);
+                 const newUnits: MilitaryUnit[] = newUnitNames.map(name => ({ id: `${Date.now()}-${unitType}-${name}`, name, title: '', unitType: unitType! }));
+                 setUnits(p => ({ ...p, military: [...p.military, ...newUnits] }));
+                 addToLog(`${count} ${unitInfo.name}(s) have been trained.`, unitType!);
+                 setActivityStatus(`${count} new ${unitInfo.name}(s) are ready for battle.`);
+                 break;
+            }
+            case 'advance_age': {
+                const ageResult = getPredefinedAge(currentAge);
+                setCurrentAge(ageResult.nextAgeName);
+                addToLog(`You have advanced to the ${ageResult.nextAgeName}!`, 'age');
+                addToLog(ageResult.description, 'age');
+                setActivityStatus(`Welcome to the ${ageResult.nextAgeName}!`);
+                break;
+            }
+        }
+    }, [currentAge, updateResources, addToLog]);
+    
+    // Game Loop
+    useEffect(() => {
+        const gameLoop = setInterval(() => {
+            const now = Date.now();
+            let completedTasks: GameTask[] = [];
+            let resourceDeltasThisTick: ResourceDeltas = {};
+
+            const stillActiveTasks = activeTasks.map(task => {
+                if (now >= task.startTime + task.duration) {
+                    completedTasks.push(task);
+                    return null;
+                }
+                
+                if (task.type === 'gather') {
+                    const node = resourceNodes.find(n => n.id === task.payload?.resourceNodeId);
+                    const villagerCount = task.payload?.villagerIds?.length || 0;
+                    
+                    if (!node || villagerCount === 0) {
+                        return null; // Orphaned task, mark for removal
+                    }
+
+                    const gatherRatePerVillagerPerSecond = GATHER_INFO[node.type].rate / 10;
+                    const amountGatheredThisTick = gatherRatePerVillagerPerSecond * villagerCount;
+
+                    resourceDeltasThisTick[node.type] = (resourceDeltasThisTick[node.type] || 0) + amountGatheredThisTick;
+                }
+
+                return task;
+
+            }).filter(Boolean) as GameTask[];
+            
+            // Update resource nodes separately to avoid race conditions with state
+            if (Object.keys(resourceDeltasThisTick).length > 0) {
+                setResources(prevRes => {
+                    const newResources = { ...prevRes };
+                    for(const key in resourceDeltasThisTick) {
+                        const resKey = key as keyof Resources;
+                        newResources[resKey] += resourceDeltasThisTick[resKey]!;
+                    }
+                    return newResources;
+                });
+
+                setResourceNodes(prevNodes => {
+                    let nodesWereDepleted = false;
+                    const newNodes = prevNodes.map(node => {
+                        const amountToDecrement = resourceDeltasThisTick[node.type];
+                        if (amountToDecrement) {
+                            const newAmount = node.amount - amountToDecrement;
+                            if (newAmount <= 0) {
+                                addToLog(`${node.assignedVillagers.length} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
+                                setActivityStatus(`A ${node.type} source has been fully depleted.`);
+                                nodesWereDepleted = true;
+
+                                const gatherTask = stillActiveTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === node.id);
+                                if(gatherTask) completedTasks.push(gatherTask);
+
+                                return null;
+                            }
+                            return { ...node, amount: newAmount };
+                        }
+                        return node;
+                    }).filter(Boolean) as ResourceNode[];
+
+                    if (nodesWereDepleted) {
+                        // This will filter out the completed gather tasks in the next step
+                    }
+                    return newNodes;
+                });
+            }
+
+            const finalActiveTasks = stillActiveTasks.filter(t => !completedTasks.some(ct => ct.id === t.id));
+            setActiveTasks(finalActiveTasks);
+
+            if (completedTasks.length > 0) {
+                completedTasks.forEach(handleTaskCompletion);
+            }
+        }, 1000);
+
+        return () => clearInterval(gameLoop);
+    }, [activeTasks, resourceNodes, handleTaskCompletion, addToLog]);
+
+
     const handleNewEvent = useCallback(() => {
-        // Allow events to trigger even if villagers are just gathering.
         const nonGatheringTasks = activeTasks.filter(t => t.type !== 'gather');
         if (!civilization || currentEvent || nonGatheringTasks.length > 0) return;
         
@@ -162,7 +296,7 @@ const GamePage: React.FC = () => {
         const event = getPredefinedGameEvent();
         setCurrentEvent(event);
         setActivityStatus('A new event requires your attention!');
-    }, [civilization, currentEvent, activeTasks]);
+    }, [civilization, currentEvent, activeTasks, addToLog]);
     
     const scheduleNextEvent = useCallback(() => {
         if (eventTimerRef.current) {
@@ -324,100 +458,6 @@ const GamePage: React.FC = () => {
             addNotification(`Could not find a saved game named "${saveName}".`);
         }
     };
-
-    const handleTaskCompletion = useCallback((task: GameTask) => {
-        switch (task.type) {
-            case 'build': {
-                const { buildingType, villagerIds, position } = task.payload!;
-                const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
-                const [name] = getRandomNames('building', 1);
-                const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
-                
-                setConstructingBuildings(prev => prev.filter(b => b.id !== task.id));
-                setBuildings(p => ({ ...p, [buildingType!]: [...p[buildingType!], newBuilding] }));
-                
-                if (villagerIds && villagerIds.length > 0) {
-                    addToLog(`${villagerIds.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingType!);
-                    setActivityStatus(`Construction of ${name} is complete.`);
-                }
-                break;
-            }
-            case 'gather': {
-                const { resourceNodeId } = task.payload!;
-
-                setResourceNodes(prevNodes => {
-                    const node = prevNodes.find(n => n.id === resourceNodeId);
-                    
-                    if (!node) {
-                        console.warn(`Gather task completed for a non-existent or already processed node: ${resourceNodeId}`);
-                        return prevNodes;
-                    }
-            
-                    const amountToAdd = Math.floor(node.amount);
-                    
-                    if (amountToAdd > 0) {
-                        updateResources({ [node.type]: amountToAdd });
-                        addToLog(`${node.assignedVillagers.length} villager(s) depleted a ${node.type} source, gaining ${amountToAdd} ${node.type}.`, node.type);
-                        setActivityStatus(`A ${node.type} source has been fully depleted.`);
-                    }
-                    
-                    return prevNodes.filter(n => n.id !== resourceNodeId);
-                });
-                break;
-            }
-            case 'train_villager': {
-                const { count } = task.payload!;
-                const newVillagerNames = getRandomNames('villager', count!);
-                const newVillagers: Villager[] = newVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name }));
-                setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
-                addToLog(`${count} new villager(s) have joined your settlement.`, 'villager');
-                setActivityStatus(`${count} new villager(s) are ready to work.`);
-                break;
-            }
-            case 'train_military': {
-                 const { unitType, count } = task.payload!;
-                 const unitInfo = UNIT_INFO.find(u => u.id === unitType)!;
-                 const newUnitNames = getRandomNames('soldier', count!);
-                 const newUnits: MilitaryUnit[] = newUnitNames.map(name => ({ id: `${Date.now()}-${unitType}-${name}`, name, title: '', unitType: unitType! }));
-                 setUnits(p => ({ ...p, military: [...p.military, ...newUnits] }));
-                 addToLog(`${count} ${unitInfo.name}(s) have been trained.`, unitType!);
-                 setActivityStatus(`${count} new ${unitInfo.name}(s) are ready for battle.`);
-                 break;
-            }
-            case 'advance_age': {
-                const ageResult = getPredefinedAge(currentAge);
-                setCurrentAge(ageResult.nextAgeName);
-                addToLog(`You have advanced to the ${ageResult.nextAgeName}!`, 'age');
-                addToLog(ageResult.description, 'age');
-                setActivityStatus(`Welcome to the ${ageResult.nextAgeName}!`);
-                break;
-            }
-        }
-    }, [currentAge, updateResources]);
-
-    // Game Loop
-    useEffect(() => {
-        const gameLoop = setInterval(() => {
-            const now = Date.now();
-            const completedTasks: GameTask[] = [];
-            setActiveTasks(currentTasks => {
-                return currentTasks.filter(task => {
-                    if (task.type !== 'gather' && now >= task.startTime + task.duration) {
-                        completedTasks.push(task);
-                        return false;
-                    }
-                    return true;
-                });
-            });
-
-            if (completedTasks.length > 0) {
-                completedTasks.forEach(handleTaskCompletion);
-            }
-        }, 1000);
-
-        return () => clearInterval(gameLoop);
-    }, [handleTaskCompletion]);
-
 
     // Event Trigger Timer
     useEffect(() => {
@@ -707,43 +747,84 @@ const GamePage: React.FC = () => {
             prevNodes.map(n => n.id === nodeId ? {...n, assignedVillagers: [...new Set([...n.assignedVillagers, ...villagerIdsToAssign])]} : n)
         );
         
-        const gatherRatePerVillager = GATHER_INFO[targetNode.type].rate;
-
         if (unlimitedResources) { // Instant gather for test mode
             updateResources({ [targetNode.type]: targetNode.amount });
             addToLog(`${cappedCount} villager(s) instantly gathered ${Math.floor(targetNode.amount)} ${targetNode.type}.`, targetNode.type);
             setResourceNodes(prev => prev.filter(n => n.id !== nodeId));
         } else {
-             const amountPerSecond = gatherRatePerVillager / 10;
-             const gatherInterval = setInterval(() => {
-                let nodeIsDepleted = false;
-                setResourceNodes(prev => prev.map(n => {
-                    if (n.id === nodeId) {
-                        const newAmount = n.amount - amountPerSecond;
-                        if (newAmount <= 0) {
-                            nodeIsDepleted = true;
-                            updateResources({ [n.type]: n.amount });
-                            addToLog(`${n.assignedVillagers.length} villager(s) depleted a ${n.type} source.`, n.type);
-                            return null;
-                        }
-                        updateResources({ [n.type]: amountPerSecond });
-                        return { ...n, amount: newAmount };
-                    }
-                    return n;
-                }).filter(Boolean) as ResourceNode[]);
-
-                if (nodeIsDepleted) {
-                     clearInterval(gatherInterval);
-                     setActiveTasks(prev => prev.filter(t => t.id !== `gather-${nodeId}`));
-                }
-             }, 100);
-            
-            const newTask: GameTask = { id: `gather-${nodeId}`, type: 'gather', startTime: Date.now(), duration: 99999999, payload: { resourceNodeId: nodeId, villagerIds: villagersToAssign.map(v=>v.id) }};
-            setActiveTasks(prev => [...prev.filter(t=> t.id !== `gather-${nodeId}`), newTask]);
+            const existingTask = activeTasks.find(t => t.type === 'gather' && t.payload?.resourceNodeId === nodeId);
+            if (existingTask) {
+                setActiveTasks(prev => prev.map(t => t.id === existingTask.id ? {
+                    ...t,
+                    payload: { ...t.payload, villagerIds: [...new Set([...t.payload!.villagerIds!, ...villagerIdsToAssign])] }
+                } : t));
+            } else {
+                 const newTask: GameTask = { id: `gather-${nodeId}`, type: 'gather', startTime: Date.now(), duration: 86400000, payload: { resourceNodeId: nodeId, villagerIds: villagerIdsToAssign }}; // Duration is arbitrary, loop handles completion
+                 setActiveTasks(prev => [...prev, newTask]);
+            }
         }
     
         addToLog(`${cappedCount} villager(s) assigned to gather ${targetNode.type}.`, targetNode.type);
         setActivityStatus(`${cappedCount} villager(s) are now gathering ${targetNode.type}.`);
+        setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
+    };
+
+    const handleRecallVillagers = (targetId: string, count: number, type: 'resource' | 'construction') => {
+        if (type === 'resource') {
+            const node = resourceNodes.find(n => n.id === targetId);
+            if (!node || node.assignedVillagers.length < count) return;
+    
+            const villagersToRecall = node.assignedVillagers.slice(node.assignedVillagers.length - count);
+            setResourceNodes(prev => prev.map(n => n.id === targetId ? { ...n, assignedVillagers: n.assignedVillagers.filter(id => !villagersToRecall.includes(id)) } : n));
+    
+            setActiveTasks(prev => {
+                const taskIndex = prev.findIndex(t => t.type === 'gather' && t.payload?.resourceNodeId === targetId);
+                if (taskIndex === -1) return prev;
+                
+                const task = prev[taskIndex];
+                const remainingVillagers = task.payload!.villagerIds!.filter(id => !villagersToRecall.includes(id));
+    
+                if (remainingVillagers.length === 0) {
+                    return prev.filter((_, i) => i !== taskIndex);
+                } else {
+                    return prev.map((t, i) => i === taskIndex ? { ...t, payload: { ...t.payload, villagerIds: remainingVillagers } } : t);
+                }
+            });
+            addToLog(`${count} villager(s) recalled from gathering ${node.type}.`, 'villager');
+        } else { // construction
+            const construction = constructingBuildings.find(c => c.id === targetId);
+            const task = activeTasks.find(t => t.id === targetId);
+            if (!construction || !task || construction.villagerIds.length < count) return;
+            
+            const villagersToRecall = construction.villagerIds.slice(construction.villagerIds.length - count);
+            const remainingVillagers = construction.villagerIds.filter(id => !villagersToRecall.includes(id));
+    
+            if (remainingVillagers.length === 0) {
+                addNotification("Cannot recall the last builder. This would cancel the project.");
+                return;
+            }
+    
+            const buildingInfo = BUILDINGS_INFO.find(b => b.id === construction.type)!;
+            const totalWork = buildingInfo.buildTime * 1000;
+            const oldWorkerCount = construction.villagerIds.length;
+    
+            const timeElapsed = Date.now() - task.startTime;
+            const workDone = timeElapsed * oldWorkerCount;
+            const workRemaining = Math.max(0, totalWork - workDone);
+    
+            const newWorkerCount = remainingVillagers.length;
+            const newRemainingDuration = workRemaining / newWorkerCount;
+            
+            setConstructingBuildings(prev => prev.map(c => c.id === targetId ? { ...c, villagerIds: remainingVillagers } : c));
+            setActiveTasks(prev => prev.map(t => t.id === targetId ? {
+                ...t,
+                startTime: Date.now(),
+                duration: newRemainingDuration,
+                payload: { ...t.payload, villagerIds: remainingVillagers }
+            } : t));
+            addToLog(`${count} villager(s) recalled from construction. Work will now proceed slower.`, 'villager');
+        }
+    
         setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     };
 
@@ -998,6 +1079,7 @@ const GamePage: React.FC = () => {
                             assignmentTarget={assignmentTarget || null}
                             idleVillagerCount={idleVillagerCount}
                             onAssignVillagers={handleAssignVillagers}
+                            onRecallVillagers={handleRecallVillagers}
                             gatherInfo={GATHER_INFO}
                             buildingList={BUILDINGS_INFO}
                             anchorRect={assignmentPanelState.anchorRect}

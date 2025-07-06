@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { Units, Villager, MilitaryUnit } from '../types';
 import { DismissIcon, EditIcon, BuildIcon } from './icons/ResourceIcons';
@@ -30,7 +31,7 @@ const ActionButton: React.FC<{
         >
             <div className="w-5 h-5">{children}</div>
         </button>
-        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none z-10">
+        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
             {title}
         </div>
     </div>
@@ -155,10 +156,10 @@ const UnitManagementPanel: React.FC<UnitManagementPanelProps> = ({ isOpen, onClo
     const titleText = currentType === 'villagers' ? 'Your Villagers' : 'Your Military Forces';
 
     const panelStyle: React.CSSProperties = {
-        top: `${currentAnchor.bottom + 8}px`,
+        bottom: `${window.innerHeight - currentAnchor.top + 8}px`,
         left: `${currentAnchor.left}px`,
-        transformOrigin: 'top left',
-        maxHeight: `calc(100vh - ${currentAnchor.bottom + 24}px)`,
+        transformOrigin: 'bottom left',
+        maxHeight: `${currentAnchor.top - 24}px`,
     } as React.CSSProperties;
 
     return (

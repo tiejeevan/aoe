@@ -180,33 +180,10 @@ const GameUI: React.FC<GameUIProps> = (props) => {
 
             {/* Main Content Grid */}
             <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Left Panel: Civ Info & Stats */}
+                {/* Left Panel: Buildings */}
                 <div className="md:col-span-1 bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col space-y-4">
-                    <div className="space-y-2">
-                        <h4 className="font-serif text-parchment-dark mb-1">Population ({busyVillagerCount}/{units.villagers.length} Busy)</h4>
-                        <StatBox icon={<VillagerIcon />} label="Villagers" value={units.villagers.length} colorClass="text-brand-blue" onActionClick={(e) => onOpenUnitPanel('villagers', e.currentTarget.getBoundingClientRect())} />
-                        <h4 className="font-serif text-parchment-dark mb-1 mt-4">Military</h4>
-                        <StatBox icon={<SwordIcon />} label="Total Military" value={units.military.length} colorClass="text-brand-red" onActionClick={(e) => onOpenUnitPanel('military', e.currentTarget.getBoundingClientRect())} />
-                        <div className="pl-4 pt-1 space-y-1">
-                            {unitList.map(unitInfo => {
-                                if (militaryUnitCounts[unitInfo.id] > 0) {
-                                    const Icon = iconMap[unitInfo.id];
-                                    if (!Icon) return null;
-                                    return (
-                                        <div key={unitInfo.id} className="flex items-center text-sm">
-                                            <div className="w-5 h-5 mr-2 text-parchment-dark">{Icon}</div>
-                                            <span className="flex-grow text-parchment-dark">{unitInfo.name}s</span>
-                                            <span className="font-bold">{militaryUnitCounts[unitInfo.id]}</span>
-                                        </div>
-                                    )
-                                }
-                                return null;
-                            })}
-                        </div>
-                    </div>
-                     <hr className="border-stone-light/20" />
                     <div className="space-y-1 flex-grow">
-                        <h4 className="font-serif text-parchment-dark mb-1">Buildings</h4>
+                        <h4 className="font-serif text-parchment-dark mb-2">Buildings</h4>
                         <div className="space-y-2">
                              {Object.entries(buildingCounts)
                                 .sort(([typeA], [typeB]) => {
@@ -242,7 +219,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                     </div>
                 </div>
 
-                {/* Center Panel: Map, Events & Log */}
+                {/* Center Panel: Map, Units, Events & Log */}
                 <div className="md:col-span-2 bg-stone-dark/30 p-4 rounded-lg border border-stone-light/30 flex flex-col gap-4">
                      <GameMap
                         buildings={buildings}
@@ -259,6 +236,62 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                         onOpenConstructionPanel={onOpenConstructionPanel}
                         gatherInfo={gatherInfo}
                     />
+
+                    <div className="flex justify-center gap-4 -mt-2">
+                        {/* Villager Button */}
+                        <div className="relative group">
+                            <button 
+                                onClick={(e) => onOpenUnitPanel('villagers', e.currentTarget.getBoundingClientRect())}
+                                className="flex items-center gap-4 px-6 py-2 rounded-lg bg-stone-dark/60 border-2 border-stone-light/40 hover:bg-brand-blue/20 hover:border-brand-blue/70 transition-all duration-200"
+                            >
+                                <div className="w-10 h-10 text-brand-blue"><VillagerIcon /></div>
+                                <div className="text-left">
+                                    <p className="text-2xl font-bold">{units.villagers.length}</p>
+                                    <p className="text-xs text-parchment-dark -mt-1">Villagers</p>
+                                </div>
+                            </button>
+                            <div className="absolute bottom-full mb-2 w-max px-3 py-2 bg-stone-dark text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-left sci-fi-panel-popup">
+                                <p className="font-serif text-brand-gold text-base">Manage Villagers</p>
+                                <p className="text-sm text-parchment-dark">{busyVillagerCount} Busy / {units.villagers.length - busyVillagerCount} Idle</p>
+                                <hr className="border-stone-light/20 my-1" />
+                                <p className="text-xs italic text-parchment-dark/70">Click to manage individual villagers.</p>
+                            </div>
+                        </div>
+
+                        {/* Military Button */}
+                        <div className="relative group">
+                            <button 
+                                onClick={(e) => onOpenUnitPanel('military', e.currentTarget.getBoundingClientRect())}
+                                className="flex items-center gap-4 px-6 py-2 rounded-lg bg-stone-dark/60 border-2 border-stone-light/40 hover:bg-brand-red/20 hover:border-brand-red/70 transition-all duration-200"
+                            >
+                                <div className="w-10 h-10 text-brand-red"><SwordIcon /></div>
+                                 <div className="text-left">
+                                    <p className="text-2xl font-bold">{units.military.length}</p>
+                                    <p className="text-xs text-parchment-dark -mt-1">Military</p>
+                                </div>
+                            </button>
+                            <div className="absolute bottom-full mb-2 w-max px-3 py-2 bg-stone-dark text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-left sci-fi-panel-popup">
+                                <p className="font-serif text-brand-gold text-base">Manage Military</p>
+                                {units.military.length > 0 ? (
+                                    <div className="mt-1 space-y-0.5 text-sm text-parchment-dark">
+                                    {unitList.map(unitInfo => {
+                                            if (militaryUnitCounts[unitInfo.id] > 0) {
+                                                return (
+                                                    <p key={unitInfo.id}>{unitInfo.name}s: <span className="font-bold">{militaryUnitCounts[unitInfo.id]}</span></p>
+                                                )
+                                            }
+                                            return null;
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-parchment-dark">No military units trained.</p>
+                                )}
+                                <hr className="border-stone-light/20 my-1" />
+                                <p className="text-xs italic text-parchment-dark/70">Click to manage your forces.</p>
+                            </div>
+                        </div>
+                    </div>
+
 
                     <div className="flex flex-col flex-grow">
                         <h2 className="text-2xl font-serif text-center mb-1">Chronicles</h2>

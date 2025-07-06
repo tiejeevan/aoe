@@ -39,7 +39,11 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     
     const isConstruction = assignmentTarget ? 'villagerIds' in assignmentTarget : false;
     const isResource = assignmentTarget ? 'amount' in assignmentTarget : false;
-    const assignedCount = isResource ? (assignmentTarget as ResourceNode).assignedVillagers.length : isConstruction ? (assignmentTarget as ConstructingBuilding).villagerIds.length : 0;
+    const assignedCount = isResource 
+        ? ((assignmentTarget as ResourceNode).assignedVillagers || []).length 
+        : isConstruction 
+        ? (assignmentTarget as ConstructingBuilding).villagerIds.length 
+        : 0;
     
     useEffect(() => {
         if (isOpen) {
@@ -86,14 +90,15 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     
     if (isResource) {
         const node = currentTarget as ResourceNode;
+        const assignedVillagers = node.assignedVillagers || [];
         title = `Gather ${node.type}`;
         const IconComponent = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
         MainIcon = <IconComponent />;
-        const currentRate = node.assignedVillagers.length * (gatherInfo[node.type].rate / 10);
+        const currentRate = assignedVillagers.length * (gatherInfo[node.type].rate / 10);
         InfoIcons = (
             <>
                 <InfoIcon icon={MainIcon} value={Math.floor(node.amount)} tooltip="Remaining Amount" />
-                <InfoIcon icon={<VillagerIcon />} value={`${node.assignedVillagers.length}`} tooltip="Assigned Workers" />
+                <InfoIcon icon={<VillagerIcon />} value={`${assignedVillagers.length}`} tooltip="Assigned Workers" />
                 <InfoIcon icon={<ClockIcon />} value={`${currentRate.toFixed(1)}/s`} tooltip="Current Gather Rate" />
             </>
         );

@@ -21,7 +21,7 @@ const InfoIcon: React.FC<{ icon: React.ReactNode; value: string | number; toolti
     <div className="relative group flex items-center gap-1.5 text-parchment-dark">
         <div className="w-5 h-5">{icon}</div>
         <span className="font-bold text-sm">{value}</span>
-        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none z-10">
+        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
             {tooltip}
         </div>
     </div>
@@ -35,22 +35,6 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     const [recallCount, setRecallCount] = useState(1);
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ assignmentTarget, anchorRect });
-    
-    const isConstruction = assignmentTarget ? 'type' in assignmentTarget && assignmentTarget.type === 'build' : false;
-    const isResource = assignmentTarget ? 'amount' in assignmentTarget : false;
-
-    const assignedCount = isResource 
-        ? ((assignmentTarget as ResourceNode).assignedVillagers || []).length 
-        : isConstruction 
-        ? ((assignmentTarget as GameTask).payload?.villagerIds || []).length 
-        : 0;
-    
-    useEffect(() => {
-        if (isOpen) {
-            setAssignCount(idleVillagerCount > 0 ? 1 : 0);
-            setRecallCount(assignedCount > 0 ? 1 : 0);
-        }
-    }, [isOpen, idleVillagerCount, assignedCount]);
     
     useEffect(() => {
         if (isOpen || isClosing) {
@@ -74,7 +58,8 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     
     const handleRecall = () => {
         if (currentData.assignmentTarget && recallCount > 0) {
-            onRecallVillagers(currentData.assignmentTarget.id, recallCount, isResource ? 'resource' : 'construction');
+            const type = 'amount' in currentData.assignmentTarget ? 'resource' : 'construction';
+            onRecallVillagers(currentData.assignmentTarget.id, recallCount, type);
         }
     };
 
@@ -82,6 +67,23 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
 
     const { assignmentTarget: currentTarget, anchorRect: currentAnchor } = currentData;
     if (!currentTarget || !currentAnchor) return null;
+
+    const isConstruction = 'type' in currentTarget && currentTarget.type === 'build';
+    const isResource = 'amount' in currentTarget;
+
+    const assignedCount = isResource 
+        ? ((currentTarget as ResourceNode).assignedVillagers || []).length 
+        : isConstruction 
+        ? ((currentTarget as GameTask).payload?.villagerIds || []).length 
+        : 0;
+
+    useEffect(() => {
+        if (isOpen) {
+            setAssignCount(idleVillagerCount > 0 ? 1 : 0);
+            setRecallCount(assignedCount > 0 ? 1 : 0);
+        }
+    }, [isOpen, idleVillagerCount, assignedCount]);
+    
 
     let title = "Manage Workforce";
     let MainIcon: React.ReactNode = <GatherIcon />;
@@ -93,8 +95,9 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
         const assignedVillagers = node.assignedVillagers || [];
         title = `Gather ${node.type}`;
         const IconComponent = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
-        MainIcon = <IconComponent />;
-        const currentRate = assignedVillagers.length * gatherInfo[node.type].rate;
+        MainIcon = IconComponent ? <IconComponent /> : <GatherIcon />;
+        const currentRateInfo = gatherInfo[node.type];
+        const currentRate = assignedVillagers.length * (currentRateInfo ? currentRateInfo.rate : 0);
         InfoIcons = (
             <>
                 <InfoIcon icon={MainIcon} value={Math.floor(node.amount)} tooltip="Remaining Amount" />

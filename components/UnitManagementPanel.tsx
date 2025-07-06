@@ -160,6 +160,7 @@ const UnitManagementPanel: React.FC<UnitManagementPanelProps> = ({ isOpen, onClo
         left: `${currentAnchor.left}px`,
         transformOrigin: 'top left',
         '--panel-opacity': panelOpacity,
+        maxHeight: `calc(100vh - ${currentAnchor.bottom + 24}px)`,
     } as React.CSSProperties;
 
     return (
@@ -167,13 +168,13 @@ const UnitManagementPanel: React.FC<UnitManagementPanelProps> = ({ isOpen, onClo
             style={panelStyle}
             className={`fixed z-40 w-80 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
         >
-             <div className="sci-fi-panel-popup sci-fi-grid p-4">
+             <div className="sci-fi-panel-popup sci-fi-grid p-4 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h2 className="text-2xl font-serif">{titleText}</h2>
                     <button onClick={handleClose} className="text-3xl font-bold sci-fi-close-button">&times;</button>
                 </div>
 
-                <div className="space-y-2 flex-grow overflow-y-auto max-h-80 pr-2">
+                <div className="space-y-2 flex-grow overflow-y-auto pr-2">
                     {unitList.length > 0 ? (
                         unitList.map(unit => (
                             <UnitRow

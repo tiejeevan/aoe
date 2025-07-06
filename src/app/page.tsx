@@ -782,13 +782,47 @@ const GamePage: React.FC = () => {
         ? resourceNodes.find(n => n.id === assignmentPanelState.targetId)
         : constructingBuildings.find(c => c.id === assignmentPanelState.targetId);
 
-    const closeAllPanels = () => {
+    const closeAllPanels = useCallback(() => {
         setUnitManagementPanel(p => p.isOpen ? { isOpen: false, type: null, anchorRect: null } : p);
         setBuildingManagementPanel(p => p.isOpen ? { isOpen: false, type: null, instanceId: undefined, anchorRect: null } : p);
         setBuildPanelState(p => p.isOpen ? { isOpen: false, villagerId: null, anchorRect: null } : p);
         setAssignmentPanelState(p => p.isOpen ? { isOpen: false, targetId: null, targetType: null, anchorRect: null } : p);
         setSettingsPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
-    };
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const isAnyPanelOpen = unitManagementPanel.isOpen || 
+                                   buildingManagementPanel.isOpen || 
+                                   buildPanelState.isOpen || 
+                                   assignmentPanelState.isOpen || 
+                                   settingsPanelState.isOpen;
+
+            if (!isAnyPanelOpen) {
+                return;
+            }
+
+            const target = event.target as Element;
+
+            if (target.closest('.sci-fi-panel-popup')) {
+                return;
+            }
+
+            closeAllPanels();
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [
+        unitManagementPanel.isOpen, 
+        buildingManagementPanel.isOpen,
+        buildPanelState.isOpen,
+        assignmentPanelState.isOpen,
+        settingsPanelState.isOpen,
+        closeAllPanels
+    ]);
 
     const renderContent = () => {
         switch (gameState) {

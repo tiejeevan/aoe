@@ -69,18 +69,19 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
     const isResource = 'amount' in currentTarget;
 
     let title = "Assign Villagers";
-    let MainIcon = GatherIcon;
+    let MainIcon: React.ReactNode = <GatherIcon />;
     let InfoIcons: React.ReactNode = null;
-    let AssignIcon = GatherIcon;
+    let AssignIcon: React.ReactNode = <GatherIcon />;
     
     if (isResource) {
         const node = currentTarget as ResourceNode;
         title = `Gather ${node.type}`;
-        MainIcon = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
+        const IconComponent = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
+        MainIcon = <IconComponent />;
         const projectedRate = assignCount * gatherInfo[node.type].rate;
         InfoIcons = (
             <>
-                <InfoIcon icon={<MainIcon />} value={Math.floor(node.amount)} tooltip="Remaining Amount" />
+                <InfoIcon icon={MainIcon} value={Math.floor(node.amount)} tooltip="Remaining Amount" />
                 <InfoIcon icon={<VillagerIcon />} value={`${node.assignedVillagers.length} / ${idleVillagerCount}`} tooltip="Assigned / Idle" />
                 <InfoIcon icon={<ClockIcon />} value={`${projectedRate.toFixed(1)}/s`} tooltip="Projected Gather Rate" />
             </>
@@ -91,8 +92,8 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
         const construction = currentTarget as ConstructingBuilding;
         const buildingInfo = buildingList.find(b => b.id === construction.type);
         title = `Construct ${buildingInfo?.name || 'Building'}`;
-        MainIcon = iconMap[construction.type] as React.FC;
-        AssignIcon = BuildIcon;
+        MainIcon = iconMap[construction.type];
+        AssignIcon = <BuildIcon />;
         InfoIcons = (
              <>
                 <InfoIcon icon={<BuildIcon />} value={construction.villagerIds.length} tooltip="Current Builders" />
@@ -110,7 +111,7 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
             <div className="sci-fi-panel-popup sci-fi-grid p-4">
                 <div className="flex justify-between items-center mb-3">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8"><MainIcon /></div>
+                        <div className="w-8 h-8">{MainIcon}</div>
                         <h2 className="text-2xl font-serif capitalize">{title}</h2>
                     </div>
                     <button onClick={handleClose} className="text-3xl font-bold sci-fi-close-button">&times;</button>
@@ -142,7 +143,7 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
                                 disabled={assignCount === 0 || maxAssignable === 0}
                                 className="sci-fi-action-button"
                             >
-                                <div className="w-6 h-6"><AssignIcon /></div>
+                                <div className="w-6 h-6">{AssignIcon}</div>
                             </button>
                              <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                                 {maxAssignable === 0 ? 'No Idle Villagers' : `Assign ${assignCount} Villager(s)`}

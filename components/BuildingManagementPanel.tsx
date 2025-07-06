@@ -95,9 +95,10 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     }, [panelState, buildings, anchorRect, isOpen, isClosing]);
 
     useEffect(() => {
+        if (!isOpen) return;
         const popSpace = population.capacity - population.current;
         setTrainCount(popSpace > 0 ? 1 : 0);
-    }, [panelState.type, population]);
+    }, [isOpen, panelState.type, population.capacity, population.current]);
 
     const handleClose = () => {
         setIsClosing(true);

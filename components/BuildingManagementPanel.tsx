@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { Buildings, BuildingInstance, BuildingType, BuildingInfo, Resources, UnitInfo, MilitaryUnitType, GameTask } from '../types';
-import { DemolishIcon, EditIcon, FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon } from './icons/ResourceIcons';
+import { DemolishIcon, EditIcon, FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
+import { iconMap } from './GameUI';
 
 interface BuildingManagementPanelProps {
     isOpen: boolean;
@@ -47,8 +48,8 @@ const BuildingRow: React.FC<{
                 <>
                     <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="sci-fi-input w-full" />
                     <div className="flex gap-1">
-                        <button onClick={handleSave} className="bg-brand-green/80 hover:bg-brand-green text-white px-2 py-0.5 text-xs rounded-md">✓</button>
-                        <button onClick={() => setIsEditing(false)} className="bg-stone-light/80 hover:bg-stone-light text-white px-2 py-0.5 text-xs rounded-md">×</button>
+                        <button onClick={handleSave} title="Save" className="bg-brand-green/80 hover:bg-brand-green text-white px-2 py-0.5 text-xs rounded-md">✓</button>
+                        <button onClick={() => setIsEditing(false)} title="Cancel" className="bg-stone-light/80 hover:bg-stone-light text-white px-2 py-0.5 text-xs rounded-md">×</button>
                     </div>
                 </>
             ) : (
@@ -116,7 +117,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const buildingInstances = currentBuildings[type];
     const unitToTrain = unitList.find(u => u.requiredBuilding === type);
     
-    const activeTrainTask = activeTasks.find(t => t.type === 'train_military' && t.payload?.unitType === unitToTrain?.id);
+    const activeTrainTask = unitToTrain ? activeTasks.find(t => t.type === 'train_military' && t.payload?.unitType === unitToTrain?.id) : undefined;
     const activeVillagerTask = activeTasks.find(t => t.type === 'train_villager');
     const activeAgeTask = activeTasks.find(t => t.type === 'advance_age');
 
@@ -133,6 +134,28 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
 
     const panelStyle: React.CSSProperties = { top: `${currentAnchor.bottom + 8}px`, left: `${currentAnchor.left}px`, transformOrigin: 'top left', '--panel-opacity': panelOpacity } as React.CSSProperties;
 
+    // --- Tooltip Text Generation ---
+    const getTrainUnitTooltip = () => {
+        if (!unitToTrain) return '';
+        if (activeTrainTask) return 'Training in progress...';
+        if (!hasPopCapacity) return `Need ${trainCount - popSpace} more housing.`;
+        if (!canAffordUnit) return 'Insufficient Resources.';
+        return `Train ${trainCount} ${unitToTrain.name}(s)`;
+    };
+
+    const getTrainVillagerTooltip = () => {
+        if (activeVillagerTask) return 'Training in progress...';
+        if (!hasPopCapacity) return `Need ${trainCount - popSpace} more housing.`;
+        if (!canAffordVillagers) return 'Insufficient Food.';
+        return `Train ${trainCount} Villager(s)`;
+    };
+    
+    const getAdvanceAgeTooltip = () => {
+        if (activeAgeTask) return 'Advancement in progress.';
+        if (resources.food < 500 || resources.gold < 200) return 'Insufficient resources to advance.';
+        return 'Advance to the next age (60s)';
+    };
+
     return (
         <div style={panelStyle} className={`fixed z-40 w-96 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
             <div className="sci-fi-panel-popup sci-fi-grid p-4">
@@ -141,7 +164,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                     <button onClick={handleClose} className="text-3xl font-bold sci-fi-close-button">&times;</button>
                 </div>
 
-                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                     {buildingInstances.length > 0 ? (
                         buildingInstances.map(instance => (
                             <BuildingRow key={instance.id} building={instance} type={type} onUpdate={onUpdateBuilding} onDemolish={onDemolishBuilding} />
@@ -151,53 +174,54 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                     {type === 'townCenter' && (
                          <>
                             <hr className="border-stone-light/20 my-3" />
-                            <div className="space-y-3">
-                                <h3 className="text-xl font-serif text-brand-gold">Train Villagers</h3>
-                                {activeVillagerTask ? (
-                                    <div className="h-16 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeVillagerTask.payload?.count} Villager(s)...</p><ProgressBar startTime={activeVillagerTask.startTime} duration={activeVillagerTask.duration} className="w-full h-2"/></div>
-                                ) : (
-                                    <>
-                                        <div className="flex items-center gap-4">
-                                            <input type="range" min="1" max={Math.max(1, popSpace)} value={trainCount} onChange={(e) => setTrainCount(Math.min(Number(e.target.value), popSpace))} className="sci-fi-slider" disabled={popSpace <= 0}/>
-                                            <span className="font-bold text-lg w-12 text-center bg-black/20 p-1 rounded-md">{popSpace > 0 ? trainCount : 0}</span>
-                                        </div>
-                                        <div><h4 className="font-serif text-sm text-parchment-dark">Total Cost:</h4><CostDisplay cost={totalVillagerCost} resources={resources} /></div>
-                                        <button onClick={() => onTrainVillagers(trainCount)} disabled={!canTrainVillagers} className="sci-fi-button w-full rounded-md text-sm">{!hasPopCapacity ? `Need ${trainCount - popSpace} housing` : !canAffordVillagers ? 'Insufficient Food' : `Train ${trainCount} Villager(s)`}</button>
-                                    </>
-                                )}
-                            </div>
-                            <hr className="border-stone-light/20 my-3" />
-                            <div className="space-y-2">
-                                <h3 className="text-xl font-serif text-brand-gold">Civilization Actions</h3>
-                                {activeAgeTask ? (
-                                    <div className="h-12 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Advancing to the next age...</p><ProgressBar startTime={activeAgeTask.startTime} duration={activeAgeTask.duration} className="w-full h-2"/></div>
-                                ) : (
-                                    <div className="flex items-center gap-4">
-                                        <button onClick={onAdvanceAge} disabled={!!activeAgeTask || resources.food < 500 || resources.gold < 200} className="sci-fi-button rounded-md !p-2" aria-label="Advance Age"><div className="w-6 h-6"><AgeIcon /></div></button>
-                                        <div><p className="font-bold font-serif text-base">Advance Age (60s)</p><CostDisplay cost={{ food: 500, gold: 200 }} resources={resources} /></div>
+                            {/* Villager Training Section */}
+                            {activeVillagerTask ? (
+                                <div className="h-14 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeVillagerTask.payload?.count} Villager(s)...</p><ProgressBar startTime={activeVillagerTask.startTime} duration={activeVillagerTask.duration} className="w-full h-2"/></div>
+                            ) : (
+                                <div className="sci-fi-unit-row !p-2 flex items-center gap-3">
+                                    <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-blue"><VillagerIcon/></div>
+                                    <div className="flex-grow"><CostDisplay cost={totalVillagerCost} resources={resources} /></div>
+                                    <input type="range" min="1" max={Math.max(1, popSpace)} value={trainCount} onChange={(e) => setTrainCount(Math.min(Number(e.target.value), popSpace))} className="sci-fi-slider w-24" disabled={popSpace <= 0}/>
+                                    <span className="font-bold text-base w-8 text-center bg-black/20 p-1 rounded-md">{popSpace > 0 ? trainCount : 0}</span>
+                                    <div className="relative group">
+                                        <button onClick={() => onTrainVillagers(trainCount)} disabled={!canTrainVillagers} className="sci-fi-action-button"><div className="w-6 h-6"><VillagerIcon/></div></button>
+                                        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getTrainVillagerTooltip()}</div>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
+                            {/* Advance Age Section */}
+                             {activeAgeTask ? (
+                                <div className="h-12 mt-2 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Advancing to the next age...</p><ProgressBar startTime={activeAgeTask.startTime} duration={activeAgeTask.duration} className="w-full h-2"/></div>
+                            ) : (
+                                <div className="sci-fi-unit-row !p-2 flex items-center gap-3 mt-2">
+                                    <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-gold"><AgeIcon/></div>
+                                    <div className="flex-grow"><CostDisplay cost={{ food: 500, gold: 200 }} resources={resources} /></div>
+                                     <div className="relative group">
+                                        <button onClick={onAdvanceAge} disabled={!!activeAgeTask || resources.food < 500 || resources.gold < 200} className="sci-fi-action-button"><div className="w-6 h-6"><AgeIcon /></div></button>
+                                        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getAdvanceAgeTooltip()}</div>
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
                     {unitToTrain && (
                         <>
                             <hr className="border-stone-light/20 my-3" />
-                            <div className="space-y-3">
-                                <h3 className="text-xl font-serif text-brand-gold">Train {unitToTrain.name}s</h3>
-                                {activeTrainTask ? (
-                                    <div className="h-16 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeTrainTask.payload?.count} {unitToTrain.name}(s)...</p><ProgressBar startTime={activeTrainTask.startTime} duration={activeTrainTask.duration} className="w-full h-2"/></div>
-                                ) : (
-                                    <>
-                                        <div className="flex items-center gap-4">
-                                            <input type="range" min="1" max={Math.max(1, popSpace)} value={trainCount} onChange={(e) => setTrainCount(Math.min(Number(e.target.value), popSpace))} className="sci-fi-slider" disabled={popSpace <= 0}/>
-                                            <span className="font-bold text-lg w-12 text-center bg-black/20 p-1 rounded-md">{popSpace > 0 ? trainCount : 0}</span>
-                                        </div>
-                                        <div><h4 className="font-serif text-sm text-parchment-dark">Total Cost:</h4><CostDisplay cost={totalUnitCost} resources={resources} /></div>
-                                        <button onClick={() => onTrainUnits(unitToTrain.id, trainCount)} disabled={!canTrainUnit} className="sci-fi-button w-full rounded-md text-sm">{!hasPopCapacity ? `Need ${trainCount - popSpace} housing` : !canAffordUnit ? 'Insufficient Resources' : `Train ${trainCount} ${unitToTrain.name}(s)`}</button>
-                                    </>
-                                )}
-                            </div>
+                            {/* Military Unit Training Section */}
+                            {activeTrainTask ? (
+                                <div className="h-16 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeTrainTask.payload?.count} {unitToTrain.name}(s)...</p><ProgressBar startTime={activeTrainTask.startTime} duration={activeTrainTask.duration} className="w-full h-2"/></div>
+                            ) : (
+                                 <div className="sci-fi-unit-row !p-2 flex items-center gap-3">
+                                    <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-red">{iconMap[unitToTrain.id]}</div>
+                                     <div className="flex-grow"><CostDisplay cost={totalUnitCost} resources={resources} /></div>
+                                     <input type="range" min="1" max={Math.max(1, popSpace)} value={trainCount} onChange={(e) => setTrainCount(Math.min(Number(e.target.value), popSpace))} className="sci-fi-slider w-24" disabled={popSpace <= 0}/>
+                                     <span className="font-bold text-base w-8 text-center bg-black/20 p-1 rounded-md">{popSpace > 0 ? trainCount : 0}</span>
+                                     <div className="relative group">
+                                         <button onClick={() => onTrainUnits(unitToTrain.id, trainCount)} disabled={!canTrainUnit} className="sci-fi-action-button"><div className="w-6 h-6">{iconMap[unitToTrain.id]}</div></button>
+                                         <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getTrainUnitTooltip()}</div>
+                                     </div>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>

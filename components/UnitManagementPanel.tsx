@@ -23,14 +23,18 @@ const ActionButton: React.FC<{
     title: string;
     children: React.ReactNode;
 }> = ({ onClick, disabled, title, children }) => (
-    <button
-        onClick={onClick}
-        disabled={disabled}
-        title={title}
-        className="sci-fi-action-button"
-    >
-        <div className="w-5 h-5">{children}</div>
-    </button>
+    <div className="relative group">
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            className="sci-fi-action-button"
+        >
+            <div className="w-5 h-5">{children}</div>
+        </button>
+        <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+            {title}
+        </div>
+    </div>
 );
 
 const UnitRow: React.FC<{
@@ -82,9 +86,9 @@ const UnitRow: React.FC<{
                         />
                     )}
                 </div>
-                <div className="flex gap-2 self-end sm:self-center">
-                    <button onClick={handleSave} className="bg-brand-green/80 hover:bg-brand-green text-white px-3 py-1 text-xs rounded-md transition-colors">Save</button>
-                    <button onClick={handleCancel} className="bg-stone-light/80 hover:bg-stone-light text-white px-3 py-1 text-xs rounded-md transition-colors">Cancel</button>
+                <div className="flex gap-1 self-end sm:self-center">
+                    <button onClick={handleSave} title="Save" className="bg-brand-green/80 hover:bg-brand-green text-white px-2 py-0.5 text-xs rounded-md">✓</button>
+                    <button onClick={handleCancel} title="Cancel" className="bg-stone-light/80 hover:bg-stone-light text-white px-2 py-0.5 text-xs rounded-md">×</button>
                 </div>
             </div>
         );
@@ -107,13 +111,13 @@ const UnitRow: React.FC<{
                     <EditIcon />
                 </ActionButton>
                 {type === 'villagers' && (
-                    <ActionButton onClick={(e) => onBuild(unit.id, e.currentTarget.getBoundingClientRect())} title={isBusy ? taskDetails : 'Construct Building'}>
+                    <ActionButton onClick={(e) => onBuild(unit.id, e.currentTarget.getBoundingClientRect())} title={isBusy ? taskDetails : 'Construct Building'} disabled={isBusy}>
                         <BuildIcon />
                     </ActionButton>
                 )}
                 <ActionButton 
                     onClick={() => onDismiss(unit.id)} 
-                    disabled={!canDismiss} 
+                    disabled={!canDismiss || isBusy} 
                     title={isBusy ? taskDetails : (canDismiss ? "Dismiss" : "Cannot dismiss")}
                 >
                     <DismissIcon />

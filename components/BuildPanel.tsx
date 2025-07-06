@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { BuildingInfo, BuildingType, Resources, BuildingCosts } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, BarracksIcon, HouseIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, TownCenterIcon, ClockIcon } from './icons/ResourceIcons';
+import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, BarracksIcon, HouseIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, TownCenterIcon, ClockIcon, BuildIcon } from './icons/ResourceIcons';
 
 interface BuildPanelProps {
     isOpen: boolean;
@@ -84,6 +84,8 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
         transformOrigin: 'top left',
         '--panel-opacity': panelOpacity,
     } as React.CSSProperties;
+    
+    const constructButtonTooltip = isBuilt ? 'Already Built' : !isAffordable ? 'Insufficient Resources' : `Construct ${selectedBuilding?.name}`;
 
     return (
         <div 
@@ -148,13 +150,20 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
                                         </p>
                                      )}
                                 </div>
-                                <button
-                                    onClick={() => { if(canBuild) onStartPlacement(selectedBuilding.id); }}
-                                    disabled={!canBuild}
-                                    className="sci-fi-button w-full mt-2 rounded-md"
-                                >
-                                    {isBuilt ? 'Already Built' : !isAffordable ? 'Insufficient Resources' : 'Construct'}
-                                </button>
+                                
+                                <div className="relative group self-end">
+                                    <button
+                                        onClick={() => { if(canBuild) onStartPlacement(selectedBuilding.id); }}
+                                        disabled={!canBuild}
+                                        className="sci-fi-action-button"
+                                        aria-label={constructButtonTooltip}
+                                    >
+                                        <div className="w-8 h-8"><BuildIcon /></div>
+                                    </button>
+                                    <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                        {constructButtonTooltip}
+                                    </div>
+                                </div>
                             </>
                         ) : (
                             <div className="flex items-center justify-center h-full text-parchment-dark">

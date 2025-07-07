@@ -1,17 +1,21 @@
-import type { FullGameState } from '../types';
+import type { FullGameState, CustomAge } from '../types';
 
 const DB_NAME = 'GeminiEmpiresDB';
-const STORE_NAME = 'gameState';
-const DB_VERSION = 1;
+const GAME_STATE_STORE_NAME = 'gameState';
+const CUSTOM_AGES_STORE_NAME = 'customAges';
+const DB_VERSION = 2; // Incremented version
 
 const openDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        request.onupgradeneeded = () => {
+        request.onupgradeneeded = (event) => {
             const db = request.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME);
+            if (!db.objectStoreNames.contains(GAME_STATE_STORE_NAME)) {
+                db.createObjectStore(GAME_STATE_STORE_NAME);
+            }
+            if (!db.objectStoreNames.contains(CUSTOM_AGES_STORE_NAME)) {
+                db.createObjectStore(CUSTOM_AGES_STORE_NAME, { keyPath: 'id' });
             }
         };
 
@@ -29,8 +33,8 @@ const openDB = (): Promise<IDBDatabase> => {
 export const saveGameState = async (saveName: string, state: FullGameState): Promise<void> => {
     try {
         const db = await openDB();
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
+        const transaction = db.transaction(GAME_STATE_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(GAME_STATE_STORE_NAME);
         store.put(state, saveName);
         
         return new Promise<void>((resolve, reject) => {
@@ -45,8 +49,8 @@ export const saveGameState = async (saveName: string, state: FullGameState): Pro
 export const loadGameState = async (saveName: string): Promise<FullGameState | undefined> => {
     try {
         const db = await openDB();
-        const transaction = db.transaction(STORE_NAME, 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
+        const transaction = db.transaction(GAME_STATE_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(GAME_STATE_STORE_NAME);
         const request = store.get(saveName);
         
         return new Promise((resolve, reject) => {
@@ -67,8 +71,8 @@ export const loadGameState = async (saveName: string): Promise<FullGameState | u
 export const getAllSaveNames = async (): Promise<string[]> => {
      try {
         const db = await openDB();
-        const transaction = db.transaction(STORE_NAME, 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
+        const transaction = db.transaction(GAME_STATE_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(GAME_STATE_STORE_NAME);
         const request = store.getAllKeys();
         
         return new Promise((resolve, reject) => {
@@ -89,8 +93,8 @@ export const getAllSaveNames = async (): Promise<string[]> => {
 export const deleteGameState = async (saveName: string): Promise<void> => {
     try {
         const db = await openDB();
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
+        const transaction = db.transaction(GAME_STATE_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(GAME_STATE_STORE_NAME);
         store.delete(saveName);
         
         return new Promise<void>((resolve, reject) => {
@@ -99,5 +103,61 @@ export const deleteGameState = async (saveName: string): Promise<void> => {
         });
     } catch (error) {
         console.error("Failed to delete game state:", error);
+    }
+};
+
+// --- Custom Age Functions ---
+
+export const saveCustomAge = async (age: CustomAge): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(CUSTOM_AGES_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(CUSTOM_AGES_STORE_NAME);
+        store.put(age);
+        
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to save custom age:", error);
+    }
+};
+
+export const getAllCustomAges = async (): Promise<CustomAge[]> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(CUSTOM_AGES_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(CUSTOM_AGES_STORE_NAME);
+        const request = store.getAll();
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                resolve(request.result as CustomAge[]);
+            };
+            request.onerror = () => {
+                console.error("Failed to load custom ages:", request.error);
+                reject(request.error);
+            };
+        });
+    } catch (error) {
+        console.error("Failed to open DB for loading custom ages:", error);
+        return [];
+    }
+};
+
+export const deleteCustomAge = async (id: string): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(CUSTOM_AGES_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(CUSTOM_AGES_STORE_NAME);
+        store.delete(id);
+        
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to delete custom age:", error);
     }
 };

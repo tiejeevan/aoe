@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import AdminLogin from './AdminLogin';
 
 interface StartScreenProps {
     onNewGame: (name: string) => void;
@@ -11,7 +13,9 @@ interface StartScreenProps {
 const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, savedGames, onDeleteGame }) => {
     const [isNaming, setIsNaming] = useState(false);
     const [newName, setNewName] = useState('');
+    const [showAdminLogin, setShowAdminLogin] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const router = useRouter();
 
     useEffect(() => {
         if (isNaming) {
@@ -30,9 +34,15 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
             handleStart();
         }
     };
+    
+    const handleLoginSuccess = () => {
+        router.push('/admin');
+    };
 
     return (
         <div className="text-center bg-stone-dark p-8 rounded-lg shadow-2xl border-2 border-stone-light w-full max-w-2xl mx-auto">
+            {showAdminLogin && <AdminLogin onLoginSuccess={handleLoginSuccess} onClose={() => setShowAdminLogin(false)} />}
+            
             <h1 className="text-6xl font-serif text-parchment-light mb-2 tracking-wider">Gemini Empires</h1>
             
             {isNaming ? (
@@ -102,12 +112,17 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                             New Saga
                         </button>
                     </div>
-                     <p className="mt-8 text-sm text-stone-light font-sans">
-                        {savedGames.length > 0
-                            ? "Start a new saga or resume an existing one."
-                            : "Lead your people from a nomadic tribe to a thriving empire. Every game is a unique story."
-                        }
-                    </p>
+                     <div className="mt-8 text-sm text-stone-light font-sans">
+                        <p className='mb-2'>
+                           {savedGames.length > 0
+                               ? "Start a new saga or resume an existing one."
+                               : "Lead your people from a nomadic tribe to a thriving empire. Every game is a unique story."
+                           }
+                        </p>
+                         <button onClick={() => setShowAdminLogin(true)} className="text-xs text-brand-blue hover:underline">
+                            admin?
+                        </button>
+                    </div>
                 </>
             )}
         </div>

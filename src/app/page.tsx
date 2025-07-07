@@ -3,11 +3,12 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance } from '@/types';
-import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState } from '@/services/dbService';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, CustomAge } from '@/types';
+import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllCustomAges } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
+import { PREDEFINED_AGES } from '@/data/predefinedContent';
 import GameUI from '@/components/GameUI';
 import StartScreen from '@/components/StartScreen';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -71,6 +72,7 @@ const GamePage: React.FC = () => {
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
     const [inventory, setInventory] = useState<GameItem[]>([]);
     const [activeBuffs, setActiveBuffs] = useState<ActiveBuffs>({ resourceBoost: [] });
+    const [ageProgressionList, setAgeProgressionList] = useState<{name: string, description: string}[]>(PREDEFINED_AGES);
     
     // Panel States
     const [buildPanelState, setBuildPanelState] = useState<{ isOpen: boolean; villagerId: string | null; anchorRect: DOMRect | null }>({ isOpen: false, villagerId: null, anchorRect: null });
@@ -91,14 +93,16 @@ const GamePage: React.FC = () => {
         capacity: (buildings.townCenter?.length > 0 ? 20 : 0) + buildings.houses.length * 5,
     };
     
-    const fetchSaves = useCallback(async () => {
+    const fetchSavesAndAges = useCallback(async () => {
         const names = await getAllSaveNames();
         setAllSaves(names);
+        const customAges = await getAllCustomAges();
+        setAgeProgressionList([...PREDEFINED_AGES, ...customAges]);
     }, []);
     
     useEffect(() => {
-        fetchSaves();
-    }, [fetchSaves]);
+        fetchSavesAndAges();
+    }, [fetchSavesAndAges]);
     
     useEffect(() => {
         if (gameState === GameStatus.PLAYING && civilization && currentSaveName) {
@@ -208,15 +212,17 @@ const GamePage: React.FC = () => {
                  break;
             }
             case 'advance_age': {
-                const ageResult = getPredefinedAge(currentAge);
-                setCurrentAge(ageResult.nextAgeName);
-                addToLog(`You have advanced to the ${ageResult.nextAgeName}!`, 'age');
+                const currentIndex = ageProgressionList.findIndex(age => age.name === currentAge);
+                const ageResult = ageProgressionList[currentIndex + 1] || { name: 'Age of Legends', description: 'Your civilization transcends history and becomes a legend.'};
+
+                setCurrentAge(ageResult.name);
+                addToLog(`You have advanced to the ${ageResult.name}!`, 'age');
                 addToLog(ageResult.description, 'age');
-                setActivityStatus(`Welcome to the ${ageResult.nextAgeName}!`);
+                setActivityStatus(`Welcome to the ${ageResult.name}!`);
                 break;
             }
         }
-    }, [currentAge, addToLog]);
+    }, [currentAge, addToLog, ageProgressionList]);
     
     // Game Loop
     useEffect(() => {
@@ -370,12 +376,13 @@ const GamePage: React.FC = () => {
         return nodes;
     };
 
-    const handleStartNewGame = (saveName: string) => {
+    const handleStartNewGame = async (saveName: string) => {
         if (allSaves.includes(saveName)) {
             addNotification(`A saga named "${saveName}" already exists.`); return;
         }
         setGameState(GameStatus.LOADING);
         setCurrentSaveName(saveName);
+        await fetchSavesAndAges();
 
         const civ = getPredefinedCivilization();
         setCivilization(civ);
@@ -400,7 +407,7 @@ const GamePage: React.FC = () => {
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
         setActivityStatus('Your settlement awaits your command.');
-        fetchSaves();
+        fetchSavesAndAges();
     };
 
     const isVillagerBusy = useCallback((villagerId: string): boolean => {
@@ -432,6 +439,7 @@ const GamePage: React.FC = () => {
     }, [activeTasks, resourceNodes, units.villagers]);
 
     const handleResumeGame = async (saveName: string) => {
+        await fetchSavesAndAges();
         const savedState = await loadGameState(saveName) as FullGameState;
         if (savedState) {
             setGameState(GameStatus.LOADING);
@@ -1017,6 +1025,13 @@ const GamePage: React.FC = () => {
             }
             updateResources({ food: -500, gold: -200 });
         }
+        
+        const currentIndex = ageProgressionList.findIndex(age => age.name === currentAge);
+        if (currentIndex === -1 || currentIndex + 1 >= ageProgressionList.length) {
+            addNotification("You have reached the final available age.");
+            return;
+        }
+
         const duration = 60000;
         if(unlimitedResources) {
             handleTaskCompletion({ id: 'instant', type: 'advance_age', startTime: 0, duration: 0, payload: {} });
@@ -1031,13 +1046,13 @@ const GamePage: React.FC = () => {
     
     const handleExitGame = async () => {
         setCurrentSaveName(null);
-        await fetchSaves();
+        await fetchSavesAndAges();
         setGameState(GameStatus.MENU);
     };
 
     const handleDeleteGame = async (saveName: string) => {
         await deleteGameState(saveName);
-        await fetchSaves();
+        await fetchSavesAndAges();
         addNotification(`Deleted saga: "${saveName}"`);
     };
 

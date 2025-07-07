@@ -194,6 +194,12 @@ export interface ActiveBuffs {
     permanentTrainTimeReduction?: number; // percentage
 }
 
+export interface CustomAge {
+    id: string;
+    name: string;
+    description: string;
+}
+
 export interface FullGameState {
     civilization: Civilization;
     resources: Resources;

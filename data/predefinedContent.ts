@@ -1020,7 +1020,7 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
         message: "A vein of iron pyrite ('Fool's Gold') is discovered.",
         choices: [
             {
-                text: "Mine it anyway (60% chance of use)",
+                text: "Mine it anyway (60% success)",
                 successChance: 0.6,
                 successEffects: { rewards: [{ type: 'resource', resource: 'gold', amount: 50 }], log: "Your smiths manage to extract a small amount of real gold from the ore." },
                 failureEffects: { rewards: [], log: "The ore is completely worthless. The effort is wasted." }
@@ -1705,7 +1705,7 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
 ];
 
 
-export const AGE_PROGRESSION: { [currentAge: string]: { nextAgeName: string; description: string } } = {
+export const PREDEFINED_AGES_MAP: { [key: string]: { nextAgeName: string; description: string } } = {
     'Nomadic Age': {
         nextAgeName: 'Feudal Age',
         description: 'Society organizes under lords and vassals, unlocking new military and economic structures.'
@@ -1727,3 +1727,10 @@ export const AGE_PROGRESSION: { [currentAge: string]: { nextAgeName: string; des
         description: 'Your civilization transcends history and becomes a legend.'
     }
 };
+
+export const PREDEFINED_AGES: { name: string; description: string }[] = [
+    { name: 'Nomadic Age', description: 'A scattered tribe, learning to survive.' },
+    { name: 'Feudal Age', description: 'Society organizes under lords and vassals, unlocking new military and economic structures.' },
+    { name: 'Castle Age', description: 'Powerful fortifications and advanced siege weaponry mark this new era of warfare and defense.' },
+    { name: 'Imperial Age', description: 'Your civilization becomes a true empire, with unparalleled economic and military might.' },
+];

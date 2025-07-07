@@ -859,6 +859,9 @@ video {
 .min-h-svh {
   min-height: 100svh;
 }
+.min-h-\[100px\] {
+  min-height: 100px;
+}
 .w-0 {
   width: 0px;
 }
@@ -990,6 +993,9 @@ video {
 }
 .max-w-xs {
   max-width: 20rem;
+}
+.max-w-4xl {
+  max-width: 56rem;
 }
 .flex-1 {
   flex: 1 1 0%;
@@ -1169,6 +1175,9 @@ video {
 }
 .gap-4 {
   gap: 1rem;
+}
+.gap-8 {
+  gap: 2rem;
 }
 .gap-x-3 {
   column-gap: 0.75rem;
@@ -1529,6 +1538,10 @@ video {
   padding-top: 2rem;
   padding-bottom: 2rem;
 }
+.px-6 {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
 .pb-3 {
   padding-bottom: 0.75rem;
 }
@@ -1628,6 +1641,14 @@ video {
 .text-xs {
   font-size: 0.75rem;
   line-height: 1rem;
+}
+.\!text-lg {
+  font-size: 1.125rem !important;
+  line-height: 1.75rem !important;
+}
+.text-4xl {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
 }
 .font-bold {
   font-weight: 700;
@@ -2739,6 +2760,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
 
   .md\:max-w-\[420px\] {
     max-width: 420px;
+  }
+
+  .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .md\:text-sm {

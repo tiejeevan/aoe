@@ -53,6 +53,7 @@ export interface BuildingInstance {
     id: string;
     name: string;
     position: { x: number; y: number; };
+    currentHp: number;
 }
 
 export interface Buildings {
@@ -123,6 +124,7 @@ export interface BuildingInfo {
     cost: BuildingCosts;
     isUnique: boolean;
     buildTime: number; // in seconds
+    hp: number;
 }
 
 export interface UnitInfo {

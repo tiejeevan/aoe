@@ -2136,6 +2136,11 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
   color: rgb(250 204 21 / var(--tw-text-opacity, 1));
 }
 
+.hover\:text-brand-green:hover {
+  --tw-text-opacity: 1;
+  color: rgb(152 151 26 / var(--tw-text-opacity, 1));
+}
+
 .hover\:underline:hover {
   text-decoration-line: underline;
 }
@@ -2185,6 +2190,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
   --tw-ring-color: rgb(253 246 227 / var(--tw-ring-opacity, 1));
 }
 
+.focus\:ring-brand-green\/50:focus {
+  --tw-ring-color: rgb(152 151 26 / 0.5);
+}
+
 .focus\:ring-offset-2:focus {
   --tw-ring-offset-width: 2px;
 }
@@ -2219,6 +2228,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
 
 .disabled\:text-stone-light\/50:disabled {
   color: rgb(102 92 84 / 0.5);
+}
+
+.disabled\:text-parchment-dark\/30:disabled {
+  color: rgb(235 219 178 / 0.3);
 }
 
 .disabled\:opacity-50:disabled {

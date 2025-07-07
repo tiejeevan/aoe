@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
@@ -20,14 +20,14 @@ import AllBuildingsPanel from '@/components/AllBuildingsPanel';
 import InventoryPanel from '@/components/InventoryPanel';
 
 const BUILDINGS_INFO: BuildingInfo[] = [
-    { id: 'houses', name: 'House', description: 'Increases population capacity by 5.', cost: { wood: 50 }, isUnique: false, buildTime: 15 },
-    { id: 'barracks', name: 'Barracks', description: 'Allows training of Swordsmen.', cost: { wood: 150, stone: 50 }, isUnique: true, buildTime: 60 },
-    { id: 'archeryRange', name: 'Archery Range', description: 'Allows training of Archers.', cost: { wood: 175 }, isUnique: true, buildTime: 60 },
-    { id: 'stable', name: 'Stables', description: 'Allows training of Knights.', cost: { wood: 175, gold: 75 }, isUnique: true, buildTime: 75 },
-    { id: 'siegeWorkshop', name: 'Siege Workshop', description: 'Constructs powerful Catapults.', cost: { wood: 200, gold: 150 }, isUnique: true, buildTime: 90 },
-    { id: 'blacksmith', name: 'Blacksmith', description: 'Researches infantry and cavalry upgrades.', cost: { wood: 100, gold: 100 }, isUnique: true, buildTime: 45 },
-    { id: 'watchTower', name: 'Watch Tower', description: 'Provides defense against raids.', cost: { stone: 125 }, isUnique: true, buildTime: 45 },
-    { id: 'townCenter', name: 'Town Center', description: 'The heart of your settlement.', cost: {}, isUnique: true, buildTime: 0 }
+    { id: 'houses', name: 'House', description: 'Increases population capacity by 5.', cost: { wood: 50 }, isUnique: false, buildTime: 15, hp: 550 },
+    { id: 'barracks', name: 'Barracks', description: 'Allows training of Swordsmen.', cost: { wood: 150, stone: 50 }, isUnique: true, buildTime: 60, hp: 1200 },
+    { id: 'archeryRange', name: 'Archery Range', description: 'Allows training of Archers.', cost: { wood: 175 }, isUnique: true, buildTime: 60, hp: 1200 },
+    { id: 'stable', name: 'Stables', description: 'Allows training of Knights.', cost: { wood: 175, gold: 75 }, isUnique: true, buildTime: 75, hp: 1200 },
+    { id: 'siegeWorkshop', name: 'Siege Workshop', description: 'Constructs powerful Catapults.', cost: { wood: 200, gold: 150 }, isUnique: true, buildTime: 90, hp: 2100 },
+    { id: 'blacksmith', name: 'Blacksmith', description: 'Researches infantry and cavalry upgrades.', cost: { wood: 100, gold: 100 }, isUnique: true, buildTime: 45, hp: 2100 },
+    { id: 'watchTower', name: 'Watch Tower', description: 'Provides defense against raids.', cost: { stone: 125 }, isUnique: true, buildTime: 45, hp: 1500 },
+    { id: 'townCenter', name: 'Town Center', description: 'The heart of your settlement.', cost: {}, isUnique: true, buildTime: 0, hp: 2400 }
 ];
 
 const UNIT_INFO: UnitInfo[] = [
@@ -173,7 +173,7 @@ const GamePage: React.FC = () => {
                 const { buildingType, villagerIds, position } = task.payload!;
                 const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
                 const [name] = getRandomNames('building', 1);
-                const newBuilding: BuildingInstance = { id: task.id, name, position: position! };
+                const newBuilding: BuildingInstance = { id: task.id, name, position: position!, currentHp: buildingInfo.hp };
                 
                 setBuildings(p => ({ ...p, [buildingType!]: [...p[buildingType!], newBuilding] }));
                 
@@ -384,7 +384,8 @@ const GamePage: React.FC = () => {
         setUnits({ villagers: initialVillagers, military: [] });
         const [initialTCName] = getRandomNames('building', 1);
         const tcPosition = { x: Math.floor(MAP_DIMENSIONS.width / 2), y: Math.floor(MAP_DIMENSIONS.height / 2) };
-        const initialTC: BuildingInstance = { id: `${Date.now()}-tc`, name: initialTCName, position: tcPosition };
+        const tcInfo = BUILDINGS_INFO.find(b => b.id === 'townCenter')!;
+        const initialTC: BuildingInstance = { id: `${Date.now()}-tc`, name: initialTCName, position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
         setCurrentAge('Nomadic Age');
@@ -461,6 +462,18 @@ const GamePage: React.FC = () => {
             setUnits({ ...savedUnits, villagers: migratedVillagers });
             
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
+            
+            Object.keys(finalBuildings).forEach(bType => {
+                const type = bType as BuildingType;
+                const info = BUILDINGS_INFO.find(b => b.id === type);
+                if(info) {
+                    finalBuildings[type] = finalBuildings[type].map(b => ({
+                        ...b,
+                        currentHp: b.currentHp === undefined ? info.hp : b.currentHp
+                    }));
+                }
+            });
+
             const constructionTasks = (migratedTasks).filter(t => t.type === 'build');
             const occupiedCells = new Set([
                 ...Object.values(finalBuildings).flat().map((b: any) => `${b.position.x},${b.position.y}`),
@@ -471,7 +484,8 @@ const GamePage: React.FC = () => {
                 let tcPos = { x: 10, y: 5 };
                 while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
                 const [tcName] = getRandomNames('building', 1);
-                finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: tcName, position: tcPos }];
+                const tcInfo = BUILDINGS_INFO.find(b => b.id === 'townCenter')!;
+                finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: tcName, position: tcPos, currentHp: tcInfo.hp }];
                 occupiedCells.add(`${tcPos.x},${tcPos.y}`);
             }
 
@@ -483,7 +497,8 @@ const GamePage: React.FC = () => {
                     let x = 5;
                     (instances as BuildingInstance[]).forEach(inst => {
                         while (occupiedCells.has(`${x},${y}`)) { x++; }
-                        (migrated[type as BuildingType] as BuildingInstance[]).push({ ...inst, position: { x, y } });
+                         const info = BUILDINGS_INFO.find(b => b.id === type as BuildingType)!;
+                        (migrated[type as BuildingType] as BuildingInstance[]).push({ ...inst, position: { x, y }, currentHp: inst.currentHp || info.hp });
                         occupiedCells.add(`${x},${y}`);
                         x++;
                     });
@@ -691,6 +706,11 @@ const GamePage: React.FC = () => {
     };
 
     const handleDemolishBuilding = (type: BuildingType, id: string) => {
+        if (type === 'townCenter') {
+            addNotification("The Town Center is the heart of your civilization and cannot be demolished.");
+            return;
+        }
+
         if(activeTasks.some(t => t.payload?.buildingId === id)) {
             addNotification("Cannot demolish a building with an active task."); return;
         }

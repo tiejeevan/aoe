@@ -3,7 +3,7 @@ import type { Buildings, BuildingInstance, BuildingType, BuildingInfo, Resources
 import { FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
 import { iconMap } from './GameUI';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Wrench } from 'lucide-react';
 
 interface BuildingManagementPanelProps {
     isOpen: boolean;
@@ -29,10 +29,11 @@ interface BuildingManagementPanelProps {
 
 const BuildingRow: React.FC<{
     building: BuildingInstance;
+    buildingInfo: BuildingInfo;
     type: BuildingType;
     onUpdate: (type: BuildingType, id: string, name: string) => void;
     onDemolish: (type: BuildingType, id: string) => void;
-}> = ({ building, type, onUpdate, onDemolish }) => {
+}> = ({ building, buildingInfo, type, onUpdate, onDemolish }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(building.name);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -80,17 +81,35 @@ const BuildingRow: React.FC<{
                         title="Double-click to rename"
                     >
                         <p className="text-base font-bold">{building.name}</p>
+                        <p className="text-xs text-parchment-dark font-mono">
+                           HP: {building.currentHp} / {buildingInfo.hp}
+                        </p>
                     </div>
-                    <div className="relative group flex-shrink-0">
-                        <button
-                            onClick={() => onDemolish(type, building.id)}
-                            className="p-1.5 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-red/50"
-                            aria-label="Demolish"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                        <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                            Demolish
+                    <div className="flex items-center gap-1">
+                        <div className="relative group flex-shrink-0">
+                            <button
+                                disabled={building.currentHp >= buildingInfo.hp}
+                                className="p-1.5 text-parchment-dark/60 hover:text-brand-green rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-green/50 disabled:text-parchment-dark/30 disabled:cursor-not-allowed"
+                                aria-label="Repair"
+                            >
+                                <Wrench className="w-4 h-4" />
+                            </button>
+                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                {building.currentHp >= buildingInfo.hp ? 'At full health' : 'Repair (coming soon)'}
+                            </div>
+                        </div>
+                        <div className="relative group flex-shrink-0">
+                            <button
+                                onClick={() => onDemolish(type, building.id)}
+                                disabled={type === 'townCenter'}
+                                className="p-1.5 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-red/50 disabled:text-parchment-dark/30 disabled:cursor-not-allowed"
+                                aria-label="Demolish"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                {type === 'townCenter' ? 'Cannot demolish Town Center' : 'Demolish'}
+                            </div>
                         </div>
                     </div>
                 </>
@@ -159,6 +178,8 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     if (!type || !currentAnchor) return null;
 
     const buildingInfo = buildingList.find(b => b.id === type);
+    if (!buildingInfo) return null;
+
     const buildingInstances = currentBuildings[type];
     const unitToTrain = unitList.find(u => u.requiredBuilding === type);
     
@@ -237,7 +258,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                     {buildingInstances.length > 0 ? (
                         buildingInstances.map(instance => (
-                            <BuildingRow key={instance.id} building={instance} type={type} onUpdate={onUpdateBuilding} onDemolish={onDemolishBuilding} />
+                            <BuildingRow key={instance.id} building={instance} buildingInfo={buildingInfo} type={type} onUpdate={onUpdateBuilding} onDemolish={onDemolishBuilding} />
                         ))
                     ) : ( <p className="text-center text-parchment-dark py-4">You have no {buildingInfo?.name?.toLowerCase()}s.</p> )}
                 </div>

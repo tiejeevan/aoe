@@ -3,9 +3,9 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, CustomAge } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllCustomAges } from '@/services/dbService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
 import { PREDEFINED_AGES } from '@/data/predefinedContent';
@@ -96,8 +96,28 @@ const GamePage: React.FC = () => {
     const fetchSavesAndAges = useCallback(async () => {
         const names = await getAllSaveNames();
         setAllSaves(names);
-        const customAges = await getAllCustomAges();
-        setAgeProgressionList([...PREDEFINED_AGES, ...customAges]);
+        
+        const allAgeConfigs = await getAllAgeConfigs();
+        const activeAges = allAgeConfigs.filter(age => age.isActive);
+
+        // Sort to maintain predefined order, then append custom ages alphabetically
+        const predefinedOrder = PREDEFINED_AGES.map(a => a.name);
+        activeAges.sort((a, b) => {
+            const indexA = predefinedOrder.indexOf(a.name);
+            const indexB = predefinedOrder.indexOf(b.name);
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB; // Both are predefined
+            if (indexA !== -1) return -1; // a is predefined, b is not
+            if (indexB !== -1) return 1;  // b is predefined, a is not
+            return a.name.localeCompare(b.name); // both are custom
+        });
+
+        if (activeAges.length > 0) {
+            setAgeProgressionList(activeAges.map(a => ({ name: a.name, description: a.description })));
+        } else {
+            // Fallback to default if all ages are disabled
+            setAgeProgressionList(PREDEFINED_AGES);
+        }
+
     }, []);
     
     useEffect(() => {

@@ -194,10 +194,12 @@ export interface ActiveBuffs {
     permanentTrainTimeReduction?: number; // percentage
 }
 
-export interface CustomAge {
-    id: string;
+export interface AgeConfig {
+    id: string; // For custom ages, `custom-${timestamp}`. For predefined, just the name.
     name: string;
     description: string;
+    isActive: boolean;
+    isPredefined: boolean;
 }
 
 export interface FullGameState {

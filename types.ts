@@ -7,6 +7,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -207,6 +208,13 @@ export interface AgeConfig {
     order: number;
 }
 
+export interface BuildingUpgradePath {
+    id: string; // The ID of the building this one upgrades to
+    cost: BuildingCosts;
+    time: number; // in seconds
+    researchRequired?: string; // Future use
+}
+
 export interface BuildingConfig {
     id: BuildingType | string;
     name: string;
@@ -222,7 +230,8 @@ export interface BuildingConfig {
     isPredefined: boolean;
     order: number;
     canTrainUnits: boolean;
-    upgradesTo?: string[];
+    isUpgradeOnly?: boolean;
+    upgradesTo?: BuildingUpgradePath[];
     
     // Comprehensive Attributes
     populationCapacity?: number;

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -48,15 +49,36 @@ const BuildingEditor: React.FC<{
         }));
     };
 
-    const handleUpgradesToChange = (buildingId: string, checked: boolean) => {
+    const handleUpgradePathChange = (targetId: string, checked: boolean) => {
         setEditedBuilding(prev => {
-            const currentBuildings = prev.upgradesTo || [];
+            const currentUpgrades = prev.upgradesTo || [];
             if (checked) {
-                return { ...prev, upgradesTo: [...currentBuildings, buildingId] };
+                // Add a new upgrade path with default values if it doesn't exist
+                if (!currentUpgrades.some(u => u.id === targetId)) {
+                    return { ...prev, upgradesTo: [...currentUpgrades, { id: targetId, cost: {}, time: 60 }] };
+                }
+                return prev; // Should not happen if logic is correct
             } else {
-                return { ...prev, upgradesTo: currentBuildings.filter(id => id !== buildingId) };
+                // Remove the upgrade path
+                return { ...prev, upgradesTo: currentUpgrades.filter(u => u.id !== targetId) };
             }
         });
+    };
+    
+    const handleUpgradeDetailChange = (targetId: string, field: 'time' | keyof Resources, value: string) => {
+        const numValue = parseInt(value, 10) || 0;
+        setEditedBuilding(prev => ({
+            ...prev,
+            upgradesTo: (prev.upgradesTo || []).map(u => {
+                if (u.id === targetId) {
+                    if (field === 'time') {
+                        return { ...u, time: numValue };
+                    }
+                    return { ...u, cost: { ...u.cost, [field]: numValue } };
+                }
+                return u;
+            })
+        }));
     };
 
     const costLikeFields: { key: 'cost' | 'researchCost' | 'maintenanceCost', title: string }[] = [
@@ -74,7 +96,7 @@ const BuildingEditor: React.FC<{
                     <TabsTrigger value="general"><Building className="w-4 h-4 mr-2"/>General</TabsTrigger>
                     <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Economy</TabsTrigger>
                     <TabsTrigger value="military"><Shield className="w-4 h-4 mr-2"/>Military</TabsTrigger>
-                    <TabsTrigger value="research"><Beaker className="w-4 h-4 mr-2"/>Research</TabsTrigger>
+                    <TabsTrigger value="research"><Beaker className="w-4 h-4 mr-2"/>Research & Upgrades</TabsTrigger>
                     <TabsTrigger value="meta"><Star className="w-4 h-4 mr-2"/>Meta</TabsTrigger>
                 </TabsList>
 
@@ -149,13 +171,14 @@ const BuildingEditor: React.FC<{
                 </TabsContent>
 
                  <TabsContent value="research" className="pt-4">
-                     <Card className="bg-stone-dark/20 border-stone-light/20">
-                         <CardHeader><CardTitle className="text-base font-serif">Technology & Progression</CardTitle></CardHeader>
+                    <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Technology & Progression</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
-                                <div className="flex items-center gap-2"><Switch id="edit-canTrainUnits" checked={editedBuilding.canTrainUnits} onCheckedChange={(c) => handleInputChange('canTrainUnits', c)} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-canTrainUnits">Can Train Units</Label></div>
-                                <div className="flex items-center gap-2"><Switch id="edit-isUnique" checked={editedBuilding.isUnique} onCheckedChange={(c) => { handleInputChange('isUnique', c); if(c) handleInputChange('buildLimit', 1); }} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-isUnique">Unique Building</Label></div>
+                                <div className="flex items-center gap-2"><Switch id="edit-canTrainUnits" checked={!!editedBuilding.canTrainUnits} onCheckedChange={(c) => handleInputChange('canTrainUnits', c)} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-canTrainUnits">Can Train Units</Label></div>
+                                <div className="flex items-center gap-2"><Switch id="edit-isUnique" checked={!!editedBuilding.isUnique} onCheckedChange={(c) => { handleInputChange('isUnique', c); if(c) handleInputChange('buildLimit', 1); }} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-isUnique">Unique Building</Label></div>
                                 {!editedBuilding.isUnique && (<div className="flex items-center gap-2"><Label htmlFor="edit-buildLimit">Build Limit (0=inf)</Label><Input id="edit-buildLimit" type="number" value={editedBuilding.buildLimit || 0} onChange={(e) => handleInputChange('buildLimit', Math.max(0, parseInt(e.target.value, 10) || 0))} className="sci-fi-input w-24" min="0" /></div>)}
+                                <div className="flex items-center gap-2"><Switch id="edit-isUpgradeOnly" checked={!!editedBuilding.isUpgradeOnly} onCheckedChange={(c) => handleInputChange('isUpgradeOnly', c)} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-isUpgradeOnly">Upgrade Only (Cannot be built directly)</Label></div>
                                 <div className="flex items-center gap-2"><Switch id="edit-requiresResearch" checked={!!editedBuilding.requiresResearch} onCheckedChange={(c) => handleInputChange('requiresResearch', c)} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-requiresResearch">Requires Research</Label></div>
                                 {editedBuilding.requiresResearch && (
                                     <div className="pl-4 border-l-2 border-brand-gold space-y-2">
@@ -164,11 +187,39 @@ const BuildingEditor: React.FC<{
                                     </div>
                                 )}
                             </div>
-                             <div>
-                                <Label>Upgrades To</Label>
-                                <ScrollArea className="h-40 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
-                                    <div className="space-y-1">
-                                        {allBuildings.filter(b => b.id !== building.id).map(b => (<div key={b.id} className="flex items-center gap-2"><Checkbox id={`upgrades-${b.id}`} checked={editedBuilding.upgradesTo?.includes(b.id)} onCheckedChange={(checked) => handleUpgradesToChange(b.id, !!checked)} /><label htmlFor={`upgrades-${b.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{b.name}</label></div>))}
+                            <div>
+                                <Label>Upgrade Paths</Label>
+                                <ScrollArea className="h-64 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
+                                    <div className="space-y-4">
+                                        {allBuildings.filter(b => b.id !== building.id).map(targetBuilding => {
+                                            const upgradePath = editedBuilding.upgradesTo?.find(u => u.id === targetBuilding.id);
+                                            const isEnabled = !!upgradePath;
+                                            return (
+                                                <div key={targetBuilding.id} className="p-2 border border-stone-light/10 rounded-md">
+                                                    <div className="flex items-center gap-2">
+                                                        <Checkbox id={`upgrades-${targetBuilding.id}`} checked={isEnabled} onCheckedChange={(checked) => handleUpgradePathChange(targetBuilding.id, !!checked)} />
+                                                        <label htmlFor={`upgrades-${targetBuilding.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{targetBuilding.name}</label>
+                                                    </div>
+                                                    {isEnabled && (
+                                                        <div className="mt-2 pl-6 space-y-2 animate-in fade-in-50">
+                                                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+                                                                <Label className="sm:col-span-5 text-xs text-brand-gold">Upgrade Cost & Time for {targetBuilding.name}:</Label>
+                                                                {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (
+                                                                    <div key={res}>
+                                                                        <Label className="capitalize text-xs">{res}</Label>
+                                                                        <Input type="number" value={upgradePath.cost[res] || ''} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, res, e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
+                                                                    </div>
+                                                                ))}
+                                                                <div>
+                                                                    <Label className="text-xs">Time(s)</Label>
+                                                                    <Input type="number" value={upgradePath.time} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, 'time', e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </ScrollArea>
                             </div>
@@ -455,7 +506,7 @@ const AdminPage: React.FC = () => {
         setEditingBuilding(newBuilding);
     };
     const handleDeleteBuilding = async (buildingToDelete: BuildingConfig) => {
-        const isUpgradeTarget = buildings.some(b => b.upgradesTo?.includes(buildingToDelete.id));
+        const isUpgradeTarget = buildings.some(b => b.upgradesTo?.some(u => u.id === buildingToDelete.id));
         if (isUpgradeTarget) {
             alert(`Cannot delete "${buildingToDelete.name}". It is targeted by another building's upgrade path.`);
             return;

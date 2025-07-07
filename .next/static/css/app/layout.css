@@ -845,6 +845,12 @@ video {
 .h-40 {
   height: 10rem;
 }
+.\!h-8 {
+  height: 2rem !important;
+}
+.h-64 {
+  height: 16rem;
+}
 .max-h-48 {
   max-height: 12rem;
 }
@@ -1375,6 +1381,9 @@ video {
 .border-transparent {
   border-color: transparent;
 }
+.border-stone-light\/10 {
+  border-color: rgb(102 92 84 / 0.1);
+}
 .border-l-transparent {
   border-left-color: transparent;
 }
@@ -1624,6 +1633,9 @@ video {
 }
 .pt-\[100\%\] {
   padding-top: 100%;
+}
+.pl-6 {
+  padding-left: 1.5rem;
 }
 .text-left {
   text-align: left;
@@ -2768,6 +2780,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
 
   .sm\:top-auto {
     top: auto;
+  }
+
+  .sm\:col-span-5 {
+    grid-column: span 5 / span 5;
   }
 
   .sm\:mt-0 {

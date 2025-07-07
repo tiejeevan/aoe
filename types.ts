@@ -9,6 +9,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -238,6 +239,7 @@ export interface BuildingConfig {
     canTrainUnits: boolean;
     isUpgradeOnly?: boolean;
     upgradesTo?: BuildingUpgradePath[];
+    treeId?: string; // Unique ID for an upgrade family of buildings.
     
     // Comprehensive Attributes
     populationCapacity?: number;

@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig } from '../../../types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig } from '../../../services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker } from 'lucide-react';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ScrollArea } from '../../components/ui/scroll-area';
+import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
 
 
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
@@ -188,38 +189,69 @@ const BuildingEditor: React.FC<{
                                 )}
                             </div>
                             <div>
-                                <Label>Upgrade Paths</Label>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Label>Tree Upgrades</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-5 w-5 text-brand-blue hover:text-brand-gold"><Info className="w-4 h-4"/></Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-96 sci-fi-panel-popup">
+                                            <h4 className="font-bold text-brand-gold font-serif">Upgrade Tree for ID:</h4>
+                                            <p className="text-xs font-mono break-all mb-2">{editedBuilding.treeId}</p>
+                                            <hr className="border-stone-light/20 mb-2"/>
+                                            <ul className="space-y-1">
+                                                {allBuildings
+                                                    .filter(b => b.treeId === editedBuilding.treeId)
+                                                    .sort((a,b) => a.order - b.order)
+                                                    .map(b => (
+                                                        <li key={b.id} className={`flex justify-between items-center text-sm p-1 rounded ${b.id === editedBuilding.id ? 'bg-brand-blue/20' : ''}`}>
+                                                            <span>{b.name}</span>
+                                                            <span className="text-xs text-parchment-dark">{b.unlockedInAge}</span>
+                                                        </li>
+                                                    ))
+                                                }
+                                            </ul>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
                                 <ScrollArea className="h-64 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
                                     <div className="space-y-4">
-                                        {allBuildings.filter(b => b.id !== building.id).map(targetBuilding => {
-                                            const upgradePath = editedBuilding.upgradesTo?.find(u => u.id === targetBuilding.id);
-                                            const isEnabled = !!upgradePath;
-                                            return (
-                                                <div key={targetBuilding.id} className="p-2 border border-stone-light/10 rounded-md">
-                                                    <div className="flex items-center gap-2">
-                                                        <Checkbox id={`upgrades-${targetBuilding.id}`} checked={isEnabled} onCheckedChange={(checked) => handleUpgradePathChange(targetBuilding.id, !!checked)} />
-                                                        <label htmlFor={`upgrades-${targetBuilding.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{targetBuilding.name}</label>
-                                                    </div>
-                                                    {isEnabled && (
-                                                        <div className="mt-2 pl-6 space-y-2 animate-in fade-in-50">
-                                                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
-                                                                <Label className="sm:col-span-5 text-xs text-brand-gold">Upgrade Cost & Time for {targetBuilding.name}:</Label>
-                                                                {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (
-                                                                    <div key={res}>
-                                                                        <Label className="capitalize text-xs">{res}</Label>
-                                                                        <Input type="number" value={upgradePath.cost[res] || ''} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, res, e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
+                                        {allBuildings
+                                            .filter(b => b.treeId === editedBuilding.treeId && b.id !== editedBuilding.id)
+                                            .map(targetBuilding => {
+                                                const upgradePath = editedBuilding.upgradesTo?.find(u => u.id === targetBuilding.id);
+                                                const isEnabled = !!upgradePath;
+                                                return (
+                                                    <div key={targetBuilding.id} className="p-2 border border-stone-light/10 rounded-md">
+                                                        <div className="flex items-center gap-2">
+                                                            <Checkbox id={`upgrades-${targetBuilding.id}`} checked={isEnabled} onCheckedChange={(checked) => handleUpgradePathChange(targetBuilding.id, !!checked)} />
+                                                            <label htmlFor={`upgrades-${targetBuilding.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                                {targetBuilding.name} <span className="text-xs text-parchment-dark">({targetBuilding.unlockedInAge})</span>
+                                                            </label>
+                                                        </div>
+                                                        {isEnabled && (
+                                                            <div className="mt-2 pl-6 space-y-2 animate-in fade-in-50">
+                                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+                                                                    <Label className="sm:col-span-5 text-xs text-brand-gold">Upgrade Cost & Time for {targetBuilding.name}:</Label>
+                                                                    {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (
+                                                                        <div key={res}>
+                                                                            <Label className="capitalize text-xs">{res}</Label>
+                                                                            <Input type="number" value={upgradePath.cost[res] || ''} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, res, e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
+                                                                        </div>
+                                                                    ))}
+                                                                    <div>
+                                                                        <Label className="text-xs">Time(s)</Label>
+                                                                        <Input type="number" value={upgradePath.time} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, 'time', e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
                                                                     </div>
-                                                                ))}
-                                                                <div>
-                                                                    <Label className="text-xs">Time(s)</Label>
-                                                                    <Input type="number" value={upgradePath.time} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, 'time', e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
+                                                        )}
+                                                    </div>
+                                                );
                                         })}
+                                        {allBuildings.filter(b => b.treeId === editedBuilding.treeId && b.id !== editedBuilding.id).length === 0 && (
+                                            <p className="text-center text-parchment-dark text-sm p-4">No other buildings found in this tree. Create another building with the same Tree ID to set up an upgrade path.</p>
+                                        )}
                                     </div>
                                 </ScrollArea>
                             </div>
@@ -230,12 +262,31 @@ const BuildingEditor: React.FC<{
                  <TabsContent value="meta" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
                          <CardHeader><CardTitle className="text-base font-serif">Meta & Aesthetics</CardTitle></CardHeader>
-                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                             <div><Label>Award Points</Label><Input type="number" value={editedBuilding.awardPoints || ''} onChange={(e) => handleNumberChange('awardPoints', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
-                             <div><Label>Award Tier</Label><Select value={editedBuilding.awardTier} onValueChange={(val) => handleInputChange('awardTier', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{['Bronze', 'Silver', 'Gold'].map(tier => <SelectItem key={tier} value={tier}>{tier}</SelectItem>)}</SelectContent></Select></div>
-                             <div><Label>Placement Radius</Label><Input type="number" value={editedBuilding.placementRadius || ''} onChange={(e) => handleNumberChange('placementRadius', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
-                             <div className="md:col-span-2"><Label>Custom Model ID</Label><Input type="text" value={editedBuilding.customModelId || ''} onChange={(e) => handleInputChange('customModelId', e.target.value)} placeholder="e.g., house_model_v2" className="sci-fi-input" /></div>
-                             <div className="md:col-span-3"><Label>Seasonal Variant IDs (comma-separated)</Label><Input type="text" value={(editedBuilding.seasonalVariantIds || []).join(',')} onChange={(e) => handleInputChange('seasonalVariantIds', e.target.value.split(',').map(s => s.trim()))} placeholder="winter_skin, halloween_skin" className="sci-fi-input" /></div>
+                        <CardContent className="space-y-4">
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                 <div><Label>Award Points</Label><Input type="number" value={editedBuilding.awardPoints || ''} onChange={(e) => handleNumberChange('awardPoints', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                                 <div><Label>Award Tier</Label><Select value={editedBuilding.awardTier} onValueChange={(val) => handleInputChange('awardTier', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{['Bronze', 'Silver', 'Gold'].map(tier => <SelectItem key={tier} value={tier}>{tier}</SelectItem>)}</SelectContent></Select></div>
+                                 <div><Label>Placement Radius</Label><Input type="number" value={editedBuilding.placementRadius || ''} onChange={(e) => handleNumberChange('placementRadius', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                             </div>
+                             <div>
+                                <Label>Tree ID</Label>
+                                <div className="flex items-center gap-2">
+                                    <Input 
+                                        type="text" 
+                                        value={editedBuilding.treeId || ''} 
+                                        onChange={(e) => handleInputChange('treeId', e.target.value)} 
+                                        placeholder="e.g., tree-17..."
+                                        className="sci-fi-input" 
+                                    />
+                                    <Button variant="outline" size="icon" onClick={() => navigator.clipboard.writeText(editedBuilding.treeId || '')} title="Copy Tree ID"><Copy className="w-4 h-4"/></Button>
+                                    <Button variant="outline" size="icon" onClick={() => handleInputChange('treeId', `tree-${Date.now()}`)} title="Generate New Tree ID"><RefreshCw className="w-4 h-4"/></Button>
+                                </div>
+                                <p className="text-xs text-parchment-dark mt-1">Buildings with the same Tree ID can be upgraded to each other. Paste an ID to join a tree, or generate a new one.</p>
+                            </div>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><Label>Custom Model ID</Label><Input type="text" value={editedBuilding.customModelId || ''} onChange={(e) => handleInputChange('customModelId', e.target.value)} placeholder="e.g., house_model_v2" className="sci-fi-input" /></div>
+                                <div><Label>Seasonal Variant IDs (comma-separated)</Label><Input type="text" value={(editedBuilding.seasonalVariantIds || []).join(',')} onChange={(e) => handleInputChange('seasonalVariantIds', e.target.value.split(',').map(s => s.trim()))} placeholder="winter_skin, halloween_skin" className="sci-fi-input" /></div>
+                             </div>
                         </CardContent>
                      </Card>
                  </TabsContent>
@@ -381,13 +432,14 @@ const AdminPage: React.FC = () => {
         for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
             const existingItem = itemMap.get(pItem.id);
             const newItem: BuildingConfig = {
-                ...(existingItem || {}),
                 ...pItem,
+                ...(existingItem || {}),
                 id: pItem.id,
                 isPredefined: true,
                 unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge),
                 isActive: existingItem?.isActive ?? true,
                 order: existingItem?.order ?? index,
+                treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`,
             };
 
             if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
@@ -411,8 +463,8 @@ const AdminPage: React.FC = () => {
         for (const [index, pItem] of INITIAL_UNITS.entries()) {
             const existingItem = itemMap.get(pItem.id);
             const newItem: UnitConfig = {
-                ...(existingItem || {}),
                 ...pItem,
+                ...(existingItem || {}),
                 id: pItem.id,
                 isPredefined: true,
                 isActive: existingItem?.isActive ?? true,
@@ -489,6 +541,7 @@ const AdminPage: React.FC = () => {
      const handleShowAddBuilding = () => {
         const newBuilding: BuildingConfig = {
             id: `custom-bld-${Date.now()}`,
+            treeId: `tree-${Date.now()}`,
             name: 'New Building',
             description: 'A new custom building.',
             cost: { wood: 50 },

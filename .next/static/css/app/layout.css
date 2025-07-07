@@ -1307,6 +1307,9 @@ video {
 .whitespace-nowrap {
   white-space: nowrap;
 }
+.break-all {
+  word-break: break-all;
+}
 .\!rounded-lg {
   border-radius: 0.5rem !important;
 }
@@ -1490,6 +1493,9 @@ video {
 .bg-parchment-light {
   --tw-bg-opacity: 1;
   background-color: rgb(253 246 227 / var(--tw-bg-opacity, 1));
+}
+.bg-brand-blue\/20 {
+  background-color: rgb(69 133 136 / 0.2);
 }
 .bg-opacity-60 {
   --tw-bg-opacity: 0.6;

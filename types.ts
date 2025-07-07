@@ -6,6 +6,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -223,17 +224,33 @@ export interface BuildingConfig {
     canTrainUnits: boolean;
     upgradesTo?: string[];
     
-    // New Comprehensive Attributes
+    // Comprehensive Attributes
     populationCapacity?: number;
     garrisonCapacity?: number;
     generatesResource?: keyof Resources | 'none';
-    generationRate?: number;
+    generationRate?: number; // per minute
     attack?: number;
-    attackRate?: number;
+    attackRate?: number; // attacks per second
     attackRange?: number;
-    healRate?: number; // For garrisoned units
+    healRate?: number; // hp per second for garrisoned units
     visionRange?: number;
-    requiredBuildingId?: string; // Prerequisite building
+    requiredBuildingId?: string;
+    
+    // Future-Proofing Attributes
+    researchCost?: BuildingCosts;
+    researchTime?: number; // in seconds
+    unlocksResearchIds?: string[];
+    requiresResearch?: boolean;
+
+    awardPoints?: number;
+    awardTier?: 'Bronze' | 'Silver' | 'Gold';
+    
+    customModelId?: string;
+    placementRadius?: number; // minimum distance from another building of the same type
+    
+    seasonalVariantIds?: string[];
+    maintenanceCost?: BuildingCosts; // per minute
+    decayRate?: number; // hp loss per minute
 }
 
 

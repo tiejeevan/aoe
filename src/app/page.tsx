@@ -111,10 +111,13 @@ const GamePage: React.FC = () => {
             
             // --- Smart Seeding for Ages ---
             let allAgeConfigs = await getAllAgeConfigs();
-            if (allAgeConfigs.length === 0) {
+            const ageIds = new Set(allAgeConfigs.map(a => a.id));
+            if (INITIAL_AGES.some(pa => !ageIds.has(pa.name))) {
                  for (const [index, pa] of INITIAL_AGES.entries()) {
-                    const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
-                    await saveAgeConfig(newPredefinedAge);
+                    if (!ageIds.has(pa.name)) {
+                        const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
+                        await saveAgeConfig(newPredefinedAge);
+                    }
                 }
                 allAgeConfigs = await getAllAgeConfigs();
             }
@@ -122,17 +125,20 @@ const GamePage: React.FC = () => {
 
             // --- Smart Seeding for Buildings ---
             let allBuildingConfigs = await getAllBuildingConfigs();
-             if (allBuildingConfigs.length === 0) {
+            const buildingIds = new Set(allBuildingConfigs.map(b => b.id));
+             if (INITIAL_BUILDINGS.some(pb => !buildingIds.has(pb.id))) {
                  for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
-                    const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
-                    const newPredefinedBuilding: BuildingConfig = {
-                        ...pb,
-                        isActive: true,
-                        isPredefined: true,
-                        order: index,
-                        unlockedInAge: pb.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge,
-                    };
-                    await saveBuildingConfig(newPredefinedBuilding);
+                    if (!buildingIds.has(pb.id)) {
+                        const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
+                        const newPredefinedBuilding: BuildingConfig = {
+                            ...pb,
+                            isActive: true,
+                            isPredefined: true,
+                            order: index,
+                            unlockedInAge: pb.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge,
+                        };
+                        await saveBuildingConfig(newPredefinedBuilding);
+                    }
                 }
                 allBuildingConfigs = await getAllBuildingConfigs();
             }
@@ -140,15 +146,18 @@ const GamePage: React.FC = () => {
 
             // --- Smart Seeding for Units ---
             let allUnitConfigs = await getAllUnitConfigs();
-            if (allUnitConfigs.length === 0) {
+            const unitIds = new Set(allUnitConfigs.map(u => u.id));
+            if (INITIAL_UNITS.some(pu => !unitIds.has(pu.id))) {
                 for (const [index, pu] of INITIAL_UNITS.entries()) {
-                    const newPredefinedUnit: UnitConfig = {
-                        ...pu,
-                        isActive: true,
-                        isPredefined: true,
-                        order: index,
-                    };
-                    await saveUnitConfig(newPredefinedUnit);
+                     if (!unitIds.has(pu.id)) {
+                        const newPredefinedUnit: UnitConfig = {
+                            ...pu,
+                            isActive: true,
+                            isPredefined: true,
+                            order: index,
+                        };
+                        await saveUnitConfig(newPredefinedUnit);
+                    }
                 }
                 allUnitConfigs = await getAllUnitConfigs();
             }
@@ -299,6 +308,26 @@ const GamePage: React.FC = () => {
 
             let completedTasks: GameTask[] = [];
             let resourceDeltasThisTick: ResourceDeltas = {};
+
+            // --- Passive Generation and Maintenance ---
+            Object.values(buildings).flat().forEach(instance => {
+                const config = masterBuildingList.find(b => b.id === Object.keys(buildings).find(key => buildings[key as string].some(bInst => bInst.id === instance.id)));
+                if (!config) return;
+
+                // Passive Generation
+                if (config.generatesResource && config.generatesResource !== 'none' && config.generationRate) {
+                    const amountPerSecond = config.generationRate / 60;
+                    resourceDeltasThisTick[config.generatesResource] = (resourceDeltasThisTick[config.generatesResource] || 0) + (amountPerSecond / 1000) * deltaTime;
+                }
+
+                // Maintenance Costs
+                if (config.maintenanceCost) {
+                    Object.entries(config.maintenanceCost).forEach(([res, cost]) => {
+                        const costPerSecond = (cost || 0) / 60;
+                        resourceDeltasThisTick[res as keyof Resources] = (resourceDeltasThisTick[res as keyof Resources] || 0) - (costPerSecond / 1000) * deltaTime;
+                    });
+                }
+            });
             
             setActiveBuffs(prev => {
                 const newResourceBoosts = prev.resourceBoost?.filter(b => b.endTime > now);
@@ -360,7 +389,7 @@ const GamePage: React.FC = () => {
         };
         animationFrameRef.current = requestAnimationFrame(gameLoop);
         return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
-    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog, updateResources, units.villagers, civilization, activeBuffs]);
+    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog, updateResources, units.villagers, civilization, activeBuffs, buildings, masterBuildingList]);
 
     const handleNewEvent = useCallback(() => {
         if (!civilization || currentEvent) return;
@@ -875,7 +904,7 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />

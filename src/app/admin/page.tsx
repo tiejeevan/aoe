@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig } from '../../../types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig } from '../../../services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins } from 'lucide-react';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -33,10 +33,7 @@ const BuildingEditor: React.FC<{
     allAges: AgeConfig[];
     allBuildings: BuildingConfig[];
 }> = ({ building, onSave, onCancel, allAges, allBuildings }) => {
-    const [editedBuilding, setEditedBuilding] = useState<BuildingConfig>({
-        ...building,
-        upgradesTo: building.upgradesTo || [],
-    });
+    const [editedBuilding, setEditedBuilding] = useState<BuildingConfig>(building);
 
     const handleInputChange = (field: keyof BuildingConfig, value: any) => {
         setEditedBuilding(prev => ({ ...prev, [field]: value }));
@@ -44,9 +41,12 @@ const BuildingEditor: React.FC<{
     const handleNumberChange = (field: keyof BuildingConfig, value: string) => {
         setEditedBuilding(prev => ({ ...prev, [field]: value === '' ? undefined : parseInt(value, 10) || 0 }));
     };
-    const handleCostChange = (resource: keyof Resources, value: string) => {
+    const handleCostChange = (costField: 'cost' | 'researchCost' | 'maintenanceCost', resource: keyof Resources, value: string) => {
         const amount = parseInt(value, 10) || 0;
-        setEditedBuilding(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
+        setEditedBuilding(prev => ({
+            ...prev,
+            [costField]: { ...prev[costField], [resource]: amount }
+        }));
     };
 
     const handleUpgradesToChange = (buildingId: string, checked: boolean) => {
@@ -60,20 +60,28 @@ const BuildingEditor: React.FC<{
         });
     };
 
+    const costLikeFields: { key: 'cost' | 'researchCost' | 'maintenanceCost', title: string }[] = [
+        { key: 'cost', title: 'Build Cost' },
+        { key: 'researchCost', title: 'Research Cost' },
+        { key: 'maintenanceCost', title: 'Maintenance Cost (per min)' },
+    ];
+
     return (
         <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
             <h3 className="text-xl font-bold text-brand-gold font-serif">Editing: {building.name}</h3>
             
             <Tabs defaultValue="general">
-                <TabsList className="grid w-full grid-cols-4 bg-stone-dark/80 border border-stone-light/20">
+                <TabsList className="grid w-full grid-cols-5 bg-stone-dark/80 border border-stone-light/20">
                     <TabsTrigger value="general"><Building className="w-4 h-4 mr-2"/>General</TabsTrigger>
-                    <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Economy & Population</TabsTrigger>
+                    <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Economy</TabsTrigger>
                     <TabsTrigger value="military"><Shield className="w-4 h-4 mr-2"/>Military</TabsTrigger>
-                    <TabsTrigger value="upgrades"><ArrowUp className="w-4 h-4 mr-2"/>Upgrades</TabsTrigger>
+                    <TabsTrigger value="research"><Beaker className="w-4 h-4 mr-2"/>Research</TabsTrigger>
+                    <TabsTrigger value="meta"><Star className="w-4 h-4 mr-2"/>Meta</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="general" className="pt-4">
                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Core Attributes</CardTitle></CardHeader>
                         <CardContent className="p-4 space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div><Label>Name</Label><Input type="text" value={editedBuilding.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Building Name" className="sci-fi-input" /></div>
@@ -86,29 +94,40 @@ const BuildingEditor: React.FC<{
                                 <div><Label>Unlocked In</Label><Select value={editedBuilding.unlockedInAge} onValueChange={(val) => handleInputChange('unlockedInAge', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{allAges.map(a => <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>)}</SelectContent></Select></div>
                                  <div><Label>Prerequisite</Label><Select value={editedBuilding.requiredBuildingId || 'none'} onValueChange={(val) => handleInputChange('requiredBuildingId', val === 'none' ? undefined : val)}><SelectTrigger className="sci-fi-input"><SelectValue placeholder="None"/></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{allBuildings.filter(b => b.id !== building.id).map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedBuilding.cost[res] || ''} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
-                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
 
                 <TabsContent value="economy" className="pt-4">
-                     <Card className="bg-stone-dark/20 border-stone-light/20">
-                        <CardHeader><CardTitle className="text-base font-serif">Population & Housing</CardTitle></CardHeader>
-                        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div><Label>Population Provided</Label><Input type="number" value={editedBuilding.populationCapacity || ''} onChange={(e) => handleNumberChange('populationCapacity', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
-                            <div><Label>Garrison Capacity</Label><Input type="number" value={editedBuilding.garrisonCapacity || ''} onChange={(e) => handleNumberChange('garrisonCapacity', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
-                            <div><Label>Garrison Heal Rate (HP/s)</Label><Input type="number" value={editedBuilding.healRate || ''} onChange={(e) => handleNumberChange('healRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                     <Card className="bg-stone-dark/20 border-stone-light/20 mb-4">
+                        <CardHeader><CardTitle className="text-base font-serif">Costs</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                            {costLikeFields.map(({key, title}) => (
+                                <div key={key}>
+                                    <Label>{title}</Label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
+                                        {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedBuilding[key]?.[res] || ''} onChange={(e) => handleCostChange(key, res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                    </div>
+                                </div>
+                            ))}
                         </CardContent>
-                    </Card>
-                    <Card className="bg-stone-dark/20 border-stone-light/20 mt-4">
-                        <CardHeader><CardTitle className="text-base font-serif">Passive Resource Generation</CardTitle></CardHeader>
-                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <div><Label>Generates Resource</Label><Select value={editedBuilding.generatesResource || 'none'} onValueChange={(val) => handleInputChange('generatesResource', val === 'none' ? undefined : val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<SelectItem key={res} value={res} className="capitalize">{res}</SelectItem>))}</SelectContent></Select></div>
-                            {editedBuilding.generatesResource && <div><Label>Generation Rate (/s)</Label><Input type="number" value={editedBuilding.generationRate || ''} onChange={(e) => handleNumberChange('generationRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>}
-                        </CardContent>
-                    </Card>
+                     </Card>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <Card className="bg-stone-dark/20 border-stone-light/20">
+                            <CardHeader><CardTitle className="text-base font-serif">Population & Housing</CardTitle></CardHeader>
+                            <CardContent className="grid grid-cols-2 gap-4">
+                                <div><Label>Population Provided</Label><Input type="number" value={editedBuilding.populationCapacity || ''} onChange={(e) => handleNumberChange('populationCapacity', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                                <div><Label>Garrison Capacity</Label><Input type="number" value={editedBuilding.garrisonCapacity || ''} onChange={(e) => handleNumberChange('garrisonCapacity', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-stone-dark/20 border-stone-light/20">
+                            <CardHeader><CardTitle className="text-base font-serif">Passive Generation</CardTitle></CardHeader>
+                            <CardContent className="grid grid-cols-2 gap-4">
+                                 <div><Label>Generates Resource</Label><Select value={editedBuilding.generatesResource || 'none'} onValueChange={(val) => handleInputChange('generatesResource', val === 'none' ? undefined : val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<SelectItem key={res} value={res} className="capitalize">{res}</SelectItem>))}</SelectContent></Select></div>
+                                {editedBuilding.generatesResource && <div><Label>Rate (per min)</Label><Input type="number" value={editedBuilding.generationRate || ''} onChange={(e) => handleNumberChange('generationRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
                 
                 <TabsContent value="military" className="pt-4">
@@ -121,22 +140,34 @@ const BuildingEditor: React.FC<{
                             <div><Label>Vision Range (cells)</Label><Input type="number" value={editedBuilding.visionRange || ''} onChange={(e) => handleNumberChange('visionRange', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
                         </CardContent>
                      </Card>
+                     <Card className="bg-stone-dark/20 border-stone-light/20 mt-4">
+                         <CardHeader><CardTitle className="text-base font-serif">Durability & Repair</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><Label>Decay Rate (HP/min)</Label><Input type="number" value={editedBuilding.decayRate || ''} onChange={(e) => handleNumberChange('decayRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                             <div><Label>Heal Rate (HP/s)</Label><Input type="number" value={editedBuilding.healRate || ''} onChange={(e) => handleNumberChange('healRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                        </CardContent>
+                     </Card>
                 </TabsContent>
 
-                 <TabsContent value="upgrades" className="pt-4">
-                    <Card className="bg-stone-dark/20 border-stone-light/20">
-                         <CardHeader><CardTitle className="text-base font-serif">Rules & Progression</CardTitle></CardHeader>
+                 <TabsContent value="research" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                         <CardHeader><CardTitle className="text-base font-serif">Technology & Progression</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
                                 <div className="flex items-center gap-2"><Switch id="edit-canTrainUnits" checked={editedBuilding.canTrainUnits} onCheckedChange={(c) => handleInputChange('canTrainUnits', c)} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-canTrainUnits">Can Train Units</Label></div>
-                                <div className="flex items-center gap-2">
-                                    <Switch id="edit-isUnique" checked={editedBuilding.isUnique} onCheckedChange={(c) => { handleInputChange('isUnique', c); if(c) handleInputChange('buildLimit', 1); }} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-isUnique">Unique Building</Label>
-                                </div>
+                                <div className="flex items-center gap-2"><Switch id="edit-isUnique" checked={editedBuilding.isUnique} onCheckedChange={(c) => { handleInputChange('isUnique', c); if(c) handleInputChange('buildLimit', 1); }} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-isUnique">Unique Building</Label></div>
                                 {!editedBuilding.isUnique && (<div className="flex items-center gap-2"><Label htmlFor="edit-buildLimit">Build Limit (0=inf)</Label><Input id="edit-buildLimit" type="number" value={editedBuilding.buildLimit || 0} onChange={(e) => handleInputChange('buildLimit', Math.max(0, parseInt(e.target.value, 10) || 0))} className="sci-fi-input w-24" min="0" /></div>)}
+                                <div className="flex items-center gap-2"><Switch id="edit-requiresResearch" checked={!!editedBuilding.requiresResearch} onCheckedChange={(c) => handleInputChange('requiresResearch', c)} className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red" /><Label htmlFor="edit-requiresResearch">Requires Research</Label></div>
+                                {editedBuilding.requiresResearch && (
+                                    <div className="pl-4 border-l-2 border-brand-gold space-y-2">
+                                        <div><Label>Research Time (s)</Label><Input type="number" value={editedBuilding.researchTime || ''} onChange={(e) => handleNumberChange('researchTime', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                                        <div><Label>Unlocks Research IDs (comma-separated)</Label><Input type="text" value={(editedBuilding.unlocksResearchIds || []).join(',')} onChange={(e) => handleInputChange('unlocksResearchIds', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_1, tech_2" className="sci-fi-input" /></div>
+                                    </div>
+                                )}
                             </div>
                              <div>
                                 <Label>Upgrades To</Label>
-                                <ScrollArea className="h-32 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
+                                <ScrollArea className="h-40 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
                                     <div className="space-y-1">
                                         {allBuildings.filter(b => b.id !== building.id).map(b => (<div key={b.id} className="flex items-center gap-2"><Checkbox id={`upgrades-${b.id}`} checked={editedBuilding.upgradesTo?.includes(b.id)} onCheckedChange={(checked) => handleUpgradesToChange(b.id, !!checked)} /><label htmlFor={`upgrades-${b.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{b.name}</label></div>))}
                                     </div>
@@ -144,6 +175,19 @@ const BuildingEditor: React.FC<{
                             </div>
                         </CardContent>
                     </Card>
+                 </TabsContent>
+
+                 <TabsContent value="meta" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                         <CardHeader><CardTitle className="text-base font-serif">Meta & Aesthetics</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                             <div><Label>Award Points</Label><Input type="number" value={editedBuilding.awardPoints || ''} onChange={(e) => handleNumberChange('awardPoints', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                             <div><Label>Award Tier</Label><Select value={editedBuilding.awardTier} onValueChange={(val) => handleInputChange('awardTier', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{['Bronze', 'Silver', 'Gold'].map(tier => <SelectItem key={tier} value={tier}>{tier}</SelectItem>)}</SelectContent></Select></div>
+                             <div><Label>Placement Radius</Label><Input type="number" value={editedBuilding.placementRadius || ''} onChange={(e) => handleNumberChange('placementRadius', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
+                             <div className="md:col-span-2"><Label>Custom Model ID</Label><Input type="text" value={editedBuilding.customModelId || ''} onChange={(e) => handleInputChange('customModelId', e.target.value)} placeholder="e.g., house_model_v2" className="sci-fi-input" /></div>
+                             <div className="md:col-span-3"><Label>Seasonal Variant IDs (comma-separated)</Label><Input type="text" value={(editedBuilding.seasonalVariantIds || []).join(',')} onChange={(e) => handleInputChange('seasonalVariantIds', e.target.value.split(',').map(s => s.trim()))} placeholder="winter_skin, halloween_skin" className="sci-fi-input" /></div>
+                        </CardContent>
+                     </Card>
                  </TabsContent>
             </Tabs>
 
@@ -376,7 +420,7 @@ const AdminPage: React.FC = () => {
             id: `custom-bld-${Date.now()}`,
             name: 'New Building',
             description: 'A new custom building.',
-            cost: { wood: 50, food: 0, gold: 0, stone: 0 },
+            cost: { wood: 50 },
             isUnique: false,
             buildLimit: 0,
             buildTime: 30,
@@ -387,16 +431,6 @@ const AdminPage: React.FC = () => {
             isPredefined: false,
             order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0,
             canTrainUnits: false,
-            upgradesTo: [],
-            populationCapacity: 0,
-            garrisonCapacity: 0,
-            generatesResource: 'none',
-            generationRate: 0,
-            attack: 0,
-            attackRate: 0,
-            attackRange: 0,
-            healRate: 0,
-            visionRange: 0,
         };
         setEditingBuilding(newBuilding);
     };
@@ -436,7 +470,7 @@ const AdminPage: React.FC = () => {
             id: `custom-unit-${Date.now()}`,
             name: 'New Unit',
             description: 'A new custom unit.',
-            cost: { food: 50, gold: 10, wood: 0, stone: 0 },
+            cost: { food: 50, gold: 10 },
             trainTime: 20,
             hp: 50,
             attack: 5,

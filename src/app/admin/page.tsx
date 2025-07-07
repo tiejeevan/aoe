@@ -1,13 +1,11 @@
 
-
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath } from '../../../types';
-import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig } from '../../../services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints } from 'lucide-react';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity } from '../../../types';
+import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig } from '../../../services/dbService';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -23,18 +21,18 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/pop
 
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
 import { INITIAL_UNITS } from '../../../data/unitInfo';
-import { buildingIconMap, unitIconMap } from '../../../components/icons/iconRegistry';
+import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
+import { buildingIconMap, unitIconMap, resourceIconMap } from '../../../components/icons/iconRegistry';
 import { INITIAL_AGES } from '../../../data/ageInfo';
 
-
-// Reusable component for editing a building's details
 const BuildingEditor: React.FC<{
     building: BuildingConfig;
     onSave: (building: BuildingConfig) => void;
     onCancel: () => void;
     allAges: AgeConfig[];
     allBuildings: BuildingConfig[];
-}> = ({ building, onSave, onCancel, allAges, allBuildings }) => {
+    allResources: ResourceConfig[];
+}> = ({ building, onSave, onCancel, allAges, allBuildings, allResources }) => {
     const [editedBuilding, setEditedBuilding] = useState<BuildingConfig>(building);
 
     const handleInputChange = (field: keyof BuildingConfig, value: any) => {
@@ -43,7 +41,7 @@ const BuildingEditor: React.FC<{
     const handleNumberChange = (field: keyof BuildingConfig, value: string) => {
         setEditedBuilding(prev => ({ ...prev, [field]: value === '' ? undefined : parseInt(value, 10) || 0 }));
     };
-    const handleCostChange = (costField: 'cost' | 'researchCost' | 'maintenanceCost', resource: keyof Resources, value: string) => {
+    const handleCostChange = (costField: 'cost' | 'researchCost' | 'maintenanceCost', resource: string, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedBuilding(prev => ({
             ...prev,
@@ -55,19 +53,17 @@ const BuildingEditor: React.FC<{
         setEditedBuilding(prev => {
             const currentUpgrades = prev.upgradesTo || [];
             if (checked) {
-                // Add a new upgrade path with default values if it doesn't exist
                 if (!currentUpgrades.some(u => u.id === targetId)) {
                     return { ...prev, upgradesTo: [...currentUpgrades, { id: targetId, cost: {}, time: 60 }] };
                 }
-                return prev; // Should not happen if logic is correct
+                return prev;
             } else {
-                // Remove the upgrade path
                 return { ...prev, upgradesTo: currentUpgrades.filter(u => u.id !== targetId) };
             }
         });
     };
     
-    const handleUpgradeDetailChange = (targetId: string, field: 'time' | keyof Resources, value: string) => {
+    const handleUpgradeDetailChange = (targetId: string, field: 'time' | string, value: string) => {
         const numValue = parseInt(value, 10) || 0;
         setEditedBuilding(prev => ({
             ...prev,
@@ -88,6 +84,8 @@ const BuildingEditor: React.FC<{
         { key: 'researchCost', title: 'Research Cost' },
         { key: 'maintenanceCost', title: 'Maintenance Cost (per min)' },
     ];
+    
+    const activeResources = allResources.filter(r => r.isActive);
 
     return (
         <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
@@ -128,8 +126,8 @@ const BuildingEditor: React.FC<{
                             {costLikeFields.map(({key, title}) => (
                                 <div key={key}>
                                     <Label>{title}</Label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
-                                        {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedBuilding[key]?.[res] || ''} onChange={(e) => handleCostChange(key, res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                    <div className={`grid grid-cols-2 sm:grid-cols-${activeResources.length || 1} gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1`}>
+                                        {activeResources.map(res => (<div key={res.id}><Label className="capitalize text-xs">{res.name}</Label><Input type="number" value={editedBuilding[key]?.[res.id] || ''} onChange={(e) => handleCostChange(key, res.id, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
                                     </div>
                                 </div>
                             ))}
@@ -146,7 +144,7 @@ const BuildingEditor: React.FC<{
                         <Card className="bg-stone-dark/20 border-stone-light/20">
                             <CardHeader><CardTitle className="text-base font-serif">Passive Generation</CardTitle></CardHeader>
                             <CardContent className="grid grid-cols-2 gap-4">
-                                 <div><Label>Generates Resource</Label><Select value={editedBuilding.generatesResource || 'none'} onValueChange={(val) => handleInputChange('generatesResource', val === 'none' ? undefined : val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<SelectItem key={res} value={res} className="capitalize">{res}</SelectItem>))}</SelectContent></Select></div>
+                                 <div><Label>Generates Resource</Label><Select value={editedBuilding.generatesResource || 'none'} onValueChange={(val) => handleInputChange('generatesResource', val === 'none' ? undefined : val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{activeResources.map(res => (<SelectItem key={res.id} value={res.id} className="capitalize">{res.name}</SelectItem>))}</SelectContent></Select></div>
                                 {editedBuilding.generatesResource && <div><Label>Rate (per min)</Label><Input type="number" value={editedBuilding.generationRate || ''} onChange={(e) => handleNumberChange('generationRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>}
                             </CardContent>
                         </Card>
@@ -232,12 +230,12 @@ const BuildingEditor: React.FC<{
                                                         </div>
                                                         {isEnabled && (
                                                             <div className="mt-2 pl-6 space-y-2 animate-in fade-in-50">
-                                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+                                                                <div className={`grid grid-cols-2 sm:grid-cols-${(activeResources.length || 0) + 1} gap-2 items-end`}>
                                                                     <Label className="sm:col-span-5 text-xs text-brand-gold">Upgrade Cost & Time for {targetBuilding.name}:</Label>
-                                                                    {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (
-                                                                        <div key={res}>
-                                                                            <Label className="capitalize text-xs">{res}</Label>
-                                                                            <Input type="number" value={upgradePath.cost[res] || ''} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, res, e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
+                                                                    {activeResources.map(res => (
+                                                                        <div key={res.id}>
+                                                                            <Label className="capitalize text-xs">{res.name}</Label>
+                                                                            <Input type="number" value={upgradePath.cost[res.id] || ''} onChange={(e) => handleUpgradeDetailChange(targetBuilding.id, res.id, e.target.value)} placeholder="0" className="sci-fi-input !h-8" />
                                                                         </div>
                                                                     ))}
                                                                     <div>
@@ -307,7 +305,8 @@ const UnitEditor: React.FC<{
     onCancel: () => void;
     allBuildings: BuildingConfig[];
     allUnits: UnitConfig[];
-}> = ({ unit, onSave, onCancel, allBuildings, allUnits }) => {
+    allResources: ResourceConfig[];
+}> = ({ unit, onSave, onCancel, allBuildings, allUnits, allResources }) => {
     const [editedUnit, setEditedUnit] = useState<UnitConfig>(unit);
 
     const trainingBuildings = allBuildings.filter(b => b.canTrainUnits && b.isActive);
@@ -315,6 +314,7 @@ const UnitEditor: React.FC<{
     const armorClassifications: ArmorClassification[] = ['melee', 'pierce', 'siege', 'magic', 'elemental'];
     const damageTypeOptions: string[] = ['slash', 'pierce', 'blunt', 'magic', 'fire', 'ice'];
     const terrainTypeOptions: string[] = ['plains', 'forest', 'desert', 'mountain', 'water'];
+    const activeResources = allResources.filter(r => r.isActive);
 
 
     const handleInputChange = (field: keyof UnitConfig, value: any) => {
@@ -326,7 +326,7 @@ const UnitEditor: React.FC<{
      const handleFloatChange = (field: keyof UnitConfig, value: string) => {
         setEditedUnit(prev => ({ ...prev, [field]: value === '' ? undefined : parseFloat(value) || 0 }));
     };
-    const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
+    const handleCostChange = (resource: string, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedUnit(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
     };
@@ -353,11 +353,11 @@ const UnitEditor: React.FC<{
 
             <Tabs defaultValue="general">
                  <TabsList className="grid w-full grid-cols-5 bg-stone-dark/80 border border-stone-light/20">
-                    <TabsTrigger value="general"><Swords className="w-4 h-4 mr-2"/>General & Combat</TabsTrigger>
-                    <TabsTrigger value="mobility"><Footprints className="w-4 h-4 mr-2"/>Mobility</TabsTrigger>
-                    <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Cost & Training</TabsTrigger>
-                    <TabsTrigger value="bonuses"><TestTube className="w-4 h-4 mr-2"/>Bonuses & Armor</TabsTrigger>
-                    <TabsTrigger value="upgrades"><ChevronsUp className="w-4 h-4 mr-2"/>Upgrades & Tech</TabsTrigger>
+                    <TabsTrigger value="general">General & Combat</TabsTrigger>
+                    <TabsTrigger value="mobility">Mobility</TabsTrigger>
+                    <TabsTrigger value="economy">Cost & Training</TabsTrigger>
+                    <TabsTrigger value="bonuses">Bonuses & Armor</TabsTrigger>
+                    <TabsTrigger value="upgrades">Upgrades & Tech</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="general" className="pt-4">
@@ -420,14 +420,14 @@ const UnitEditor: React.FC<{
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div>
                                     <Label>Training Cost</Label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
-                                        {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost?.[res] || ''} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                    <div className={`grid grid-cols-2 sm:grid-cols-${activeResources.length || 1} gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1`}>
+                                        {activeResources.map(res => (<div key={res.id}><Label className="capitalize text-xs">{res.name}</Label><Input type="number" value={editedUnit.cost?.[res.id] || ''} onChange={(e) => handleCostChange(res.id, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
                                     </div>
                                 </div>
                                 <div>
                                     <Label>Maintenance Cost (per min)</Label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
-                                        {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.maintenanceCost?.[res] || ''} onChange={(e) => setEditedUnit(p => ({...p, maintenanceCost: {...p.maintenanceCost, [res]: parseInt(e.target.value, 10) || 0}}))} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                    <div className={`grid grid-cols-2 sm:grid-cols-${activeResources.length || 1} gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1`}>
+                                        {activeResources.map(res => (<div key={res.id}><Label className="capitalize text-xs">{res.name}</Label><Input type="number" value={editedUnit.maintenanceCost?.[res.id] || ''} onChange={(e) => setEditedUnit(p => ({...p, maintenanceCost: {...p.maintenanceCost, [res.id]: parseInt(e.target.value, 10) || 0}}))} placeholder="0" className="sci-fi-input w-full" /></div>))}
                                     </div>
                                 </div>
                             </div>
@@ -493,7 +493,6 @@ const UnitEditor: React.FC<{
                                 </div>
                                 <div>
                                     <Label>Additional Required Buildings (Prerequisites)</Label>
-                                    {/* A multi-select component would be ideal here. Using comma-separated for now. */}
                                     <Input type="text" value={(editedUnit.requiredBuildingIds || []).join(',')} onChange={(e) => handleInputChange('requiredBuildingIds', e.target.value.split(',').map(s=>s.trim()).filter(Boolean))} className="sci-fi-input" placeholder="barracks,blacksmith" />
                                 </div>
                                 <div><Label>Required Research IDs (Prerequisites)</Label><Input type="text" value={(editedUnit.requiredResearchIds || []).join(',')} onChange={(e) => handleInputChange('requiredResearchIds', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_armor_1" className="sci-fi-input" /></div>
@@ -534,12 +533,12 @@ const UnitEditor: React.FC<{
                                             </div>
                                             <div>
                                                 <Label className="text-xs">Upgrade Cost</Label>
-                                                 <div className="grid grid-cols-4 gap-2 mt-1">
-                                                    {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (
-                                                        <Input key={res} type="number" value={path.cost?.[res] || ''} onChange={(e) => {
-                                                            const newCost = {...path.cost, [res]: parseInt(e.target.value) || 0};
+                                                 <div className={`grid grid-cols-${activeResources.length || 1} gap-2 mt-1`}>
+                                                    {activeResources.map(res => (
+                                                        <Input key={res.id} type="number" value={path.cost?.[res.id] || ''} onChange={(e) => {
+                                                            const newCost = {...path.cost, [res.id]: parseInt(e.target.value) || 0};
                                                             handleArrayFieldChange<UnitUpgradePath>('upgradesTo', index, 'cost', newCost);
-                                                        }} placeholder={res} className="sci-fi-input" />
+                                                        }} placeholder={res.name} className="sci-fi-input" />
                                                     ))}
                                                  </div>
                                             </div>
@@ -556,6 +555,74 @@ const UnitEditor: React.FC<{
             <div className="flex justify-end gap-2 pt-4">
                 <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
                 <Button onClick={() => onSave(editedUnit)} className="bg-brand-green hover:bg-brand-green/80" disabled={!editedUnit.requiredBuilding}><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
+            </div>
+        </div>
+    );
+};
+
+const ResourceEditor: React.FC<{
+    resource: ResourceConfig;
+    onSave: (resource: ResourceConfig) => void;
+    onCancel: () => void;
+    allBuildings: BuildingConfig[];
+}> = ({ resource, onSave, onCancel, allBuildings }) => {
+    const [editedResource, setEditedResource] = useState<ResourceConfig>(resource);
+    const rarityOptions: ResourceRarity[] = ['Abundant', 'Common', 'Uncommon', 'Rare', 'Strategic'];
+
+    const handleInputChange = (field: keyof ResourceConfig, value: any) => {
+        setEditedResource(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleNumberChange = (field: keyof ResourceConfig, value: string) => {
+        setEditedResource(prev => ({ ...prev, [field]: value === '' ? 0 : parseInt(value, 10) || 0 }));
+    };
+
+    return (
+        <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
+            <h3 className="text-xl font-bold text-brand-gold font-serif">Editing: {resource.name}</h3>
+
+            <Card className="bg-stone-dark/20 border-stone-light/20">
+                <CardHeader><CardTitle className="text-base font-serif">Core Attributes</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div><Label>Name</Label><Input type="text" value={editedResource.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Resource Name" className="sci-fi-input" /></div>
+                        <div><Label>ID</Label><Input type="text" value={editedResource.id} disabled placeholder="e.g., crystal" className="sci-fi-input disabled:opacity-70" /></div>
+                        <div><Label>Icon</Label><Select value={editedResource.iconId} onValueChange={(val) => handleInputChange('iconId', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(resourceIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent></Select></div>
+                    </div>
+                    <div><Label>Description</Label><Textarea value={editedResource.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Description" className="sci-fi-input" /></div>
+                </CardContent>
+            </Card>
+
+            <Card className="bg-stone-dark/20 border-stone-light/20">
+                <CardHeader><CardTitle className="text-base font-serif">Economy & Spawning</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div><Label>Rarity</Label><Select value={editedResource.rarity} onValueChange={(val) => handleInputChange('rarity', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{rarityOptions.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
+                    <div><Label>Initial Amount</Label><Input type="number" value={editedResource.initialAmount} onChange={(e) => handleNumberChange('initialAmount', e.target.value)} className="sci-fi-input" /></div>
+                    <div><Label>Base Gather Rate/s</Label><Input type="number" value={editedResource.baseGatherRate} onChange={(e) => handleNumberChange('baseGatherRate', e.target.value)} className="sci-fi-input" /></div>
+                    <div className="flex items-center gap-2 pt-4"><Switch id="edit-spawnInSafeZone" checked={!!editedResource.spawnInSafeZone} onCheckedChange={(c) => handleInputChange('spawnInSafeZone', c)} /><Label htmlFor="edit-spawnInSafeZone">Spawns in Safe Zone</Label></div>
+                    <div className="flex items-center gap-2 pt-4"><Switch id="edit-isTradable" checked={!!editedResource.isTradable} onCheckedChange={(c) => handleInputChange('isTradable', c)} /><Label htmlFor="edit-isTradable">Is Tradable</Label></div>
+                </CardContent>
+            </Card>
+
+            <Card className="bg-stone-dark/20 border-stone-light/20">
+                <CardHeader><CardTitle className="text-base font-serif">Advanced Mechanics</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="flex items-center gap-2 pt-4"><Switch id="edit-decays" checked={!!editedResource.decaysOverTime} onCheckedChange={(c) => handleInputChange('decaysOverTime', c)} /><Label htmlFor="edit-decays">Decays Over Time</Label></div>
+                    {editedResource.decaysOverTime && <div><Label>Decay Rate (%/min)</Label><Input type="number" value={editedResource.decayRate || ''} onChange={(e) => handleNumberChange('decayRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>}
+                     <div>
+                        <Label>Storage Building</Label>
+                        <Select value={editedResource.storageBuildingId || 'none'} onValueChange={(val) => handleInputChange('storageBuildingId', val === 'none' ? undefined : val)}>
+                            <SelectTrigger className="sci-fi-input"><SelectValue placeholder="None" /></SelectTrigger>
+                            <SelectContent><SelectItem value="none">None</SelectItem>{allBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <p className="text-xs text-parchment-dark mt-1">If set, this building type increases max capacity for this resource.</p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-2 pt-4">
+                <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
+                <Button onClick={() => onSave(editedResource)} className="bg-brand-green hover:bg-brand-green/80"><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
             </div>
         </div>
     );
@@ -578,6 +645,11 @@ const AdminPage: React.FC = () => {
     const [units, setUnits] = useState<UnitConfig[]>([]);
     const [isUnitsLoading, setIsUnitsLoading] = useState(true);
     const [editingUnit, setEditingUnit] = useState<UnitConfig | null>(null);
+    
+    // Resources State
+    const [resources, setResources] = useState<ResourceConfig[]>([]);
+    const [isResourcesLoading, setIsResourcesLoading] = useState(true);
+    const [editingResource, setEditingResource] = useState<ResourceConfig | null>(null);
 
 
     // --- Data Fetching and Seeding ---
@@ -589,19 +661,8 @@ const AdminPage: React.FC = () => {
 
         for (const [index, pItem] of INITIAL_AGES.entries()) {
             const existingItem = itemMap.get(pItem.name);
-            const newItem: AgeConfig = {
-                ...(existingItem || {}),
-                ...pItem,
-                id: pItem.name,
-                isPredefined: true,
-                isActive: existingItem?.isActive ?? true,
-                order: existingItem?.order ?? index,
-            };
-            
-            if (!existingItem) {
-                await saveAgeConfig(newItem);
-                needsUpdate = true;
-            }
+            const newItem: AgeConfig = { ...(existingItem || {}), ...pItem, id: pItem.name, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, };
+            if (!existingItem) { await saveAgeConfig(newItem); needsUpdate = true; }
         }
 
         if (needsUpdate) allItems = await getAllAgeConfigs();
@@ -620,25 +681,8 @@ const AdminPage: React.FC = () => {
 
         for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
             const existingItem = itemMap.get(pItem.id);
-            const newItem: BuildingConfig = {
-                ...pItem,
-                ...(existingItem || {}),
-                id: pItem.id,
-                isPredefined: true,
-                unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge),
-                isActive: existingItem?.isActive ?? true,
-                order: existingItem?.order ?? index,
-                treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`,
-                populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity,
-                generatesResource: existingItem?.generatesResource ?? pItem.generatesResource,
-                generationRate: existingItem?.generationRate ?? pItem.generationRate,
-                maintenanceCost: existingItem?.maintenanceCost ?? pItem.maintenanceCost,
-            };
-
-            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
-                await saveBuildingConfig(newItem);
-                needsUpdate = true;
-            }
+            const newItem: BuildingConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge), isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`, populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity, generatesResource: existingItem?.generatesResource ?? pItem.generatesResource, generationRate: existingItem?.generationRate ?? pItem.generationRate, maintenanceCost: existingItem?.maintenanceCost ?? pItem.maintenanceCost, };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) { await saveBuildingConfig(newItem); needsUpdate = true; }
         }
 
         if (needsUpdate) allItems = await getAllBuildingConfigs();
@@ -657,22 +701,8 @@ const AdminPage: React.FC = () => {
 
         for (const [index, pItem] of initialUnitsWithIds.entries()) {
             const existingItem = itemMap.get(pItem.id);
-            const newItem: UnitConfig = {
-                 ...(pItem as any), // Base predefined values
-                ...(existingItem || {}), // Overwrite with saved values
-                id: pItem.id,
-                isPredefined: true,
-                isActive: existingItem?.isActive ?? true,
-                order: existingItem?.order ?? index,
-                treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`,
-                populationCost: existingItem?.populationCost ?? pItem.populationCost,
-                attack: existingItem?.attack ?? pItem.attack,
-            };
-
-            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
-                await saveUnitConfig(newItem);
-                needsUpdate = true;
-            }
+            const newItem: UnitConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`, populationCost: existingItem?.populationCost ?? pItem.populationCost, attack: existingItem?.attack ?? pItem.attack, };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) { await saveUnitConfig(newItem); needsUpdate = true; }
         }
 
         if (needsUpdate) allItems = await getAllUnitConfigs();
@@ -680,161 +710,98 @@ const AdminPage: React.FC = () => {
         setIsUnitsLoading(false);
         return allItems;
     }, []);
+    
+    const fetchResources = useCallback(async () => {
+        setIsResourcesLoading(true);
+        let allItems = await getAllResourceConfigs();
+        const itemMap = new Map(allItems.map(i => [i.id, i]));
+        let needsUpdate = false;
 
+        for (const [index, pItem] of INITIAL_RESOURCES.entries()) {
+            const existingItem = itemMap.get(pItem.id);
+            const newItem: ResourceConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) { await saveResourceConfig(newItem); needsUpdate = true; }
+        }
+
+        if (needsUpdate) allItems = await getAllResourceConfigs();
+        setResources(allItems);
+        setIsResourcesLoading(false);
+        return allItems;
+    }, []);
 
     useEffect(() => {
         const loadAll = async () => {
+            await fetchResources();
             const allAges = await fetchAges();
             await fetchBuildings(allAges);
             await fetchUnits();
         };
         loadAll();
-    }, [fetchAges, fetchBuildings, fetchUnits]);
+    }, [fetchAges, fetchBuildings, fetchUnits, fetchResources]);
 
     // --- Ages Handlers ---
     const handleAddAge = async () => {
         if (!newAgeName.trim() || !newAgeDescription.trim()) return alert('Age name and description cannot be empty.');
-        const newAge: AgeConfig = {
-            id: `custom-${Date.now()}`,
-            name: newAgeName,
-            description: newAgeDescription,
-            isActive: true,
-            isPredefined: false,
-            order: ages.length > 0 ? Math.max(...ages.map(a => a.order)) + 1 : 0,
-        };
+        const newAge: AgeConfig = { id: `custom-${Date.now()}`, name: newAgeName, description: newAgeDescription, isActive: true, isPredefined: false, order: ages.length > 0 ? Math.max(...ages.map(a => a.order)) + 1 : 0, };
         await saveAgeConfig(newAge);
-        setNewAgeName(''); setNewAgeDescription('');
-        await fetchAges();
+        setNewAgeName(''); setNewAgeDescription(''); await fetchAges();
     };
     const handleDeleteAge = async (ageToDelete: AgeConfig) => {
-        const isAgeInUse = buildings.some(b => b.unlockedInAge === ageToDelete.name);
-        if (isAgeInUse) {
-            alert(`Cannot delete "${ageToDelete.name}". One or more buildings are assigned to this age. Please reassign them before deleting.`);
-            return;
-        }
-        if (window.confirm(`Are you sure you want to delete the custom age "${ageToDelete.name}"?`)) {
-            await deleteAgeConfig(ageToDelete.id);
-            await fetchAges();
-        }
+        if (buildings.some(b => b.unlockedInAge === ageToDelete.name)) { alert(`Cannot delete "${ageToDelete.name}". One or more buildings are assigned to this age.`); return; }
+        if (window.confirm(`Are you sure you want to delete the custom age "${ageToDelete.name}"?`)) { await deleteAgeConfig(ageToDelete.id); await fetchAges(); }
     };
-    const handleToggleAgeActive = async (age: AgeConfig) => {
-        await saveAgeConfig({ ...age, isActive: !age.isActive }); await fetchAges();
-    };
+    const handleToggleAgeActive = async (age: AgeConfig) => { await saveAgeConfig({ ...age, isActive: !age.isActive }); await fetchAges(); };
     const handleMoveAge = async (index: number, direction: 'up' | 'down') => {
         const newIndex = direction === 'up' ? index - 1 : index + 1;
         if (newIndex < 0 || newIndex >= ages.length) return;
-        
         const reorderedAges = [...ages];
         const [movedItem] = reorderedAges.splice(index, 1);
         reorderedAges.splice(newIndex, 0, movedItem);
-
         const updatedAges = reorderedAges.map((age, i) => ({ ...age, order: i }));
-        for (const age of updatedAges) {
-            await saveAgeConfig(age);
-        }
+        for (const age of updatedAges) { await saveAgeConfig(age); }
         await fetchAges();
     };
 
     // --- Buildings Handlers ---
      const handleShowAddBuilding = () => {
-        const newBuilding: BuildingConfig = {
-            id: `custom-bld-${Date.now()}`,
-            treeId: `tree-${Date.now()}`,
-            name: 'New Building',
-            description: 'A new custom building.',
-            cost: { wood: 50 },
-            isUnique: false,
-            buildLimit: 0,
-            buildTime: 30,
-            hp: 1000,
-            unlockedInAge: ages.find(a => a.isActive)?.name || 'Nomadic Age',
-            iconId: 'default',
-            isActive: true,
-            isPredefined: false,
-            order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0,
-            canTrainUnits: false,
-        };
+        const newBuilding: BuildingConfig = { id: `custom-bld-${Date.now()}`, treeId: `tree-${Date.now()}`, name: 'New Building', description: 'A new custom building.', cost: {}, isUnique: false, buildLimit: 0, buildTime: 30, hp: 1000, unlockedInAge: ages.find(a => a.isActive)?.name || 'Nomadic Age', iconId: 'default', isActive: true, isPredefined: false, order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0, canTrainUnits: false, };
         setEditingBuilding(newBuilding);
     };
     const handleDeleteBuilding = async (buildingToDelete: BuildingConfig) => {
-        const isUpgradeTarget = buildings.some(b => b.upgradesTo?.some(u => u.id === buildingToDelete.id));
-        if (isUpgradeTarget) {
-            alert(`Cannot delete "${buildingToDelete.name}". It is targeted by another building's upgrade path.`);
-            return;
-        }
-        const isRequiredForUnit = units.some(u => u.requiredBuilding === buildingToDelete.id || u.requiredBuildingIds?.includes(buildingToDelete.id));
-        if (isRequiredForUnit) {
-            alert(`Cannot delete "${buildingToDelete.name}". One or more units require this building for training.`);
-            return;
-        }
-        if (window.confirm(`Are you sure you want to delete the custom building "${buildingToDelete.name}"?`)) {
-            await deleteBuildingConfig(buildingToDelete.id);
-            await fetchBuildings(ages);
-        }
+        if (buildings.some(b => b.upgradesTo?.some(u => u.id === buildingToDelete.id))) { alert(`Cannot delete "${buildingToDelete.name}". It is an upgrade target.`); return; }
+        if (units.some(u => u.requiredBuilding === buildingToDelete.id || u.requiredBuildingIds?.includes(buildingToDelete.id))) { alert(`Cannot delete "${buildingToDelete.name}". A unit requires it.`); return; }
+        if (window.confirm(`Are you sure you want to delete "${buildingToDelete.name}"?`)) { await deleteBuildingConfig(buildingToDelete.id); await fetchBuildings(ages); }
     };
-    const handleToggleBuildingActive = async (building: BuildingConfig) => {
-        await saveBuildingConfig({ ...building, isActive: !building.isActive }); await fetchBuildings(ages);
-    };
-    const handleSaveBuilding = async (buildingToSave: BuildingConfig) => {
-        await saveBuildingConfig(buildingToSave);
-        setEditingBuilding(null);
-        await fetchBuildings(ages);
-    };
+    const handleToggleBuildingActive = async (building: BuildingConfig) => { await saveBuildingConfig({ ...building, isActive: !building.isActive }); await fetchBuildings(ages); };
+    const handleSaveBuilding = async (buildingToSave: BuildingConfig) => { await saveBuildingConfig(buildingToSave); setEditingBuilding(null); await fetchBuildings(ages); };
 
     // --- Units Handlers ---
      const handleShowAddUnit = () => {
         const trainingBuildings = buildings.filter(b => b.canTrainUnits && b.isActive);
-        if (trainingBuildings.length === 0) {
-            alert("Please create and activate a building with 'Can Train Units' enabled before adding a unit.");
-            return;
-        }
-        const newUnit: UnitConfig = {
-            id: `custom-unit-${Date.now()}`,
-            treeId: `utree-${Date.now()}`,
-            name: 'New Unit',
-            description: 'A new custom unit.',
-            cost: { food: 50, gold: 10 },
-            trainTime: 20,
-            hp: 50,
-            attack: 5,
-            iconId: 'default',
-            isActive: true,
-            isPredefined: false,
-            order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0,
-            requiredBuilding: trainingBuildings[0].id,
-            populationCost: 1,
-            attackRate: 1,
-            movementSpeed: 1,
-            unitType: 'infantry',
-            upgradesTo: [],
-            armorValues: [],
-            attackBonuses: [],
-            damageTypes: [],
-            terrainModifiers: [],
-            requiredBuildingIds: [],
-            requiredResearchIds: []
-        };
+        if (trainingBuildings.length === 0) { alert("Please create/activate a building with 'Can Train Units' enabled."); return; }
+        const newUnit: UnitConfig = { id: `custom-unit-${Date.now()}`, treeId: `utree-${Date.now()}`, name: 'New Unit', description: 'A new custom unit.', cost: {}, trainTime: 20, hp: 50, attack: 5, iconId: 'default', isActive: true, isPredefined: false, order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0, requiredBuilding: trainingBuildings[0].id, populationCost: 1, attackRate: 1, movementSpeed: 1, unitType: 'infantry', upgradesTo: [], armorValues: [], attackBonuses: [], damageTypes: [], terrainModifiers: [], requiredBuildingIds: [], requiredResearchIds: [] };
         setEditingUnit(newUnit);
     };
-     const handleSaveUnit = async (unitToSave: UnitConfig) => {
-        await saveUnitConfig(unitToSave);
-        setEditingUnit(null);
-        await fetchUnits();
-    };
+     const handleSaveUnit = async (unitToSave: UnitConfig) => { await saveUnitConfig(unitToSave); setEditingUnit(null); await fetchUnits(); };
     const handleDeleteUnit = async (id: string) => {
-        const isUpgradeTarget = units.some(u => u.upgradesTo?.some(path => path.targetUnitId === id));
-         if (isUpgradeTarget) {
-            alert(`Cannot delete this unit. It is targeted by another unit's upgrade path.`);
-            return;
-        }
-        if (window.confirm('Are you sure you want to delete this custom unit?')) {
-            await deleteUnitConfig(id); await fetchUnits();
-        }
+        if (units.some(u => u.upgradesTo?.some(path => path.targetUnitId === id))) { alert(`Cannot delete. This unit is an upgrade target.`); return; }
+        if (window.confirm('Are you sure you want to delete this custom unit?')) { await deleteUnitConfig(id); await fetchUnits(); }
     };
-     const handleToggleUnitActive = async (unit: UnitConfig) => {
-        await saveUnitConfig({ ...unit, isActive: !unit.isActive }); await fetchUnits();
+     const handleToggleUnitActive = async (unit: UnitConfig) => { await saveUnitConfig({ ...unit, isActive: !unit.isActive }); await fetchUnits(); };
+     
+    // --- Resources Handlers ---
+    const handleShowAddResource = () => {
+        const newId = `custom_res_${Date.now()}`;
+        const newResource: ResourceConfig = { id: newId, name: 'New Resource', description: '', iconId: 'default', isActive: true, isPredefined: false, order: resources.length + 1, rarity: 'Common', initialAmount: 0, baseGatherRate: 5, spawnInSafeZone: false, isTradable: false, decaysOverTime: false };
+        setEditingResource(newResource);
     };
-
+    const handleSaveResource = async (resourceToSave: ResourceConfig) => { await saveResourceConfig(resourceToSave); setEditingResource(null); await fetchResources(); };
+    const handleToggleResourceActive = async (resource: ResourceConfig) => { await saveResourceConfig({ ...resource, isActive: !resource.isActive }); await fetchResources(); };
+    const handleDeleteResource = async (resourceToDelete: ResourceConfig) => {
+        const isUsedInCost = [...buildings, ...units].some(item => item.cost[resourceToDelete.id] > 0 || item.maintenanceCost?.[resourceToDelete.id] > 0);
+        if (isUsedInCost) { alert(`Cannot delete "${resourceToDelete.name}". It is used in a building or unit cost.`); return; }
+        if (window.confirm(`Are you sure you want to delete "${resourceToDelete.name}"?`)) { await deleteResourceConfig(resourceToDelete.id); await fetchResources(); }
+    };
 
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light p-4 sm:p-8">
@@ -845,20 +812,18 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <Tabs defaultValue="ages" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 bg-stone-dark/80 border border-stone-light/20">
+                    <TabsList className="grid w-full grid-cols-4 bg-stone-dark/80 border border-stone-light/20">
                         <TabsTrigger value="ages">Ages</TabsTrigger>
                         <TabsTrigger value="buildings">Buildings</TabsTrigger>
                         <TabsTrigger value="units">Units</TabsTrigger>
+                        <TabsTrigger value="resources">Resources</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="ages" className="mt-6">
                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             <div className="lg:col-span-2">
                                 <Card className="bg-stone-dark/30 border-stone-light/30">
-                                    <CardHeader>
-                                        <CardTitle className="text-brand-gold">Manage Ages</CardTitle>
-                                        <CardDescription className="text-parchment-dark">Enable, disable, and reorder the Ages of your civilization.</CardDescription>
-                                    </CardHeader>
+                                    <CardHeader><CardTitle className="text-brand-gold">Manage Ages</CardTitle><CardDescription className="text-parchment-dark">Enable, disable, and reorder the Ages of your civilization.</CardDescription></CardHeader>
                                     <CardContent>
                                         {isAgesLoading ? <p>Loading ages...</p> : (
                                             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
@@ -866,14 +831,8 @@ const AdminPage: React.FC = () => {
                                                     <div key={age.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
                                                         <div className="flex items-center gap-4 flex-grow">
                                                             <span className="font-serif text-2xl text-stone-light/80 w-6 text-center">{index + 1}.</span>
-                                                            <div className="flex flex-col">
-                                                                <button onClick={() => handleMoveAge(index, 'up')} disabled={index === 0} className="disabled:opacity-20 hover:text-brand-gold"><ArrowUp className="w-4 h-4" /></button>
-                                                                <button onClick={() => handleMoveAge(index, 'down')} disabled={index === ages.length - 1} className="disabled:opacity-20 hover:text-brand-gold"><ArrowDown className="w-4 h-4" /></button>
-                                                            </div>
-                                                            <div className="flex-grow">
-                                                                <h3 className="font-bold flex items-center gap-2">{age.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{age.name}</h3>
-                                                                <p className="text-sm text-parchment-dark">{age.description}</p>
-                                                            </div>
+                                                            <div className="flex flex-col"><button onClick={() => handleMoveAge(index, 'up')} disabled={index === 0} className="disabled:opacity-20 hover:text-brand-gold"><ArrowUp className="w-4 h-4" /></button><button onClick={() => handleMoveAge(index, 'down')} disabled={index === ages.length - 1} className="disabled:opacity-20 hover:text-brand-gold"><ArrowDown className="w-4 h-4" /></button></div>
+                                                            <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{age.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{age.name}</h3><p className="text-sm text-parchment-dark">{age.description}</p></div>
                                                         </div>
                                                         <div className="flex flex-col items-center gap-2">
                                                             <div className="flex items-center space-x-2"><Label htmlFor={`active-age-${age.id}`} className="text-xs">Active</Label><Switch id={`active-age-${age.id}`} checked={age.isActive} onCheckedChange={() => handleToggleAgeActive(age)} /></div>
@@ -888,9 +847,7 @@ const AdminPage: React.FC = () => {
                             </div>
                              <div>
                                 <Card className="bg-stone-dark/30 border-stone-light/30">
-                                    <CardHeader>
-                                        <CardTitle className="text-brand-gold">Add Custom Age</CardTitle>
-                                    </CardHeader>
+                                    <CardHeader><CardTitle className="text-brand-gold">Add Custom Age</CardTitle></CardHeader>
                                     <CardContent className="space-y-4">
                                         <input type="text" value={newAgeName} onChange={(e) => setNewAgeName(e.target.value)} placeholder="New Age Name" className="sci-fi-input w-full !text-lg" />
                                         <textarea value={newAgeDescription} onChange={(e) => setNewAgeDescription(e.target.value)} placeholder="Description..." className="sci-fi-input w-full min-h-[80px] !text-base" rows={3} />
@@ -904,33 +861,18 @@ const AdminPage: React.FC = () => {
                     <TabsContent value="buildings" className="mt-6">
                         <Card className="bg-stone-dark/30 border-stone-light/30">
                             <CardHeader className="flex flex-row items-center justify-between">
-                                <div>
-                                    <CardTitle className="text-brand-gold">Manage Buildings</CardTitle>
-                                    <CardDescription className="text-parchment-dark">Create, edit, activate, or delete buildings.</CardDescription>
-                                </div>
+                                <div><CardTitle className="text-brand-gold">Manage Buildings</CardTitle><CardDescription className="text-parchment-dark">Create, edit, activate, or delete buildings.</CardDescription></div>
                                 <Button onClick={handleShowAddBuilding} disabled={!!editingBuilding}><PlusCircle className="mr-2"/> Add Building</Button>
                             </CardHeader>
                             <CardContent>
                                 {isBuildingsLoading ? <p>Loading buildings...</p> : (
                                     <>
-                                        {editingBuilding && (
-                                            <BuildingEditor 
-                                                building={editingBuilding} 
-                                                onSave={handleSaveBuilding} 
-                                                onCancel={() => setEditingBuilding(null)} 
-                                                allAges={ages.filter(a => a.isActive)} 
-                                                allBuildings={buildings}
-                                            />
-                                        )}
+                                        {editingBuilding && <BuildingEditor building={editingBuilding} onSave={handleSaveBuilding} onCancel={() => setEditingBuilding(null)} allAges={ages.filter(a => a.isActive)} allBuildings={buildings} allResources={resources} />}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
                                             {buildings.map((b) => (
                                                 <div key={b.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
-                                                    <div className="flex items-center gap-3 flex-grow">
-                                                        <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(buildingIconMap[b.iconId] || buildingIconMap.default)}</div>
-                                                        <div className="flex-grow">
-                                                            <h3 className="font-bold flex items-center gap-2">{b.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{b.name}</h3>
-                                                            <p className="text-xs text-parchment-dark">Unlocks in: {b.unlockedInAge}</p>
-                                                        </div>
+                                                    <div className="flex items-center gap-3 flex-grow"><div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(buildingIconMap[b.iconId] || buildingIconMap.default)}</div>
+                                                        <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{b.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{b.name}</h3><p className="text-xs text-parchment-dark">Unlocks in: {b.unlockedInAge}</p></div>
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex items-center space-x-2"><Label htmlFor={`active-bld-${b.id}`} className="text-xs">Active</Label><Switch id={`active-bld-${b.id}`} checked={b.isActive} onCheckedChange={() => handleToggleBuildingActive(b)} /></div>
@@ -949,33 +891,18 @@ const AdminPage: React.FC = () => {
                     <TabsContent value="units" className="mt-6">
                          <Card className="bg-stone-dark/30 border-stone-light/30">
                            <CardHeader className="flex flex-row items-center justify-between">
-                                <div>
-                                    <CardTitle className="text-brand-gold">Manage Units</CardTitle>
-                                    <CardDescription className="text-parchment-dark">Create, edit, and manage all military units in the game.</CardDescription>
-                                </div>
+                                <div><CardTitle className="text-brand-gold">Manage Units</CardTitle><CardDescription className="text-parchment-dark">Create, edit, and manage all military units in the game.</CardDescription></div>
                                 <Button onClick={handleShowAddUnit} disabled={!!editingUnit}><PlusCircle className="mr-2"/> Add Unit</Button>
                             </CardHeader>
                             <CardContent>
                                 {isUnitsLoading ? <p>Loading units...</p> : (
                                     <>
-                                        {editingUnit && (
-                                            <UnitEditor 
-                                                unit={editingUnit} 
-                                                onSave={handleSaveUnit} 
-                                                onCancel={() => setEditingUnit(null)}
-                                                allBuildings={buildings.filter(b => b.isActive)} 
-                                                allUnits={units}
-                                            />
-                                        )}
+                                        {editingUnit && <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} allBuildings={buildings.filter(b => b.isActive)} allUnits={units} allResources={resources}/>}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
                                             {units.map((u) => (
                                                 <div key={u.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
-                                                    <div className="flex items-center gap-3 flex-grow">
-                                                        <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(unitIconMap[u.iconId] || unitIconMap.default)}</div>
-                                                        <div className="flex-grow">
-                                                            <h3 className="font-bold flex items-center gap-2">{u.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{u.name}</h3>
-                                                            <p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack}</p>
-                                                        </div>
+                                                    <div className="flex items-center gap-3 flex-grow"><div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(unitIconMap[u.iconId] || unitIconMap.default)}</div>
+                                                        <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{u.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{u.name}</h3><p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack}</p></div>
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex items-center space-x-2"><Label htmlFor={`active-unit-${u.id}`} className="text-xs">Active</Label><Switch id={`active-unit-${u.id}`} checked={u.isActive} onCheckedChange={() => handleToggleUnitActive(u)} /></div>
@@ -990,6 +917,37 @@ const AdminPage: React.FC = () => {
                             </CardContent>
                         </Card>
                     </TabsContent>
+                    
+                    <TabsContent value="resources" className="mt-6">
+                        <Card className="bg-stone-dark/30 border-stone-light/30">
+                           <CardHeader className="flex flex-row items-center justify-between">
+                                <div><CardTitle className="text-brand-gold">Manage Resources</CardTitle><CardDescription className="text-parchment-dark">Define the core economic resources of your game.</CardDescription></div>
+                                <Button onClick={handleShowAddResource} disabled={!!editingResource}><PlusCircle className="mr-2"/> Add Resource</Button>
+                            </CardHeader>
+                            <CardContent>
+                                {isResourcesLoading ? <p>Loading resources...</p> : (
+                                    <>
+                                        {editingResource && <ResourceEditor resource={editingResource} onSave={handleSaveResource} onCancel={() => setEditingResource(null)} allBuildings={buildings} />}
+                                        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
+                                            {resources.map((r) => (
+                                                <div key={r.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-3 flex-grow"><div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(resourceIconMap[r.iconId] || resourceIconMap.default)}</div>
+                                                        <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{r.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{r.name}</h3><p className="text-xs text-parchment-dark">Rarity: {r.rarity}</p></div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center space-x-2"><Label htmlFor={`active-res-${r.id}`} className="text-xs">Active</Label><Switch id={`active-res-${r.id}`} checked={r.isActive} onCheckedChange={() => handleToggleResourceActive(r)} /></div>
+                                                        <Button variant="ghost" size="icon" onClick={() => setEditingResource(r)} className="text-parchment-dark/70 hover:text-brand-blue" disabled={!!editingResource}><Edit className="w-4 h-4"/></Button>
+                                                        {!r.isPredefined && <button onClick={() => handleDeleteResource(r)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
                 </Tabs>
             </div>
         </div>

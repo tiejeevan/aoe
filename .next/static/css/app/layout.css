@@ -2401,6 +2401,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
   opacity: 0.5;
 }
 
+.disabled\:opacity-70:disabled {
+  opacity: 0.7;
+}
+
 .group\/menu-item:focus-within .group-focus-within\/menu-item\:opacity-100 {
   opacity: 1;
 }

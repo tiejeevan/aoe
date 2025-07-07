@@ -2,8 +2,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { AgeConfig, ResourceConfig, ResearchConfig } from '@/types';
-import type { GenerateResourcesOutput, GenerateAgesOutput, GeneratedTechnologyOutput } from '@/src/ai/flows/generate-resources';
+import type { AgeConfig, ResourceConfig, ResearchConfig } from '../../../../types';
+import type { GenerateResourcesOutput, GenerateAgesOutput, GeneratedTechnologyOutput } from '../../ai/flows/generate-resources';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { WandSparkles, LoaderCircle, Package, Calendar, Beaker, Sprout } from 'lucide-react';
-import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '@/app/actions';
-import { saveResourceConfig, saveAgeConfig, saveResearchConfig } from '@/services/dbService';
+import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '../../actions';
+import { saveResourceConfig, saveAgeConfig, saveResearchConfig } from '../../../../services/dbService';
 
 interface DataGeneratorProps {
     resources: ResourceConfig[];

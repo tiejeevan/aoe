@@ -2,28 +2,28 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath, ResourceConfig, ResearchConfig } from '@/types';
-import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig, getAllResourceConfigs, saveResourceConfig, getAllResearchConfigs, saveResearchConfig } from '@/services/dbService';
-import { getRandomNames } from '@/services/nameService';
-import { GAME_ITEMS } from '@/data/itemContent';
-import { INITIAL_AGES } from '@/data/ageInfo';
-import { INITIAL_BUILDINGS } from '@/data/buildingInfo';
-import { INITIAL_UNITS } from '@/data/unitInfo';
-import { INITIAL_RESOURCES } from '@/data/resourceInfo';
-import { INITIAL_RESEARCH } from '@/data/researchInfo';
-import GameUI from '@/components/GameUI';
-import StartScreen from '@/components/StartScreen';
-import LoadingScreen from '@/components/LoadingScreen';
-import BuildPanel from '@/components/BuildPanel';
-import NotificationManager from '@/components/NotificationManager';
-import UnitManagementPanel from '@/components/UnitManagementPanel';
-import BuildingManagementPanel from '@/components/BuildingManagementPanel';
-import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
-import CivilizationPanel from '@/components/CivilizationPanel';
-import AllBuildingsPanel from '@/components/AllBuildingsPanel';
-import InventoryPanel from '@/components/InventoryPanel';
-import ResearchPanel from '@/components/ResearchPanel';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath, ResourceConfig, ResearchConfig } from '../../types';
+import { getPredefinedCivilization, getPredefinedGameEvent } from '../../services/geminiService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig, getAllResourceConfigs, saveResourceConfig, getAllResearchConfigs, saveResearchConfig } from '../../services/dbService';
+import { getRandomNames } from '../../services/nameService';
+import { GAME_ITEMS } from '../../data/itemContent';
+import { INITIAL_AGES } from '../../data/ageInfo';
+import { INITIAL_BUILDINGS } from '../../data/buildingInfo';
+import { INITIAL_UNITS } from '../../data/unitInfo';
+import { INITIAL_RESOURCES } from '../../data/resourceInfo';
+import { INITIAL_RESEARCH } from '../../data/researchInfo';
+import GameUI from '../../components/GameUI';
+import StartScreen from '../../components/StartScreen';
+import LoadingScreen from '../../components/LoadingScreen';
+import BuildPanel from '../../components/BuildPanel';
+import NotificationManager from '../../components/NotificationManager';
+import UnitManagementPanel from '../../components/UnitManagementPanel';
+import BuildingManagementPanel from '../../components/BuildingManagementPanel';
+import ResourceAssignmentPanel from '../../components/ResourceAssignmentPanel';
+import CivilizationPanel from '../../components/CivilizationPanel';
+import AllBuildingsPanel from '../../components/AllBuildingsPanel';
+import InventoryPanel from '../../components/InventoryPanel';
+import ResearchPanel from '../../components/ResearchPanel';
 
 
 const initialBuildingsState: Buildings = {
@@ -1146,8 +1146,8 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={gatherInfoRef.current} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
-                            onOpenResearchPanel={(rect) => { closeAllPanels(); setResearchPanelState({ isOpen: true, anchorRect: rect }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
+                            onOpenResearchPanel={(rect) => { closeAllPanels(); setResearchPanelState({ isOpen: true, anchorRect: null }); }}
                             hasResearchBuildings={hasResearchBuildings}
                             resourceList={masterResourceList}
                         />

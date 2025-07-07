@@ -10,7 +10,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { resourceIconMap } from '@/components/icons/iconRegistry';
+import { resourceIconMap } from '../../../components/icons/iconRegistry';
 
 const GenerateResourcesInputSchema = z.object({
   count: z.number().min(1).max(10).describe('The number of resources to generate.'),

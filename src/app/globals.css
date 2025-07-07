@@ -7,7 +7,6 @@ body {
 }
 
 .sci-fi-panel-popup {
-    position: relative;
     background: rgb(10, 10, 15);
     border: 1px solid rgba(69, 133, 136, 0.5);
     box-shadow: 0 0 25px rgba(69, 133, 136, 0.4), inset 0 0 20px rgba(69, 133, 136, 0.2);

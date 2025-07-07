@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
@@ -22,6 +23,8 @@ import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
 import CivilizationPanel from '@/components/CivilizationPanel';
 import AllBuildingsPanel from '@/components/AllBuildingsPanel';
 import InventoryPanel from '@/components/InventoryPanel';
+import ResearchPanel from '@/components/ResearchPanel';
+
 
 const initialBuildingsState: Buildings = {
     houses: [], barracks: [], archeryRange: [], stable: [], siegeWorkshop: [], blacksmith: [], watchTower: [], townCenter: []
@@ -73,22 +76,19 @@ const GamePage: React.FC = () => {
     const [assignmentPanelState, setAssignmentPanelState] = useState<{ isOpen: boolean; targetId: string | null; targetType: 'resource' | 'construction' | null; anchorRect: DOMRect | null; }>({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     const [civPanelState, setCivPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
     const [inventoryPanelState, setInventoryPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
+    const [researchPanelState, setResearchPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
+
 
     const deltaTimeoutRef = useRef<{ [key in keyof Resources]?: number }>({});
     const eventTimerRef = useRef<NodeJS.Timeout | null>(null);
     const lastTickRef = useRef<number>(Date.now());
     const animationFrameRef = useRef<number>();
-    const gatherInfoRef = useRef<Record<string, { rate: number }>>({
-        food: { rate: 10 },
-        wood: { rate: 8 },
-        gold: { rate: 5 },
-        stone: { rate: 6 },
-    });
+    const gatherInfoRef = useRef<Record<string, { rate: number }>>({});
     
     // Derived state for active game configurations
-    const ageProgressionList = masterAgeList.filter(age => age.isActive);
-    const buildingList = masterBuildingList; // Keep all for lookups, filter on use
-    const unitList = masterUnitList; // Keep all for lookups, filter on use
+    const ageProgressionList = useMemo(() => masterAgeList.filter(age => age.isActive), [masterAgeList]);
+    const buildingList = useMemo(() => masterBuildingList, [masterBuildingList]); // Keep all for lookups, filter on use
+    const unitList = useMemo(() => masterUnitList, [masterUnitList]); // Keep all for lookups, filter on use
 
     const populationCapacity = useMemo(() => {
         let capacity = 0;
@@ -221,12 +221,14 @@ const GamePage: React.FC = () => {
                 const id = pItem.name.toLowerCase().replace(/\s/g, '_');
                 const existingItem = researchMap.get(id);
                 const newItem: ResearchConfig = {
-                     ...(pItem as any), // Base predefined values
-                    ...(existingItem || {}), // Overwrite with saved values
-                    id, isPredefined: true,
+                    ...(existingItem || {} as ResearchConfig), // Start with saved values
+                    ...(pItem as any), // Overwrite with predefined base values
+                    id, // Ensure ID is correct
+                    isPredefined: true,
                     isActive: existingItem?.isActive ?? true,
                     order: existingItem?.order ?? index,
                     ageRequirement: existingItem?.ageRequirement || defaultAge,
+                    requiredBuildingId: existingItem?.requiredBuildingId || 'blacksmith',
                 };
                 if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
                     await saveResearchConfig(newItem);
@@ -1012,6 +1014,7 @@ const GamePage: React.FC = () => {
             addToLog(`Began research for ${researchInfo.name}.`, researchInfo.iconId);
         }
         setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
+        setResearchPanelState({ isOpen: false, anchorRect: null });
     };
 
     
@@ -1095,6 +1098,7 @@ const GamePage: React.FC = () => {
         setCivPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
         setAllBuildingsPanel(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
         setInventoryPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
+        setResearchPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
     }, []);
 
     const handleOpenBuildingPanel = useCallback((type: BuildingType | string, instanceId: string, rect: DOMRect) => {
@@ -1137,6 +1141,7 @@ const GamePage: React.FC = () => {
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={gatherInfoRef.current} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
                             onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
+                            onOpenResearchPanel={(rect) => { closeAllPanels(); setResearchPanelState({ isOpen: true, anchorRect: rect }); }}
                             resourceList={masterResourceList}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
@@ -1146,6 +1151,17 @@ const GamePage: React.FC = () => {
                         <CivilizationPanel isOpen={civPanelState.isOpen} onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })} civilization={civilization} anchorRect={civPanelState.anchorRect} />
                         <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })} buildingList={buildingList} buildingCounts={buildingCounts} activeTasks={activeTasks} onOpenBuildingPanel={handleOpenBuildingPanel} anchorRect={allBuildingsPanel.anchorRect} />
                         <InventoryPanel isOpen={inventoryPanelState.isOpen} onClose={() => setInventoryPanelState({ isOpen: false, anchorRect: null })} inventory={inventory} onUseItem={handleUseItem} activeTasks={activeTasks} activeBuffs={activeBuffs} anchorRect={inventoryPanelState.anchorRect} />
+                        <ResearchPanel 
+                            isOpen={researchPanelState.isOpen} 
+                            onClose={() => setResearchPanelState({ isOpen: false, anchorRect: null })}
+                            masterResearchList={masterResearchList}
+                            completedResearch={completedResearch}
+                            activeTasks={activeTasks}
+                            resources={resources}
+                            currentAge={currentAge}
+                            ageProgressionList={ageProgressionList}
+                            onStartResearch={handleStartResearch}
+                        />
                     </>
                 );
             default: return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;

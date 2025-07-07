@@ -1,7 +1,7 @@
 
 import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitConfig, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, GameEvent, GameEventChoice, GameItem, ResourceConfig } from '../types';
-import { PopulationIcon, VillagerIcon, SwordIcon, AgeIcon, EventIcon, SystemIcon, WatchTowerIcon, ExitIcon } from './icons/ResourceIcons';
+import { PopulationIcon, VillagerIcon, SwordIcon, AgeIcon, EventIcon, SystemIcon, WatchTowerIcon, ExitIcon, BeakerIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText, Package as PackageIcon } from 'lucide-react';
 import { resourceIconMap, unitIconMap } from './icons/iconRegistry';
@@ -37,6 +37,7 @@ interface GameUIProps {
     onEventChoice: (choice: GameEventChoice) => void;
     inventory: GameItem[];
     onOpenInventoryPanel: (rect: DOMRect) => void;
+    onOpenResearchPanel: (rect: DOMRect) => void;
     resourceList: ResourceConfig[];
 }
 
@@ -77,7 +78,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel, resourceList
+        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel, onOpenResearchPanel, resourceList
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -226,6 +227,20 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                                 </button>
                                 <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                                     View Inventory
+                                </div>
+                            </div>
+                            
+                            {/* Research Button */}
+                            <div className="relative group">
+                                <button
+                                    onClick={(e) => onOpenResearchPanel(e.currentTarget.getBoundingClientRect())}
+                                    className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
+                                    aria-label={`Open Technology Tree`}
+                                >
+                                    <div className="w-7 h-7 text-brand-green"><BeakerIcon /></div>
+                                </button>
+                                <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                    Technology Tree
                                 </div>
                             </div>
                         </div>

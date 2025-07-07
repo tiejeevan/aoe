@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask, BuildingUpgradePath, ResearchConfig, AgeConfig } from '../types';
 import { AgeIcon, VillagerIcon, BeakerIcon } from './icons/ResourceIcons';
@@ -241,13 +242,13 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const canTrainVillagers = canAffordVillagers && hasPopForVillagers && !activeVillagerTask;
 
     const currentAgeIndex = ageProgressionList.findIndex(a => a.name === currentAge);
-    const availableResearch = masterResearchList.filter(r => {
+    const availableResearch = buildingInfo.canResearch ? masterResearchList.filter(r => {
         const ageReqIndex = ageProgressionList.findIndex(a => a.name === r.ageRequirement);
         return r.isActive && r.requiredBuildingId === buildingInfo.id &&
             !completedResearch.includes(r.id) &&
-            (r.requiredResearchIds || []).every(reqId => completedResearch.includes(reqId)) &&
+            (r.prerequisites || []).every(reqId => completedResearch.includes(reqId)) &&
             ageReqIndex !== -1 && ageReqIndex <= currentAgeIndex;
-    });
+    }) : [];
 
     const getTrainVillagerTooltip = () => { if (activeVillagerTask) return 'Training in progress...'; if (!hasPopForVillagers) return `Need ${villagerTrainCount - popSpace} more housing.`; if (!canAffordVillagers) return 'Insufficient Food.'; return `Train ${villagerTrainCount} Villager(s)`; };
     const getAdvanceAgeTooltip = () => { if (activeAgeTask) return 'Advancement in progress.'; if ((resources['food'] || 0) < 500 || (resources['gold'] || 0) < 200) return 'Insufficient resources to advance.'; return 'Advance to the next age (60s)'; };

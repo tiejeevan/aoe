@@ -360,17 +360,24 @@ export interface ResearchEffect {
 }
 
 export interface ResearchConfig {
-    id: string;
+    id: string; // Unique key for the technology node
     name: string;
     description: string;
     iconId: string;
     cost: BuildingCosts;
     researchTime: number; // in seconds
+    prerequisites: string[]; // Array of tech IDs required before this one
+    effects: ResearchEffect[]; // Structured list of in-game effects
+    
+    // Admin & Tree Management
+    treeId: string; // ID for the tree this tech belongs to (e.g., 'military', 'economy')
+    treeName: string; // Display name for the tree
+    colorTheme?: string; // Hex color for the tree's UI theme
+
     requiredBuildingId: string;
     ageRequirement: string;
-    requiredResearchIds?: string[];
-    effects: ResearchEffect[];
     isActive: boolean;
     isPredefined: boolean;
-    order: number;
+    order: number; // Display order within its tree
+    repeatable?: boolean;
 }

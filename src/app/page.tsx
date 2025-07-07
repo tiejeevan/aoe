@@ -1178,8 +1178,6 @@ const GamePage: React.FC = () => {
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (currentEvent) return;
-            
             const isAnyPanelOpen = unitManagementPanel.isOpen || 
                                    buildingManagementPanel.isOpen || 
                                    buildPanelState.isOpen || 
@@ -1214,7 +1212,6 @@ const GamePage: React.FC = () => {
         allBuildingsPanel.isOpen,
         inventoryPanelState.isOpen,
         closeAllPanels,
-        currentEvent,
     ]);
 
     const renderContent = () => {

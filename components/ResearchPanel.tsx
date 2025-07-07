@@ -2,14 +2,14 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import type { ResearchConfig, Resources, GameTask, AgeConfig } from '@/types';
-import { Button } from '@/src/components/ui/button';
-import { ScrollArea } from '@/src/components/ui/scroll-area';
-import { resourceIconMap, researchIconMap } from '@/components/icons/iconRegistry';
+import type { ResearchConfig, Resources, GameTask, AgeConfig } from '../types';
+import { Button } from '../src/components/ui/button';
+import { ScrollArea } from '../src/components/ui/scroll-area';
+import { resourceIconMap, researchIconMap } from './icons/iconRegistry';
 import { CheckCircle2, Lock, Clock, Info, X } from 'lucide-react';
-import ProgressBar from '@/components/ProgressBar';
-import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
+import ProgressBar from './ProgressBar';
+import { Card, CardHeader, CardTitle, CardContent } from '../src/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../src/components/ui/tabs';
 
 interface ResearchPanelProps {
     isOpen: boolean;

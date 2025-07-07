@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI agent that suggests complementary color palettes based on a shade of white.
@@ -7,7 +8,7 @@
  * - SuggestPaletteOutput - The return type for the suggestPalette function.
  */
 
-import {ai} from '@/src/ai/genkit';
+import { ai } from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SuggestPaletteInputSchema = z.object({

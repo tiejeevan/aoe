@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI agent that generates a sequence of thematic game ages.
@@ -7,7 +8,7 @@
  * - GenerateAgesOutput - The return type for the generateAges function.
  */
 
-import { ai } from '@/src/ai/genkit';
+import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 const GenerateAgesInputSchema = z.object({

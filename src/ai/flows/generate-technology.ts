@@ -8,7 +8,7 @@
  * - GenerateTechnologyOutput - The return type for the generateTechnology function.
  */
 
-import { ai } from '@/src/ai/genkit';
+import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { researchIconMap, resourceIconMap } from '../../../components/icons/iconRegistry';
 

@@ -4,8 +4,8 @@ import { FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from '
 import ProgressBar from './ProgressBar';
 import { unitIconMap } from './icons/iconRegistry';
 import { Trash2, Wrench, ChevronsUp, X } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Button } from './ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
+import { Button } from '@/src/components/ui/button';
 
 interface BuildingManagementPanelProps {
     isOpen: boolean;

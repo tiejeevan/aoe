@@ -96,15 +96,19 @@ const GamePage: React.FC = () => {
         const names = await getAllSaveNames();
         setAllSaves(names);
         
-        const allAgeConfigs = await getAllAgeConfigs();
-        setMasterAgeList(allAgeConfigs.length > 0 ? allAgeConfigs : FALLBACK_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i})));
+        let allAgeConfigs = await getAllAgeConfigs();
+        if (allAgeConfigs.length === 0) {
+            allAgeConfigs = FALLBACK_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
+        }
+        setMasterAgeList(allAgeConfigs);
 
         const allBuildingConfigs = await getAllBuildingConfigs();
         setMasterBuildingList(allBuildingConfigs);
 
         const allUnitConfigs = await getAllUnitConfigs();
         setMasterUnitList(allUnitConfigs);
-
+        
+        return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
     }, []);
     
     useEffect(() => {
@@ -331,18 +335,21 @@ const GamePage: React.FC = () => {
         if (allSaves.includes(saveName)) { addNotification(`A saga named "${saveName}" already exists.`); return; }
         setGameState(GameStatus.LOADING);
         setCurrentSaveName(saveName);
-        await fetchSavesAndConfigs();
+        
+        const { allAgeConfigs, allBuildingConfigs } = await fetchSavesAndConfigs();
+        const localAgeProgressionList = allAgeConfigs.filter(a => a.isActive);
+
         const civ = getPredefinedCivilization();
         setCivilization(civ);
         setResources({ food: 200, wood: 150, gold: 50, stone: 100 });
         const initialVillagers = getRandomNames('villager', 3).map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
         setUnits({ villagers: initialVillagers, military: [] });
         const tcPosition = { x: Math.floor(MAP_DIMENSIONS.width / 2), y: Math.floor(MAP_DIMENSIONS.height / 2) };
-        const tcInfo = masterBuildingList.find(b => b.id === 'townCenter')!;
+        const tcInfo = allBuildingConfigs.find(b => b.id === 'townCenter')!;
         const initialTC = { id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
-        setCurrentAge(ageProgressionList[0]?.name || FALLBACK_AGES[0].name);
+        setCurrentAge(localAgeProgressionList[0]?.name || FALLBACK_AGES[0].name);
         setGameLog([]); setCurrentEvent(null); setUnlimitedResources(false); setActiveTasks([]); setInventory([]); setActiveBuffs({ resourceBoost: [] });
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');

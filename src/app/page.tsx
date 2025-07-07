@@ -113,6 +113,12 @@ const GamePage: React.FC = () => {
         };
     }, [units, populationCapacity, masterUnitList]);
 
+    const hasResearchBuildings = useMemo(() => {
+        return masterBuildingList.some(buildingInfo => 
+            buildingInfo.canResearch && (buildings[buildingInfo.id]?.length || 0) > 0
+        );
+    }, [buildings, masterBuildingList]);
+
     const fetchResources = useCallback(async () => {
         let allItems = await getAllResourceConfigs();
         const itemMap = new Map(allItems.map(i => [i.id, i]));
@@ -1142,6 +1148,7 @@ const GamePage: React.FC = () => {
                             gatherInfo={gatherInfoRef.current} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
                             onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
                             onOpenResearchPanel={(rect) => { closeAllPanels(); setResearchPanelState({ isOpen: true, anchorRect: rect }); }}
+                            hasResearchBuildings={hasResearchBuildings}
                             resourceList={masterResourceList}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />

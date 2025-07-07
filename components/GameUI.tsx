@@ -38,6 +38,7 @@ interface GameUIProps {
     inventory: GameItem[];
     onOpenInventoryPanel: (rect: DOMRect) => void;
     onOpenResearchPanel: (rect: DOMRect) => void;
+    hasResearchBuildings: boolean;
     resourceList: ResourceConfig[];
 }
 
@@ -78,7 +79,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel, onOpenResearchPanel, resourceList
+        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel, onOpenResearchPanel, hasResearchBuildings, resourceList
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -231,18 +232,20 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                             </div>
                             
                             {/* Research Button */}
-                            <div className="relative group">
-                                <button
-                                    onClick={(e) => onOpenResearchPanel(e.currentTarget.getBoundingClientRect())}
-                                    className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
-                                    aria-label={`Open Technology Tree`}
-                                >
-                                    <div className="w-7 h-7 text-brand-green"><BeakerIcon /></div>
-                                </button>
-                                <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                    Technology Tree
+                            {hasResearchBuildings && (
+                                <div className="relative group">
+                                    <button
+                                        onClick={(e) => onOpenResearchPanel(e.currentTarget.getBoundingClientRect())}
+                                        className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
+                                        aria-label={`Open Technology Tree`}
+                                    >
+                                        <div className="w-7 h-7 text-brand-green"><BeakerIcon /></div>
+                                    </button>
+                                    <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                        Technology Tree
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
 

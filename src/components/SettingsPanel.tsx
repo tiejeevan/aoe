@@ -2,12 +2,12 @@
 
 import type { RefObject } from 'react';
 import { Download } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { PaletteSuggestion } from '@/components/PaletteSuggestion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
+import { PaletteSuggestion } from './PaletteSuggestion';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Separator } from './ui/separator';
+import { useToast } from '../hooks/use-toast';
+import { cn } from '../lib/utils';
 import { ScrollArea } from './ui/scroll-area';
 
 interface SettingsPanelProps {

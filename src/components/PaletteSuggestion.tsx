@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { Paintbrush, LoaderCircle, Clipboard, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { suggestPaletteAction } from '@/app/actions';
-import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from './ui/button';
+import { suggestPaletteAction } from '../app/actions';
+import { useToast } from '../hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 
 interface PaletteSuggestionProps {
   currentColor: string;

@@ -1,9 +1,10 @@
-import type { FullGameState, AgeConfig } from '../types';
+import type { FullGameState, AgeConfig, BuildingConfig } from '../types';
 
 const DB_NAME = 'GeminiEmpiresDB';
 const GAME_STATE_STORE_NAME = 'gameState';
 const AGES_CONFIG_STORE_NAME = 'ageConfigurations';
-const DB_VERSION = 3; // Incremented version
+const BUILDING_CONFIG_STORE_NAME = 'buildingConfigurations';
+const DB_VERSION = 4; // Incremented version
 
 const openDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -14,12 +15,14 @@ const openDB = (): Promise<IDBDatabase> => {
             if (!db.objectStoreNames.contains(GAME_STATE_STORE_NAME)) {
                 db.createObjectStore(GAME_STATE_STORE_NAME);
             }
-            // Handle old store name for migration if needed, for simplicity we create the new one
             if (db.objectStoreNames.contains('customAges')) {
                 db.deleteObjectStore('customAges');
             }
             if (!db.objectStoreNames.contains(AGES_CONFIG_STORE_NAME)) {
                 db.createObjectStore(AGES_CONFIG_STORE_NAME, { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains(BUILDING_CONFIG_STORE_NAME)) {
+                db.createObjectStore(BUILDING_CONFIG_STORE_NAME, { keyPath: 'id' });
             }
         };
 
@@ -165,5 +168,64 @@ export const deleteAgeConfig = async (id: string): Promise<void> => {
         });
     } catch (error) {
         console.error("Failed to delete age config:", error);
+    }
+};
+
+
+// --- Building Configuration Functions ---
+
+export const saveBuildingConfig = async (building: BuildingConfig): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(BUILDING_CONFIG_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(BUILDING_CONFIG_STORE_NAME);
+        store.put(building);
+        
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to save building config:", error);
+    }
+};
+
+export const getAllBuildingConfigs = async (): Promise<BuildingConfig[]> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(BUILDING_CONFIG_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(BUILDING_CONFIG_STORE_NAME);
+        const request = store.getAll();
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                const buildings = request.result as BuildingConfig[];
+                buildings.sort((a, b) => a.order - b.order);
+                resolve(buildings);
+            };
+            request.onerror = () => {
+                console.error("Failed to load building configs:", request.error);
+                reject(request.error);
+            };
+        });
+    } catch (error) {
+        console.error("Failed to open DB for loading building configs:", error);
+        return [];
+    }
+};
+
+export const deleteBuildingConfig = async (id: string): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(BUILDING_CONFIG_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(BUILDING_CONFIG_STORE_NAME);
+        store.delete(id);
+        
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to delete building config:", error);
     }
 };

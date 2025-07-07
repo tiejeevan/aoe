@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice, GameItem } from '../types';
+import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice, GameItem } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText, Package as PackageIcon } from 'lucide-react';
@@ -16,9 +17,9 @@ interface GameUIProps {
     resourceDeltas: ResourceDeltas;
     activityStatus: string;
     unitList: UnitInfo[];
-    buildingList: BuildingInfo[];
+    buildingList: BuildingConfig[];
     onOpenUnitPanel: (type: 'villagers' | 'military', rect: DOMRect) => void;
-    onOpenBuildingPanel: (type: BuildingType, instanceId: string, rect: DOMRect) => void;
+    onOpenBuildingPanel: (type: BuildingType | string, instanceId: string, rect: DOMRect) => void;
     onOpenAllBuildingsPanel: (rect: DOMRect) => void;
     playerAction: PlayerActionState;
     onConfirmPlacement: (position: { x: number; y: number }) => void;
@@ -72,11 +73,11 @@ export const iconMap: Record<LogIconType, React.ReactNode> = {
     watchTower: <WatchTowerIcon/>, townCenter: <TownCenterIcon />,
     age: <AgeIcon />, event: <EventIcon />, system: <SystemIcon />,
     item: <PackageIcon />,
+    default: <PackageIcon />,
 };
 
 const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
-    const foundIcon = iconMap[icon];
-    if (!foundIcon) return null;
+    const foundIcon = iconMap[icon] || iconMap.default;
     return <div className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0">{foundIcon}</div>;
 }
 
@@ -86,10 +87,10 @@ const GameUI: React.FC<GameUIProps> = (props) => {
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
-        const buildingType = key as BuildingType;
+        const buildingType = key as string;
         acc[buildingType] = buildings[buildingType].length;
         return acc;
-    }, {} as Record<BuildingType, number>);
+    }, {} as Record<string, number>);
     
     const militaryUnitCounts = units.military.reduce((acc, unit) => {
         acc[unit.unitType] = (acc[unit.unitType] || 0) + 1;

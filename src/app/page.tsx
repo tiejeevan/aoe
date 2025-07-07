@@ -3,9 +3,9 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs } from '@/services/dbService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
 import GameUI from '@/components/GameUI';
@@ -19,17 +19,7 @@ import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
 import CivilizationPanel from '@/components/CivilizationPanel';
 import AllBuildingsPanel from '@/components/AllBuildingsPanel';
 import InventoryPanel from '@/components/InventoryPanel';
-
-const BUILDINGS_INFO: BuildingInfo[] = [
-    { id: 'houses', name: 'House', description: 'Increases population capacity by 5.', cost: { wood: 50 }, isUnique: false, buildTime: 15, hp: 550 },
-    { id: 'barracks', name: 'Barracks', description: 'Allows training of Swordsmen.', cost: { wood: 150, stone: 50 }, isUnique: true, buildTime: 60, hp: 1200 },
-    { id: 'archeryRange', name: 'Archery Range', description: 'Allows training of Archers.', cost: { wood: 175 }, isUnique: true, buildTime: 60, hp: 1200 },
-    { id: 'stable', name: 'Stables', description: 'Allows training of Knights.', cost: { wood: 175, gold: 75 }, isUnique: true, buildTime: 75, hp: 1200 },
-    { id: 'siegeWorkshop', name: 'Siege Workshop', description: 'Constructs powerful Catapults.', cost: { wood: 200, gold: 150 }, isUnique: true, buildTime: 90, hp: 2100 },
-    { id: 'blacksmith', name: 'Blacksmith', description: 'Researches infantry and cavalry upgrades.', cost: { wood: 100, gold: 100 }, isUnique: true, buildTime: 45, hp: 2100 },
-    { id: 'watchTower', name: 'Watch Tower', description: 'Provides defense against raids.', cost: { stone: 125 }, isUnique: true, buildTime: 45, hp: 1500 },
-    { id: 'townCenter', name: 'Town Center', description: 'The heart of your settlement.', cost: {}, isUnique: true, buildTime: 0, hp: 2400 }
-];
+import { buildingIconMap } from '@/components/icons/iconRegistry';
 
 const UNIT_INFO: UnitInfo[] = [
     { id: 'swordsman', name: 'Swordsman', description: 'Basic melee infantry.', cost: { food: 60, gold: 20 }, requiredBuilding: 'barracks', trainTime: 22 },
@@ -79,12 +69,16 @@ const GamePage: React.FC = () => {
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
     const [inventory, setInventory] = useState<GameItem[]>([]);
     const [activeBuffs, setActiveBuffs] = useState<ActiveBuffs>({ resourceBoost: [] });
+    
+    // Dynamic Configs from DB
     const [ageProgressionList, setAgeProgressionList] = useState<{name: string, description: string}[]>([]);
+    const [buildingList, setBuildingList] = useState<BuildingConfig[]>([]);
+
     
     // Panel States
     const [buildPanelState, setBuildPanelState] = useState<{ isOpen: boolean; villagerId: string | null; anchorRect: DOMRect | null }>({ isOpen: false, villagerId: null, anchorRect: null });
     const [unitManagementPanel, setUnitManagementPanel] = useState<{ isOpen: boolean; type: 'villagers' | 'military' | null; anchorRect: DOMRect | null; }>({ isOpen: false, type: null, anchorRect: null });
-    const [buildingManagementPanel, setBuildingManagementPanel] = useState<{ isOpen: boolean; type: BuildingType | null; instanceId?: string; anchorRect: DOMRect | null; }>({ isOpen: false, type: null, anchorRect: null });
+    const [buildingManagementPanel, setBuildingManagementPanel] = useState<{ isOpen: boolean; type: BuildingType | string | null; instanceId?: string; anchorRect: DOMRect | null; }>({ isOpen: false, type: null, anchorRect: null });
     const [allBuildingsPanel, setAllBuildingsPanel] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
     const [assignmentPanelState, setAssignmentPanelState] = useState<{ isOpen: boolean; targetId: string | null; targetType: 'resource' | 'construction' | null; anchorRect: DOMRect | null; }>({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     const [civPanelState, setCivPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
@@ -97,28 +91,29 @@ const GamePage: React.FC = () => {
 
     const population = {
         current: units.villagers.length + units.military.length,
-        capacity: (buildings.townCenter?.length > 0 ? 20 : 0) + buildings.houses.length * 5,
+        capacity: (buildings.townCenter?.length > 0 ? 20 : 0) + (buildings.houses?.length || 0) * 5,
     };
     
-    const fetchSavesAndAges = useCallback(async () => {
+    const fetchSavesAndConfigs = useCallback(async () => {
         const names = await getAllSaveNames();
         setAllSaves(names);
         
         const allAgeConfigs = await getAllAgeConfigs();
         const activeAges = allAgeConfigs.filter(age => age.isActive);
-        
         if (activeAges.length > 0) {
             setAgeProgressionList(activeAges.map(a => ({ name: a.name, description: a.description })));
         } else {
             setAgeProgressionList(FALLBACK_AGES);
-            console.warn("No active ages found in DB, using fallback list.");
         }
+
+        const allBuildingConfigs = await getAllBuildingConfigs();
+        setBuildingList(allBuildingConfigs.filter(b => b.isActive));
 
     }, []);
     
     useEffect(() => {
-        fetchSavesAndAges();
-    }, [fetchSavesAndAges]);
+        fetchSavesAndConfigs();
+    }, [fetchSavesAndConfigs]);
     
     useEffect(() => {
         if (gameState === GameStatus.PLAYING && civilization && currentSaveName) {
@@ -179,35 +174,29 @@ const GamePage: React.FC = () => {
     }, []);
 
     const handleTaskCompletion = useCallback((task: GameTask) => {
-        // Free up any villagers that were assigned to this task
         if (task.payload?.villagerIds && task.payload.villagerIds.length > 0) {
-            setUnits(prev => ({
-                ...prev,
-                villagers: prev.villagers.map(v => 
-                    task.payload!.villagerIds!.includes(v.id) ? { ...v, currentTask: null } : v
-                )
-            }));
+            setUnits(prev => ({ ...prev, villagers: prev.villagers.map(v => task.payload!.villagerIds!.includes(v.id) ? { ...v, currentTask: null } : v) }));
         }
 
         switch (task.type) {
             case 'build': {
                 const { buildingType, villagerIds, position } = task.payload!;
-                const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType)!;
+                const buildingInfo = buildingList.find(b => b.id === buildingType)!;
                 const [name] = getRandomNames('building', 1);
                 const newBuilding: BuildingInstance = { id: task.id, name, position: position!, currentHp: buildingInfo.hp };
                 
-                setBuildings(p => ({ ...p, [buildingType!]: [...p[buildingType!], newBuilding] }));
+                setBuildings(p => {
+                    const currentBuildings = p[buildingType as string] || [];
+                    return { ...p, [buildingType as string]: [...currentBuildings, newBuilding] };
+                });
                 
                 if (villagerIds && villagerIds.length > 0) {
-                    addToLog(`${villagerIds.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingType!);
+                    addToLog(`${villagerIds.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingInfo.iconId);
                     setActivityStatus(`Construction of ${name} is complete.`);
                 }
                 break;
             }
-            case 'gather': {
-                // Villagers are freed above. Nothing else to do here as the resource node depletion is handled in the game loop.
-                break;
-            }
+            case 'gather': break;
             case 'train_villager': {
                 const { count } = task.payload!;
                 const newVillagerNames = getRandomNames('villager', count!);
@@ -230,7 +219,6 @@ const GamePage: React.FC = () => {
             case 'advance_age': {
                 const currentIndex = ageProgressionList.findIndex(age => age.name === currentAge);
                 const ageResult = ageProgressionList[currentIndex + 1] || { name: 'Age of Legends', description: 'Your civilization transcends history and becomes a legend.'};
-
                 setCurrentAge(ageResult.name);
                 addToLog(`You have advanced to the ${ageResult.name}!`, 'age');
                 addToLog(ageResult.description, 'age');
@@ -238,9 +226,8 @@ const GamePage: React.FC = () => {
                 break;
             }
         }
-    }, [currentAge, addToLog, ageProgressionList]);
+    }, [currentAge, addToLog, ageProgressionList, buildingList]);
     
-    // Game Loop
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -255,7 +242,6 @@ const GamePage: React.FC = () => {
             let completedTasks: GameTask[] = [];
             let resourceDeltasThisTick: ResourceDeltas = {};
             
-            // Clean up expired buffs
             setActiveBuffs(prev => {
                 const newResourceBoosts = prev.resourceBoost?.filter(b => b.endTime > now);
                 if (newResourceBoosts?.length !== prev.resourceBoost?.length) {
@@ -269,414 +255,207 @@ const GamePage: React.FC = () => {
                     completedTasks.push(task);
                     return null;
                 }
-                
                 if (task.type === 'gather') {
                     const node = resourceNodes.find(n => n.id === task.payload?.resourceNodeId);
-                    const assignedVillagers = units.villagers.filter(v => v.currentTask === task.id);
-                    const villagerCount = assignedVillagers.length;
-                    
+                    const villagerCount = task.payload?.villagerIds?.length || 0;
                     if (!node || villagerCount === 0) {
-                        completedTasks.push(task); // Orphaned or empty gather task
-                        return null; 
+                        completedTasks.push(task); return null; 
                     }
-
                     const baseRatePerSecond = GATHER_INFO[node.type].rate;
                     let civBonusMultiplier = 1;
-                    if (civilization) {
-                        const bonusString = civilization.bonus.toLowerCase();
-                        const resourceString = node.type.toLowerCase();
-                        if (bonusString.includes(resourceString)) {
-                            const match = bonusString.match(/(\d+)%/);
-                            if (match && match[1]) {
-                                civBonusMultiplier = 1 + (parseInt(match[1], 10) / 100);
-                            }
-                        }
+                    if (civilization?.bonus.toLowerCase().includes(node.type.toLowerCase())) {
+                        const match = civilization.bonus.match(/(\d+)%/);
+                        if (match?.[1]) civBonusMultiplier = 1 + (parseInt(match[1], 10) / 100);
                     }
-                    
-                    const itemBoost = activeBuffs.resourceBoost?.find(b => b.resource === node.type);
-                    const itemBoostMultiplier = itemBoost ? itemBoost.multiplier : 1;
-
+                    const itemBoostMultiplier = activeBuffs.resourceBoost?.find(b => b.resource === node.type)?.multiplier || 1;
                     const finalRatePerSecond = baseRatePerSecond * civBonusMultiplier * itemBoostMultiplier;
-                    const amountGatheredThisTick = (finalRatePerSecond / 1000) * deltaTime * villagerCount;
-                    
-                    resourceDeltasThisTick[node.type] = (resourceDeltasThisTick[node.type] || 0) + amountGatheredThisTick;
+                    resourceDeltasThisTick[node.type] = (resourceDeltasThisTick[node.type] || 0) + (finalRatePerSecond / 1000) * deltaTime * villagerCount;
                 }
-
                 return task;
-
             }).filter(Boolean) as GameTask[];
             
             if (Object.keys(resourceDeltasThisTick).length > 0) {
                 updateResources(resourceDeltasThisTick);
-
-                setResourceNodes(prevNodes => {
-                    const newNodes = prevNodes.map(node => {
-                        const amountToDecrement = resourceDeltasThisTick[node.type];
-                        if (amountToDecrement) {
-                            const newAmount = node.amount - amountToDecrement;
-                            if (newAmount <= 0) {
-                                const taskId = `gather-${node.id}`;
-                                const assigned = units.villagers.filter(v => v.currentTask === taskId);
-                                addToLog(`${assigned.length} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
-                                setActivityStatus(`A ${node.type} source has been fully depleted.`);
-
-                                const gatherTask = tasksInProgress.find(t => t.id === taskId);
-                                if(gatherTask) completedTasks.push(gatherTask);
-
-                                return null;
-                            }
-                            return { ...node, amount: newAmount };
+                setResourceNodes(prevNodes => prevNodes.map(node => {
+                    const amountToDecrement = resourceDeltasThisTick[node.type];
+                    if (!amountToDecrement) return node;
+                    const newAmount = node.amount - amountToDecrement;
+                    if (newAmount <= 0) {
+                        const taskId = `gather-${node.id}`;
+                        const task = tasksInProgress.find(t => t.id === taskId);
+                        if(task) {
+                            addToLog(`${task.payload?.villagerIds?.length || 0} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
+                            setActivityStatus(`A ${node.type} source has been fully depleted.`);
+                            completedTasks.push(task);
                         }
-                        return node;
-                    }).filter(Boolean) as ResourceNode[];
-
-                    return newNodes;
-                });
+                        return null;
+                    }
+                    return { ...node, amount: newAmount };
+                }).filter(Boolean) as ResourceNode[]);
             }
 
             const finalActiveTasks = tasksInProgress.filter(t => !completedTasks.some(ct => ct.id === t.id));
             setActiveTasks(finalActiveTasks);
-
-            if (completedTasks.length > 0) {
-                completedTasks.forEach(handleTaskCompletion);
-            }
+            if (completedTasks.length > 0) completedTasks.forEach(handleTaskCompletion);
             
             animationFrameRef.current = requestAnimationFrame(gameLoop);
         };
-
         animationFrameRef.current = requestAnimationFrame(gameLoop);
-
-        return () => {
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        };
+        return () => { if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current); };
     }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog, updateResources, units.villagers, civilization, activeBuffs]);
-
 
     const handleNewEvent = useCallback(() => {
         if (!civilization || currentEvent) return;
-        
         const event = getPredefinedGameEvent();
         setCurrentEvent(event);
         setActivityStatus('A new event requires your attention!');
     }, [civilization, currentEvent]);
     
     const scheduleNextEvent = useCallback(() => {
-        if (eventTimerRef.current) {
-            clearTimeout(eventTimerRef.current);
-        }
-        const nextEventTime = (10 + Math.random() * 15) * 1000;
-        eventTimerRef.current = setTimeout(() => handleNewEvent(), nextEventTime);
+        if (eventTimerRef.current) clearTimeout(eventTimerRef.current);
+        eventTimerRef.current = setTimeout(() => handleNewEvent(), (10 + Math.random() * 15) * 1000);
     }, [handleNewEvent]);
 
     const generateResourceNodes = (existingPositions: Set<string>): ResourceNode[] => {
         const nodes: ResourceNode[] = [];
         const types: ResourceNodeType[] = ['food', 'wood', 'gold', 'stone'];
         const numNodes = 20 + Math.floor(Math.random() * 10);
-        
         for (let i = 0; i < numNodes; i++) {
             let pos: {x: number, y: number};
-            do {
-                pos = {
-                    x: Math.floor(Math.random() * MAP_DIMENSIONS.width),
-                    y: Math.floor(Math.random() * MAP_DIMENSIONS.height),
-                }
-            } while (existingPositions.has(`${pos.x},${pos.y}`));
-            
+            do { pos = { x: Math.floor(Math.random() * MAP_DIMENSIONS.width), y: Math.floor(Math.random() * MAP_DIMENSIONS.height) } } while (existingPositions.has(`${pos.x},${pos.y}`));
             existingPositions.add(`${pos.x},${pos.y}`);
-            
             const type = types[Math.floor(Math.random() * types.length)];
-            const amount = Math.floor(Math.random() * (2500 - 500 + 1)) + 500;
-
-            nodes.push({ id: `${Date.now()}-node-${i}`, type, position: pos, amount });
+            nodes.push({ id: `${Date.now()}-node-${i}`, type, position: pos, amount: Math.floor(Math.random() * 2001) + 500 });
         }
         return nodes;
     };
 
     const handleStartNewGame = async (saveName: string) => {
-        if (allSaves.includes(saveName)) {
-            addNotification(`A saga named "${saveName}" already exists.`); return;
-        }
+        if (allSaves.includes(saveName)) { addNotification(`A saga named "${saveName}" already exists.`); return; }
         setGameState(GameStatus.LOADING);
         setCurrentSaveName(saveName);
-        await fetchSavesAndAges();
-
+        await fetchSavesAndConfigs();
         const civ = getPredefinedCivilization();
         setCivilization(civ);
         setResources({ food: 200, wood: 150, gold: 50, stone: 100 });
-        const initialVillagerNames = getRandomNames('villager', 3);
-        const initialVillagers: Villager[] = initialVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
+        const initialVillagers = getRandomNames('villager', 3).map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
         setUnits({ villagers: initialVillagers, military: [] });
-        const [initialTCName] = getRandomNames('building', 1);
         const tcPosition = { x: Math.floor(MAP_DIMENSIONS.width / 2), y: Math.floor(MAP_DIMENSIONS.height / 2) };
-        const tcInfo = BUILDINGS_INFO.find(b => b.id === 'townCenter')!;
-        const initialTC: BuildingInstance = { id: `${Date.now()}-tc`, name: initialTCName, position: tcPosition, currentHp: tcInfo.hp };
+        const tcInfo = buildingList.find(b => b.id === 'townCenter')!;
+        const initialTC = { id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
         setCurrentAge(ageProgressionList[0]?.name || FALLBACK_AGES[0].name);
-        setGameLog([]);
-        setCurrentEvent(null);
-        setUnlimitedResources(false);
-        setActiveTasks([]);
-        setInventory([]);
-        setActiveBuffs({ resourceBoost: [] });
+        setGameLog([]); setCurrentEvent(null); setUnlimitedResources(false); setActiveTasks([]); setInventory([]); setActiveBuffs({ resourceBoost: [] });
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
         setActivityStatus('Your settlement awaits your command.');
-        fetchSavesAndAges();
+        fetchSavesAndConfigs();
     };
 
-    const isVillagerBusy = useCallback((villagerId: string): boolean => {
-        const villager = units.villagers.find(v => v.id === villagerId);
-        return !!villager?.currentTask;
-    }, [units.villagers]);
+    const isVillagerBusy = useCallback((villagerId: string): boolean => !!units.villagers.find(v => v.id === villagerId)?.currentTask, [units.villagers]);
 
     const getVillagerTaskDetails = useCallback((villagerId: string): string => {
         const villager = units.villagers.find(v => v.id === villagerId);
-        if (!villager || !villager.currentTask) {
-            return 'Idle';
-        }
-        
+        if (!villager?.currentTask) return 'Idle';
         const task = activeTasks.find(t => t.id === villager.currentTask);
-        if (!task) {
-            return 'Idle (Finalizing Task)';
-        }
-
-        if (task.type === 'build') {
-            const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType);
-            return `Busy: Constructing ${buildingInfo?.name || 'a building'}`;
-        }
-        if (task.type === 'gather') {
-            const node = resourceNodes.find(n => n.id === task.payload!.resourceNodeId);
-            return `Busy: Gathering ${node?.type || 'resources'}`;
-        }
-        
+        if (!task) return 'Idle (Finalizing Task)';
+        if (task.type === 'build') return `Busy: Constructing ${buildingList.find(b => b.id === task.payload!.buildingType)?.name || 'a building'}`;
+        if (task.type === 'gather') return `Busy: Gathering ${resourceNodes.find(n => n.id === task.payload!.resourceNodeId)?.type || 'resources'}`;
         return 'Idle';
-    }, [activeTasks, resourceNodes, units.villagers]);
+    }, [activeTasks, resourceNodes, units.villagers, buildingList]);
 
     const handleResumeGame = async (saveName: string) => {
-        await fetchSavesAndAges();
+        await fetchSavesAndConfigs();
         const savedState = await loadGameState(saveName) as FullGameState;
         if (savedState) {
             setGameState(GameStatus.LOADING);
             setCurrentSaveName(saveName);
             setCivilization(savedState.civilization);
             setResources(savedState.resources);
+            const migratedVillagers = (savedState.units.villagers || []).map(v => ({...v, currentTask: v.currentTask !== undefined ? v.currentTask : null}));
+            const migratedTasks = (savedState.activeTasks || []).map(t => t.type === 'build' && !t.payload?.villagerIds ? { ...t, payload: { ...t.payload, villagerIds: [] } } : t);
+            migratedTasks.forEach(task => task.payload?.villagerIds?.forEach(vid => { const v = migratedVillagers.find(v => v.id === vid); if(v) v.currentTask = task.id; }));
+            setUnits({ ...savedState.units, villagers: migratedVillagers });
             
-            let savedUnits = savedState.units || { villagers: [], military: [] };
-            if ((savedState.units as any)?.soldiers) {
-                 const migratedMilitary: MilitaryUnit[] = (savedState.units as any).soldiers.map((s: any) => ({ ...s, unitType: 'swordsman' }));
-                 savedUnits = { villagers: savedUnits.villagers || [], military: migratedMilitary };
-            }
-            const migratedVillagers = savedUnits.villagers.map(v => ({...v, currentTask: v.currentTask !== undefined ? v.currentTask : null}));
-            const migratedTasks = (savedState.activeTasks || []).map(t => {
-                if (t.type === 'build' && !t.payload?.villagerIds) {
-                    return { ...t, payload: { ...t.payload, villagerIds: [] } };
-                }
-                return t;
-            });
-             // Back-fill currentTask for older saves
-            migratedTasks.forEach(task => {
-                if(task.payload?.villagerIds) {
-                    task.payload.villagerIds.forEach(vid => {
-                        const villager = migratedVillagers.find(v => v.id === vid);
-                        if(villager) villager.currentTask = task.id;
-                    });
-                }
-            });
-            setUnits({ ...savedUnits, villagers: migratedVillagers });
-            
+            const constructionTasks = migratedTasks.filter(t => t.type === 'build');
+            const occupiedCells = new Set([...Object.values(savedState.buildings || {}).flat().map((b: any) => `${b.position.x},${b.position.y}`), ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)]);
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
-            
             Object.keys(finalBuildings).forEach(bType => {
-                const type = bType as BuildingType;
-                const info = BUILDINGS_INFO.find(b => b.id === type);
-                if(info) {
-                    finalBuildings[type] = finalBuildings[type].map(b => ({
-                        ...b,
-                        currentHp: b.currentHp === undefined ? info.hp : b.currentHp
-                    }));
-                }
+                const info = buildingList.find(b => b.id === bType);
+                if(info) finalBuildings[bType] = finalBuildings[bType].map(b => ({ ...b, currentHp: b.currentHp === undefined ? info.hp : b.currentHp }));
             });
-
-            const constructionTasks = (migratedTasks).filter(t => t.type === 'build');
-            const occupiedCells = new Set([
-                ...Object.values(finalBuildings).flat().map((b: any) => `${b.position.x},${b.position.y}`),
-                ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)
-            ]);
-
             if (!finalBuildings.townCenter || finalBuildings.townCenter.length === 0) {
-                let tcPos = { x: 10, y: 5 };
-                while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
-                const [tcName] = getRandomNames('building', 1);
-                const tcInfo = BUILDINGS_INFO.find(b => b.id === 'townCenter')!;
-                finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: tcName, position: tcPos, currentHp: tcInfo.hp }];
+                let tcPos = { x: 10, y: 5 }; while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
+                const tcInfo = buildingList.find(b => b.id === 'townCenter')!;
+                finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPos, currentHp: tcInfo.hp }];
                 occupiedCells.add(`${tcPos.x},${tcPos.y}`);
             }
-
-            const firstBuilding = Object.values(finalBuildings).flat()[0];
-            if (firstBuilding && typeof firstBuilding === 'object' && !('position' in firstBuilding)) {
-                const migrated = { ...initialBuildingsState };
-                let y = 3;
-                Object.entries(finalBuildings).forEach(([type, instances]) => {
-                    let x = 5;
-                    (instances as BuildingInstance[]).forEach(inst => {
-                        while (occupiedCells.has(`${x},${y}`)) { x++; }
-                         const info = BUILDINGS_INFO.find(b => b.id === type as BuildingType)!;
-                        (migrated[type as BuildingType] as BuildingInstance[]).push({ ...inst, position: { x, y }, currentHp: inst.currentHp || info.hp });
-                        occupiedCells.add(`${x},${y}`);
-                        x++;
-                    });
-                });
-                finalBuildings = migrated;
-            }
-            
             setBuildings(finalBuildings);
 
-            const nodesToSet = (savedState.resourceNodes || []).map(n => ({...n, assignedVillagers: n.assignedVillagers || []}));
-            if (nodesToSet.length === 0) {
-                 setResourceNodes(generateResourceNodes(occupiedCells));
-            } else {
-                 setResourceNodes(nodesToSet);
-            }
-
-            setCurrentAge(savedState.currentAge);
-            setGameLog(savedState.gameLog);
-            setActiveTasks(migratedTasks);
-            setInventory(savedState.inventory || []);
-            setActiveBuffs(savedState.activeBuffs || { resourceBoost: [] });
-            
-            setCurrentEvent(null);
-            setActivityStatus('Welcome back to your saga.');
+            setResourceNodes((savedState.resourceNodes || []).length === 0 ? generateResourceNodes(occupiedCells) : (savedState.resourceNodes || []));
+            setCurrentAge(savedState.currentAge); setGameLog(savedState.gameLog); setActiveTasks(migratedTasks);
+            setInventory(savedState.inventory || []); setActiveBuffs(savedState.activeBuffs || { resourceBoost: [] });
+            setCurrentEvent(null); setActivityStatus('Welcome back to your saga.');
             setGameState(GameStatus.PLAYING);
         } else {
             addNotification(`Could not find a saved game named "${saveName}".`);
         }
     };
 
-    // Event Trigger Timer
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) return;
-
-        if (!currentEvent) {
-            scheduleNextEvent();
-        } else if (eventTimerRef.current) {
-            clearTimeout(eventTimerRef.current);
-        }
-
-        return () => {
-            if (eventTimerRef.current) {
-                clearTimeout(eventTimerRef.current);
-            }
-        };
+        if (!currentEvent) scheduleNextEvent();
+        else if (eventTimerRef.current) clearTimeout(eventTimerRef.current);
+        return () => { if (eventTimerRef.current) clearTimeout(eventTimerRef.current); };
     }, [gameState, currentEvent, scheduleNextEvent]);
 
     const handleEventChoice = (choice: GameEventChoice) => {
         if (choice.cost) {
-            const missingRes: string[] = [];
-            for (const key in choice.cost) {
-                const resKey = key as keyof Resources;
-                if (resources[resKey] < (choice.cost[resKey] || 0)) {
-                    missingRes.push(resKey);
-                }
-            }
-            if (missingRes.length > 0) {
-                addNotification(`You lack the required resources: ${missingRes.join(', ')}.`);
-                return;
-            }
-            const negativeCost: ResourceDeltas = {};
-            for (const key in choice.cost) {
-                const resKey = key as keyof Resources;
-                negativeCost[resKey] = -(choice.cost[resKey] || 0);
-            }
-            updateResources(negativeCost);
+            const missing = (Object.keys(choice.cost) as (keyof Resources)[]).filter(res => resources[res] < (choice.cost![res] || 0));
+            if (missing.length > 0) { addNotification(`You lack the required resources: ${missing.join(', ')}.`); return; }
+            updateResources(Object.entries(choice.cost).reduce((acc, [k, v]) => ({...acc, [k]: -v}), {}));
         }
-        
         const isSuccess = choice.successChance === undefined || Math.random() < choice.successChance;
         const effects = isSuccess ? choice.successEffects : choice.failureEffects;
-
-        if (!effects) {
-            setCurrentEvent(null);
-            scheduleNextEvent();
-            return;
-        }
+        if (!effects) { setCurrentEvent(null); scheduleNextEvent(); return; }
 
         let logMessage = `Decision: "${choice.text}". Outcome: ${isSuccess ? 'Success' : 'Failure'}. ${effects.log}`;
-
         effects.rewards.forEach((reward: Reward) => {
             if (reward.type === 'resource') {
-                let amount = 0;
-                if (Array.isArray(reward.amount)) {
-                    const [min, max] = reward.amount;
-                    amount = Math.floor(Math.random() * (max - min + 1)) + min;
-                } else {
-                    amount = reward.amount;
-                }
-
-                if (amount !== 0) {
-                    updateResources({ [reward.resource]: amount });
-                    logMessage += ` You ${amount > 0 ? 'gained' : 'lost'} ${Math.abs(amount)} ${reward.resource}.`;
-                }
+                const amount = Array.isArray(reward.amount) ? Math.floor(Math.random() * (reward.amount[1] - reward.amount[0] + 1)) + reward.amount[0] : reward.amount;
+                if (amount !== 0) { updateResources({ [reward.resource]: amount }); logMessage += ` You ${amount > 0 ? 'gained' : 'lost'} ${Math.abs(amount)} ${reward.resource}.`; }
             } else if (reward.type === 'item') {
                 const itemInfo = GAME_ITEMS[reward.itemId];
                 if (itemInfo) {
-                    const newItems: GameItem[] = [];
-                    for(let i = 0; i < reward.amount; i++) {
-                        newItems.push({ ...itemInfo, id: `${reward.itemId}-${Date.now()}-${i}` });
-                    }
+                    const newItems = Array.from({length: reward.amount}, (_, i) => ({ ...itemInfo, id: `${reward.itemId}-${Date.now()}-${i}` }));
                     setInventory(prev => [...prev, ...newItems]);
                     logMessage += ` You received ${reward.amount}x ${itemInfo.name}!`;
                 }
-            } else if (reward.type === 'unit') {
-                if (reward.unitType === 'villager') {
-                    const newVillagerNames = getRandomNames('villager', reward.amount);
-                    const newVillagers: Villager[] = newVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
-                    setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
-                    logMessage += ` You gained ${reward.amount} villager(s).`;
-                }
+            } else if (reward.type === 'unit' && reward.unitType === 'villager') {
+                const newVillagers = getRandomNames('villager', reward.amount).map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
+                setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
+                logMessage += ` You gained ${reward.amount} villager(s).`;
             }
         });
         
-        addToLog(logMessage, 'event');
-        setActivityStatus(effects.log);
-        setCurrentEvent(null);
-        scheduleNextEvent();
+        addToLog(logMessage, 'event'); setActivityStatus(effects.log); setCurrentEvent(null); scheduleNextEvent();
     };
 
     const handleInitiateBuild = (villagerId: string, rect: DOMRect) => {
-        if (isVillagerBusy(villagerId)) {
-            addNotification("This villager is already busy.");
-            return;
-        }
+        if (isVillagerBusy(villagerId)) { addNotification("This villager is already busy."); return; }
         setBuildPanelState({ isOpen: true, villagerId, anchorRect: rect });
         setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null });
     };
     
-    const handleStartPlacement = (buildingId: BuildingType) => {
-        const villagerId = buildPanelState.villagerId;
-        if (!villagerId) return;
-
-        const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingId);
-        if (!buildingInfo) return;
-
+    const handleStartPlacement = (buildingId: BuildingType | string) => {
+        const villagerId = buildPanelState.villagerId; if (!villagerId) return;
+        const buildingInfo = buildingList.find(b => b.id === buildingId); if (!buildingInfo) return;
         const isAlreadyConstructing = activeTasks.some(t => t.type === 'build' && t.payload?.buildingType === buildingInfo.id);
-        if (buildingInfo.isUnique && (buildings[buildingInfo.id].length > 0 || isAlreadyConstructing)) {
-            addNotification(`You can only build one ${buildingInfo.name}.`); return;
-        }
-        
-        const cost = buildingInfo.cost;
-        if (!unlimitedResources) {
-            const missing: string[] = [];
-            for (const res in cost) {
-                const resourceKey = res as keyof Resources;
-                if (resources[resourceKey] < (cost[resourceKey] ?? 0)) {
-                     missing.push(`${(cost[resourceKey] ?? 0) - resources[resourceKey]} ${resourceKey}`);
-                }
-            }
-             if (missing.length > 0) {
-                addNotification(`Need ${missing.join(' and ')}.`); return;
-            }
-        }
+        if (buildingInfo.isUnique && ((buildings[buildingInfo.id]?.length || 0) > 0 || isAlreadyConstructing)) { addNotification(`You can only build one ${buildingInfo.name}.`); return; }
+        const missing = unlimitedResources ? [] : (Object.keys(buildingInfo.cost) as (keyof Resources)[]).filter(res => resources[res] < (buildingInfo.cost[res] || 0));
+        if (missing.length > 0) { addNotification(`Need more ${missing.join(', ')}.`); return; }
         setPlayerAction({ mode: 'build', buildingType: buildingId, villagerId });
         setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null });
         setActivityStatus(`Select a location to build a ${buildingInfo.name}. Right-click to cancel.`);
@@ -685,118 +464,62 @@ const GamePage: React.FC = () => {
     const handleConfirmPlacement = (position: { x: number; y: number }) => {
         if (playerAction?.mode !== 'build') return;
         const { buildingType, villagerId } = playerAction;
-        const buildingInfo = BUILDINGS_INFO.find(b => b.id === buildingType);
+        const buildingInfo = buildingList.find(b => b.id === buildingType);
         const builder = units.villagers.find(v => v.id === villagerId);
         if (!buildingInfo || !builder) return;
-        
-        if (!unlimitedResources) {
-            const cost = buildingInfo.cost;
-            const negativeCost: ResourceDeltas = {};
-            for(const resource in cost) {
-                negativeCost[resource as keyof Resources] = -(cost[resource as keyof Resources] || 0);
-            }
-            updateResources(negativeCost);
-        }
+        if (!unlimitedResources) updateResources(Object.entries(buildingInfo.cost).reduce((acc, [k, v]) => ({...acc, [k]: -v}), {}));
         
         let buildTime = buildingInfo.buildTime * 1000;
         if(activeBuffs.buildTimeReduction) {
             buildTime *= (1 - activeBuffs.buildTimeReduction.percentage);
             addToLog(`A Builder's Charm reduced construction time by ${activeBuffs.buildTimeReduction.percentage * 100}%!`, 'item');
-            setActiveBuffs(prev => {
-                const newUses = prev.buildTimeReduction!.uses - 1;
-                return newUses > 0 
-                    ? { ...prev, buildTimeReduction: { ...prev.buildTimeReduction!, uses: newUses } }
-                    : { ...prev, buildTimeReduction: undefined };
-            });
+            setActiveBuffs(prev => ({...prev, buildTimeReduction: prev.buildTimeReduction!.uses - 1 > 0 ? {...prev.buildTimeReduction!, uses: prev.buildTimeReduction!.uses - 1} : undefined }));
         }
         
         const taskId = `${Date.now()}-build-${buildingType}`;
         const taskPayload = { buildingType, villagerIds: [villagerId], position };
-
         if (unlimitedResources) {
              handleTaskCompletion({ id: taskId, type: 'build', startTime: 0, duration: 0, payload: { ...taskPayload, position } });
         } else {
-            const newTask: GameTask = {
-                id: taskId, 
-                type: 'build', 
-                startTime: Date.now(), 
-                duration: buildTime, 
-                payload: taskPayload
-            };
-            setActiveTasks(prev => [...prev, newTask]);
+            setActiveTasks(prev => [...prev, { id: taskId, type: 'build', startTime: Date.now(), duration: buildTime, payload: taskPayload }]);
             setUnits(prev => ({...prev, villagers: prev.villagers.map(v => v.id === villagerId ? {...v, currentTask: taskId} : v)}));
             setActivityStatus(`${builder.name} has started constructing a ${buildingInfo.name}.`);
-            addToLog(`${builder.name} began construction of a new ${buildingInfo.name}.`, buildingType);
+            addToLog(`${builder.name} began construction of a new ${buildingInfo.name}.`, buildingInfo.iconId);
         }
-        
         setPlayerAction(null);
     };
 
-    const handleCancelPlayerAction = () => {
-        setPlayerAction(null);
-        setActivityStatus('Command cancelled.');
-    };
+    const handleCancelPlayerAction = () => { setPlayerAction(null); setActivityStatus('Command cancelled.'); };
 
-    const handleDemolishBuilding = (type: BuildingType, id: string) => {
-        if (type === 'townCenter') {
-            addNotification("The Town Center is the heart of your civilization and cannot be demolished.");
-            return;
-        }
-
-        if(activeTasks.some(t => t.payload?.buildingId === id)) {
-            addNotification("Cannot demolish a building with an active task."); return;
-        }
-        const buildingInfo = BUILDINGS_INFO.find(b => b.id === type);
+    const handleDemolishBuilding = (type: BuildingType | string, id: string) => {
+        if (type === 'townCenter') { addNotification("The Town Center is the heart of your civilization and cannot be demolished."); return; }
+        if(activeTasks.some(t => t.payload?.buildingId === id)) { addNotification("Cannot demolish a building with an active task."); return; }
+        const buildingInfo = buildingList.find(b => b.id === type);
         const buildingInstance = buildings[type].find(b => b.id === id);
         if (!buildingInfo || !buildingInstance) return;
-        if (type === 'houses' && population.current > (buildings.townCenter?.length > 0 ? 20 : 0) + (buildings.houses.length - 1) * 5) {
-             addNotification("Cannot demolish this house, your people would be homeless."); return;
-        }
-        const refund: ResourceDeltas = {};
-        let refundMessageParts: string[] = [];
-        for (const res in buildingInfo.cost) {
-            const resourceKey = res as keyof Resources;
-            const cost = buildingInfo.cost[resourceKey] || 0;
-            const amount = Math.floor(cost * 0.5);
-            if (amount > 0) {
-                refund[resourceKey] = amount;
-                refundMessageParts.push(`${amount} ${resourceKey}`);
-            }
-        }
-        updateResources(refund);
+        if (type === 'houses' && population.current > (buildings.townCenter?.length > 0 ? 20 : 0) + (buildings.houses.length - 1) * 5) { addNotification("Cannot demolish this house, your people would be homeless."); return; }
+        const refund = Object.entries(buildingInfo.cost).reduce((acc, [res, cost]) => { const amount = Math.floor((cost || 0) * 0.5); if (amount > 0) acc[res as keyof Resources] = amount; return acc; }, {} as ResourceDeltas);
+        if (Object.keys(refund).length > 0) { updateResources(refund); addNotification(`Salvaged ${Object.entries(refund).map(([r,a]) => `${a} ${r}`).join(', ')}.`); }
         setBuildings(prev => ({ ...prev, [type]: prev[type].filter(b => b.id !== id) }));
-        addToLog(`${buildingInstance.name} (${buildingInfo.name}) was demolished.`, type);
-        if (refundMessageParts.length > 0) { addNotification(`Salvaged ${refundMessageParts.join(', ')}.`); }
+        addToLog(`${buildingInstance.name} (${buildingInfo.name}) was demolished.`, buildingInfo.iconId);
         setBuildingManagementPanel({isOpen: false, type: null, anchorRect: null });
     };
 
-    const handleUpdateBuilding = (type: BuildingType, id: string, name: string) => {
+    const handleUpdateBuilding = (type: BuildingType | string, id: string, name: string) => {
         setBuildings(prev => ({ ...prev, [type]: prev[type].map(b => b.id === id ? { ...b, name } : b) }));
         addNotification("Building renamed.");
     };
 
     const handleTrainVillagers = (count: number) => {
         if (activeTasks.some(t => t.type === 'train_villager') || count <= 0) return;
-        const villagerCost = 50;
-        const totalCost = villagerCost * count;
         if (population.current + count > population.capacity) { addNotification(`Need space for ${count} more villagers.`); return; }
+        if (!buildings.townCenter?.[0]) { addNotification(`No Town Center to train villagers.`); return; }
+        if (!unlimitedResources) { const totalCost = 50 * count; if (resources.food < totalCost) { addNotification(`Need ${totalCost - resources.food} more Food.`); return; } updateResources({ food: -totalCost }); }
         
-        const townCenter = buildings.townCenter?.[0];
-        if (!townCenter) { addNotification(`No Town Center to train villagers.`); return; }
-
-        if (!unlimitedResources) {
-            if (resources.food < totalCost) { addNotification(`Need ${totalCost - resources.food} more Food.`); return; }
-            updateResources({ food: -totalCost });
-        }
-        const trainTime = 10000 * count;
-        if(unlimitedResources) {
-            handleTaskCompletion({ id: 'instant', type: 'train_villager', startTime: 0, duration: 0, payload: { count } });
-        } else {
-            const taskId = `${Date.now()}-train-villager`;
-            const newTask: GameTask = { id: taskId, type: 'train_villager', startTime: Date.now(), duration: trainTime, payload: { count, buildingId: townCenter.id } };
-            setActiveTasks(prev => [...prev, newTask]);
-            setActivityStatus(`Training ${count} villager(s)...`);
-            addToLog(`Began training ${count} new villager(s).`, 'villager');
+        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'train_villager', startTime: 0, duration: 0, payload: { count } });
+        else {
+            setActiveTasks(prev => [...prev, { id: `${Date.now()}-train-villager`, type: 'train_villager', startTime: Date.now(), duration: 10000 * count, payload: { count, buildingId: buildings.townCenter![0].id } }]);
+            setActivityStatus(`Training ${count} villager(s)...`); addToLog(`Began training ${count} new villager(s).`, 'villager');
         }
         setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null });
     };
@@ -805,62 +528,35 @@ const GamePage: React.FC = () => {
         const unitInfo = UNIT_INFO.find(u => u.id === unitType);
         if (!unitInfo || activeTasks.some(t => t.payload?.unitType === unitType) || count <= 0) return;
         if (population.current + count > population.capacity) { addNotification(`Need space for ${count} more units.`); return; }
-        
         const trainingBuilding = buildings[unitInfo.requiredBuilding]?.[0];
-        if (!trainingBuilding) { addNotification(`No ${unitInfo.requiredBuilding} to train units.`); return; }
+        if (!trainingBuilding) { addNotification(`No ${buildingList.find(b => b.id === unitInfo.requiredBuilding)?.name} to train units.`); return; }
 
         if (!unlimitedResources) {
-            const totalCost: ResourceDeltas = {}; const missing: string[] = [];
-            for (const res in unitInfo.cost) {
-                const resourceKey = res as keyof Resources;
-                const cost = (unitInfo.cost[resourceKey] || 0) * count;
-                totalCost[resourceKey] = -cost;
-                if (resources[resourceKey] < cost) missing.push(`${cost - resources[resourceKey]} ${resourceKey}`);
-            }
-            if (missing.length > 0) { addNotification(`Need ${missing.join(' and ')}.`); return; }
-            updateResources(totalCost);
+            const missing = (Object.keys(unitInfo.cost) as (keyof Resources)[]).filter(res => resources[res] < (unitInfo.cost[res] || 0) * count);
+            if (missing.length > 0) { addNotification(`Need more ${missing.join(' and ')}.`); return; }
+            updateResources(Object.entries(unitInfo.cost).reduce((acc, [k, v]) => ({...acc, [k]: -(v || 0) * count}), {}));
         }
         
         let trainTime = unitInfo.trainTime * 1000 * count;
-        const permanentBonus = activeBuffs.permanentTrainTimeReduction || 0;
-        let tempBonus = 0;
+        if(activeBuffs.permanentTrainTimeReduction) trainTime *= (1 - activeBuffs.permanentTrainTimeReduction);
         if (activeBuffs.trainTimeReduction) {
-            const applicableUses = Math.min(count, activeBuffs.trainTimeReduction.uses);
-            const remainingUses = activeBuffs.trainTimeReduction.uses - applicableUses;
-            tempBonus = activeBuffs.trainTimeReduction.percentage;
-
-            const timeForBuffedUnits = (unitInfo.trainTime * 1000 * applicableUses) * (1 - tempBonus);
-            const timeForNormalUnits = (unitInfo.trainTime * 1000 * (count - applicableUses));
-            trainTime = timeForBuffedUnits + timeForNormalUnits;
-
-            if (remainingUses > 0) {
-                setActiveBuffs(prev => ({...prev, trainTimeReduction: {...prev.trainTimeReduction!, uses: remainingUses}}));
-            } else {
-                setActiveBuffs(prev => ({...prev, trainTimeReduction: undefined}));
-                addToLog("The Drillmaster's Whistle buff has been fully used.", 'item');
-            }
+            const applicable = Math.min(count, activeBuffs.trainTimeReduction.uses);
+            trainTime = (unitInfo.trainTime * 1000 * applicable * (1 - activeBuffs.trainTimeReduction.percentage)) + (unitInfo.trainTime * 1000 * (count - applicable));
+            if (activeBuffs.trainTimeReduction.uses - applicable > 0) setActiveBuffs(prev => ({...prev, trainTimeReduction: {...prev.trainTimeReduction!, uses: prev.trainTimeReduction!.uses - applicable}}));
+            else { setActiveBuffs(prev => ({...prev, trainTimeReduction: undefined})); addToLog("The Drillmaster's Whistle buff has been fully used.", 'item'); }
         }
-        trainTime *= (1 - permanentBonus);
         
-        if(unlimitedResources) {
-            handleTaskCompletion({ id: 'instant', type: 'train_military', startTime: 0, duration: 0, payload: { unitType, count } });
-        } else {
-            const taskId = `${Date.now()}-train-${unitType}`;
-            const newTask: GameTask = { id: taskId, type: 'train_military', startTime: Date.now(), duration: trainTime, payload: { unitType, count, buildingId: trainingBuilding.id } };
-            setActiveTasks(prev => [...prev, newTask]);
-            setActivityStatus(`Training ${count} ${unitInfo.name}(s)...`);
-            addToLog(`Began training ${count} new ${unitInfo.name}(s).`, unitType);
+        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'train_military', startTime: 0, duration: 0, payload: { unitType, count } });
+        else {
+            setActiveTasks(prev => [...prev, { id: `${Date.now()}-train-${unitType}`, type: 'train_military', startTime: Date.now(), duration: trainTime, payload: { unitType, count, buildingId: trainingBuilding.id } }]);
+            setActivityStatus(`Training ${count} ${unitInfo.name}(s)...`); addToLog(`Began training ${count} new ${unitInfo.name}(s).`, unitType);
         }
         setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null });
     };
 
     const handleDismissSpecificUnit = (type: 'villagers' | 'military', id: string) => {
-        if (type === 'villagers' && isVillagerBusy(id)) {
-            addNotification("Cannot dismiss a busy villager.");
-            return;
-        }
-        const unit = units[type].find(u => u.id === id);
-        if (!unit) return;
+        if (type === 'villagers' && isVillagerBusy(id)) { addNotification("Cannot dismiss a busy villager."); return; }
+        const unit = units[type].find(u => u.id === id); if (!unit) return;
         if (type === 'villagers' && units.villagers.length <= 1) { addNotification("Cannot dismiss your last villager."); return; }
         setUnits(prev => ({ ...prev, [type]: prev[type].filter(u => u.id !== id) }));
         const unitTypeName = type === 'villagers' ? 'villager' : (unit as MilitaryUnit).unitType;
@@ -869,336 +565,164 @@ const GamePage: React.FC = () => {
     };
 
     const handleUpdateUnit = (type: 'villagers' | 'military', id: string, name: string, title?: string) => {
-         setUnits(prev => ({ ...prev, [type]: prev[type].map(u => {
-                if (u.id === id) {
-                    const updatedUnit = { ...u, name };
-                    if (type === 'military' && title !== undefined) { (updatedUnit as MilitaryUnit).title = title; }
-                    return updatedUnit;
-                } return u;
-            })
-        }));
+         setUnits(prev => ({ ...prev, [type]: prev[type].map(u => u.id === id ? (type === 'military' && title !== undefined ? { ...u, name, title } : { ...u, name }) : u)}));
         addNotification("Unit updated.");
     };
 
-    const handleAssignVillagersToNode = (nodeId: string, count: number) => {
+    const handleAssignVillagersToConstruction = (constructionId: string, count: number) => {
         const idleVillagers = units.villagers.filter(v => !v.currentTask);
-        if (count <= 0) return;
-        let cappedCount = Math.min(count, idleVillagers.length);
-        if (cappedCount === 0) { addNotification("No idle villagers available."); return; }
-    
-        const villagersToAssign = idleVillagers.slice(0, cappedCount);
-        const villagerIdsToAssign = villagersToAssign.map(v => v.id);
-    
-        const targetNode = resourceNodes.find(n => n.id === nodeId);
-        if (!targetNode) return;
-    
-        const taskId = `gather-${nodeId}`;
+        if (count <= 0 || idleVillagers.length === 0) { addNotification("No idle villagers available."); return; }
+        const task = activeTasks.find(t => t.id === constructionId); if (!task || task.type !== 'build') return;
+        const buildingInfo = buildingList.find(b => b.id === task.payload?.buildingType); if (!buildingInfo) return;
+
+        const cappedCount = Math.min(count, idleVillagers.length);
+        const villagersToAssign = idleVillagers.slice(0, cappedCount).map(v => v.id);
+        const workDone = (Date.now() - task.startTime) * (task.payload?.villagerIds?.length || 1);
+        const workRemaining = Math.max(0, (buildingInfo.buildTime * 1000) - workDone);
+        const newWorkerCount = (task.payload?.villagerIds?.length || 0) + cappedCount;
+        const newRemainingDuration = workRemaining / newWorkerCount;
+        
+        setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToAssign.includes(v.id) ? {...v, currentTask: constructionId} : v)}));
+        setActiveTasks(prev => prev.map(t => t.id === constructionId ? { ...t, startTime: Date.now(), duration: newRemainingDuration, payload: { ...t.payload, villagerIds: [...t.payload!.villagerIds!, ...villagersToAssign] } } : t));
+        addToLog(`${cappedCount} villager(s) are now assisting with the ${buildingInfo.name}.`, buildingInfo.iconId);
+        setActivityStatus(`Construction of the ${buildingInfo.name} is now faster.`);
+        setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
+    };
+
+    const handleAssignVillagers = (targetId: string, count: number) => {
+        if (assignmentPanelState.targetType === 'construction') return handleAssignVillagersToConstruction(targetId, count);
+        const idleVillagers = units.villagers.filter(v => !v.currentTask);
+        if (count <= 0 || idleVillagers.length === 0) { addNotification("No idle villagers available."); return; }
+        const targetNode = resourceNodes.find(n => n.id === targetId); if (!targetNode) return;
+        const cappedCount = Math.min(count, idleVillagers.length);
+        const villagersToAssign = idleVillagers.slice(0, cappedCount).map(v => v.id);
+        const taskId = `gather-${targetId}`;
         const existingTask = activeTasks.find(t => t.id === taskId);
-    
+        
         if (unlimitedResources) {
             updateResources({ [targetNode.type]: targetNode.amount });
             addToLog(`${cappedCount} villager(s) instantly gathered ${Math.floor(targetNode.amount)} ${targetNode.type}.`, targetNode.type);
             setResourceNodes(prev => prev.filter(n => n.id !== nodeId));
         } else {
-            if (existingTask) {
-                setActiveTasks(prev => prev.map(t => t.id === taskId ? {
-                    ...t,
-                    payload: { ...t.payload, villagerIds: [...new Set([...t.payload!.villagerIds!, ...villagerIdsToAssign])] }
-                } : t));
-            } else {
-                 const newTask: GameTask = { id: taskId, type: 'gather', startTime: Date.now(), duration: 999999999, payload: { resourceNodeId: nodeId, villagerIds: villagerIdsToAssign }}; // Duration is arbitrary
-                 setActiveTasks(prev => [...prev, newTask]);
-            }
-            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagerIdsToAssign.includes(v.id) ? {...v, currentTask: taskId} : v)}));
+            if (existingTask) setActiveTasks(prev => prev.map(t => t.id === taskId ? { ...t, payload: { ...t.payload, villagerIds: [...new Set([...t.payload!.villagerIds!, ...villagersToAssign])] } } : t));
+            else setActiveTasks(prev => [...prev, { id: taskId, type: 'gather', startTime: Date.now(), duration: 999999999, payload: { resourceNodeId: targetId, villagerIds: villagersToAssign } }]);
+            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToAssign.includes(v.id) ? {...v, currentTask: taskId} : v)}));
         }
-    
         addToLog(`${cappedCount} villager(s) assigned to gather ${targetNode.type}.`, targetNode.type);
         setActivityStatus(`${cappedCount} villager(s) are now gathering ${targetNode.type}.`);
         setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     };
 
     const handleRecallVillagers = (targetId: string, count: number, type: 'resource' | 'construction') => {
-        if (type === 'resource') {
-            const taskId = `gather-${targetId}`;
+        const task = activeTasks.find(t => t.id === targetId);
+        if (!task || (task.payload?.villagerIds?.length ?? 0) < count) return;
+        
+        const villagersToRecall = task.payload!.villagerIds!.slice(task.payload!.villagerIds!.length - count);
+        if (type === 'construction' && villagersToRecall.length === task.payload!.villagerIds!.length) { addNotification("Cannot recall the last builder from a project."); return; }
+
+        setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToRecall.includes(v.id) ? {...v, currentTask: null} : v)}));
+        const remainingVillagers = task.payload!.villagerIds!.filter(id => !villagersToRecall.includes(id));
+        
+        if (remainingVillagers.length === 0) {
+            setActiveTasks(prev => prev.filter(t => t.id !== targetId));
             const node = resourceNodes.find(n => n.id === targetId);
-            const assignedVillagers = units.villagers.filter(v => v.currentTask === taskId);
-            
-            if (!node || assignedVillagers.length < count) return;
-    
-            const villagersToRecall = assignedVillagers.slice(assignedVillagers.length - count).map(v => v.id);
-            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToRecall.includes(v.id) ? {...v, currentTask: null} : v)}));
-    
-            setActiveTasks(prev => {
-                const taskIndex = prev.findIndex(t => t.id === taskId);
-                if (taskIndex === -1) return prev;
-                
-                const task = prev[taskIndex];
-                const remainingVillagers = task.payload!.villagerIds!.filter(id => !villagersToRecall.includes(id));
-    
-                if (remainingVillagers.length === 0) {
-                    return prev.filter((_, i) => i !== taskIndex);
-                } else {
-                    return prev.map((t, i) => i === taskIndex ? { ...t, payload: { ...t.payload, villagerIds: remainingVillagers } } : t);
-                }
-            });
-            addToLog(`${count} villager(s) recalled from gathering ${node.type}.`, 'villager');
-        } else { // construction
-            const task = activeTasks.find(t => t.id === targetId);
-            if (!task || task.type !== 'build' || (task.payload?.villagerIds?.length ?? 0) < count) return;
-            
-            const villagersToRecall = task.payload!.villagerIds!.slice(task.payload!.villagerIds!.length - count);
-            const remainingVillagers = task.payload!.villagerIds!.filter(id => !villagersToRecall.includes(id));
-    
-            if (remainingVillagers.length === 0) {
-                addNotification("Cannot recall the last builder. This would cancel the project.");
-                return;
-            }
-
-            setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagersToRecall.includes(v.id) ? {...v, currentTask: null} : v)}));
-    
-            const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload!.buildingType)!;
-            const totalWork = buildingInfo.buildTime * 1000;
-            const oldWorkerCount = task.payload!.villagerIds!.length;
-    
-            const timeElapsed = Date.now() - task.startTime;
-            const workDone = timeElapsed * oldWorkerCount;
-            const workRemaining = Math.max(0, totalWork - workDone);
-    
-            const newWorkerCount = remainingVillagers.length;
-            const newRemainingDuration = workRemaining / newWorkerCount;
-            
-            setActiveTasks(prev => prev.map(t => t.id === targetId ? {
-                ...t,
-                startTime: Date.now(),
-                duration: newRemainingDuration,
-                payload: { ...t.payload, villagerIds: remainingVillagers }
-            } : t));
-            addToLog(`${count} villager(s) recalled from construction. Work will now proceed slower.`, 'villager');
+            if(node) addToLog(`All villagers recalled from gathering ${node.type}.`, 'villager');
+        } else {
+            const buildingInfo = buildingList.find(b => b.id === task.payload?.buildingType)!;
+            const workDone = (Date.now() - task.startTime) * task.payload!.villagerIds!.length;
+            const newRemainingDuration = (buildingInfo.buildTime * 1000 - workDone) / remainingVillagers.length;
+            setActiveTasks(prev => prev.map(t => t.id === targetId ? { ...t, startTime: Date.now(), duration: newRemainingDuration, payload: { ...t.payload, villagerIds: remainingVillagers } } : t));
+            if (type === 'construction') addToLog(`${count} builder(s) recalled. Construction will now be slower.`, 'villager');
         }
-    
         setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
-    };
-
-    const handleAssignVillagersToConstruction = (constructionId: string, count: number) => {
-        const idleVillagers = units.villagers.filter(v => !v.currentTask);
-        if (count <= 0) return;
-        let cappedCount = Math.min(count, idleVillagers.length);
-        if (cappedCount === 0) { addNotification("No idle villagers available to assist."); return; }
-
-        const villagersToAssign = idleVillagers.slice(0, cappedCount);
-        const villagerIdsToAssign = villagersToAssign.map(v => v.id);
-        const task = activeTasks.find(t => t.id === constructionId);
-
-        if (!task || task.type !== 'build') return;
-
-        const buildingInfo = BUILDINGS_INFO.find(b => b.id === task.payload?.buildingType);
-        if (!buildingInfo) return;
-
-        const baseDuration = buildingInfo.buildTime * 1000;
-        const oldWorkerCount = task.payload?.villagerIds?.length || 1;
-        
-        const timeElapsed = Date.now() - task.startTime;
-        const workDone = timeElapsed * oldWorkerCount;
-        const totalWork = baseDuration;
-        const workRemaining = Math.max(0, totalWork - workDone);
-        
-        const newWorkerCount = oldWorkerCount + cappedCount;
-        const newRemainingDuration = workRemaining / newWorkerCount;
-        
-        const updatedVillagerIds = [...task.payload!.villagerIds!, ...villagerIdsToAssign];
-
-        setUnits(prev => ({...prev, villagers: prev.villagers.map(v => villagerIdsToAssign.includes(v.id) ? {...v, currentTask: constructionId} : v)}));
-
-        setActiveTasks(prev => prev.map(t => t.id === constructionId ? {
-            ...t,
-            startTime: Date.now(),
-            duration: newRemainingDuration,
-            payload: { ...t.payload, villagerIds: updatedVillagerIds }
-        } : t));
-
-        addToLog(`${cappedCount} villager(s) are now assisting with the ${buildingInfo.name}.`, buildingInfo.id);
-        setActivityStatus(`Construction of the ${buildingInfo.name} is now faster.`);
-        setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
-    };
-
-    const handleAssignVillagers = (targetId: string, count: number) => {
-        if (assignmentPanelState.targetType === 'resource') {
-            handleAssignVillagersToNode(targetId, count);
-        } else if (assignmentPanelState.targetType === 'construction') {
-            handleAssignVillagersToConstruction(targetId, count);
-        }
     };
 
     const handleAdvanceAge = async () => {
         if (activeTasks.some(t => t.type === 'advance_age')) { addNotification("Advancement already in progress."); return; }
         if (!unlimitedResources) {
-            if (resources.food < 500 || resources.gold < 200) {
-                const missing: string[] = [];
-                if (resources.food < 500) missing.push(`${500 - resources.food} Food`);
-                if (resources.gold < 200) missing.push(`${200 - resources.gold} Gold`);
-                addNotification(`To advance, you need ${missing.join(' and ')}.`);
-                return;
-            }
+            const missing = [];
+            if (resources.food < 500) missing.push(`${500 - resources.food} Food`);
+            if (resources.gold < 200) missing.push(`${200 - resources.gold} Gold`);
+            if (missing.length > 0) { addNotification(`To advance, you need ${missing.join(' and ')}.`); return; }
             updateResources({ food: -500, gold: -200 });
         }
-        
         const currentIndex = ageProgressionList.findIndex(age => age.name === currentAge);
-        if (currentIndex === -1 || currentIndex + 1 >= ageProgressionList.length) {
-            addNotification("You have reached the final available age.");
-            return;
-        }
+        if (currentIndex === -1 || currentIndex + 1 >= ageProgressionList.length) { addNotification("You have reached the final available age."); return; }
 
-        const duration = 60000;
-        if(unlimitedResources) {
-            handleTaskCompletion({ id: 'instant', type: 'advance_age', startTime: 0, duration: 0, payload: {} });
-        } else {
-            const taskId = `${Date.now()}-advance_age`;
-            const newTask: GameTask = { id: taskId, type: 'advance_age', startTime: Date.now(), duration };
-            setActiveTasks(prev => [...prev, newTask]);
+        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'advance_age', startTime: 0, duration: 0, payload: {} });
+        else {
+            setActiveTasks(prev => [...prev, { id: `${Date.now()}-advance_age`, type: 'advance_age', startTime: Date.now(), duration: 60000 }]);
             setActivityStatus(`Your people begin the long journey to a new age.`);
             setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null });
         }
     };
     
-    const handleExitGame = async () => {
-        setCurrentSaveName(null);
-        await fetchSavesAndAges();
-        setGameState(GameStatus.MENU);
-    };
-
-    const handleDeleteGame = async (saveName: string) => {
-        await deleteGameState(saveName);
-        await fetchSavesAndAges();
-        addNotification(`Deleted saga: "${saveName}"`);
-    };
+    const handleExitGame = async () => { setCurrentSaveName(null); await fetchSavesAndConfigs(); setGameState(GameStatus.MENU); };
+    const handleDeleteGame = async (saveName: string) => { await deleteGameState(saveName); await fetchSavesAndConfigs(); addNotification(`Deleted saga: "${saveName}"`); };
 
     const handleToggleUnlimitedResources = () => {
         const newMode = !unlimitedResources;
         setUnlimitedResources(newMode);
-
         if (newMode) {
             setResources({ food: 99999, wood: 99999, gold: 99999, stone: 99999 });
             addNotification("Test Mode: ON - All active tasks completed.");
-
             const depletedNodeIds = new Set<string>();
-            const tasksToComplete = [...activeTasks];
-            
-            setActiveTasks([]);
-
-            tasksToComplete.forEach(task => {
-                if (task.type === 'gather') {
-                    if (task.payload?.resourceNodeId) {
-                        depletedNodeIds.add(task.payload.resourceNodeId);
-                        const node = resourceNodes.find(n => n.id === task.payload.resourceNodeId);
-                        if (node) {
-                            addToLog(`Instantly gathered all ${node.type} from a depleted source.`, node.type);
-                        }
-                    }
+            activeTasks.forEach(task => {
+                if (task.type === 'gather' && task.payload?.resourceNodeId) {
+                    depletedNodeIds.add(task.payload.resourceNodeId);
+                    const node = resourceNodes.find(n => n.id === task.payload.resourceNodeId);
+                    if (node) addToLog(`Instantly gathered all ${node.type} from a depleted source.`, node.type);
                 }
                 handleTaskCompletion(task);
             });
-
-            if (depletedNodeIds.size > 0) {
-                setResourceNodes(prev => prev.filter(n => !depletedNodeIds.has(n.id)));
-            }
-
-        } else {
-            addNotification("Test Mode: OFF");
-        }
+            setActiveTasks([]);
+            if (depletedNodeIds.size > 0) setResourceNodes(prev => prev.filter(n => !depletedNodeIds.has(n.id)));
+        } else addNotification("Test Mode: OFF");
     };
     
     const handleUseItem = (itemId: string) => {
-        const item = inventory.find(i => i.id === itemId);
-        if (!item) return;
-
+        const item = inventory.find(i => i.id === itemId); if (!item) return;
         const baseItemId = item.id.split('-')[0];
-
+        const constructionTasks = activeTasks.filter(t => t.type === 'build');
         switch(baseItemId) {
-            case 'scroll_of_haste':
-            case 'blueprint_of_the_master': {
-                const constructionTasks = activeTasks.filter(t => t.type === 'build');
+            case 'scroll_of_haste': case 'blueprint_of_the_master':
                 if (constructionTasks.length > 0) {
-                    const taskToBoost = constructionTasks.sort((a,b) => (b.startTime + b.duration) - (a.startTime + a.duration))[0];
-                    const timeReduction = baseItemId === 'scroll_of_haste' ? 15000 : 60000;
-                    
-                    setActiveTasks(prev => prev.map(t => 
-                        t.id === taskToBoost.id ? { ...t, duration: Math.max(0, t.duration - timeReduction) } : t
-                    ));
-                    addToLog(`Used ${item.name} to speed up construction of the ${BUILDINGS_INFO.find(b => b.id === taskToBoost.payload?.buildingType)?.name}.`, 'item');
-                }
-                break;
-            }
-            case 'hearty_meal': {
-                updateResources({ food: 75 });
-                addToLog(`Used ${item.name} to gain 75 food.`, 'item');
-                break;
-            }
-             case 'builders_charm': {
-                setActiveBuffs(prev => ({...prev, buildTimeReduction: { percentage: 0.1, uses: 1 }}));
-                addToLog(`Used ${item.name}. The next building will be constructed 10% faster.`, 'item');
-                break;
-            }
-             case 'drillmasters_whistle': {
-                setActiveBuffs(prev => ({...prev, trainTimeReduction: { percentage: 0.25, uses: 5 }}));
-                addToLog(`Used ${item.name}. The next 5 military units will train 25% faster.`, 'item');
-                break;
-            }
-             case 'golden_harvest': {
-                setActiveBuffs(prev => ({...prev, resourceBoost: [...(prev.resourceBoost || []), { resource: 'food', multiplier: 1.5, endTime: Date.now() + 60000 }]}));
-                addToLog(`Used ${item.name}. Food gathering is boosted by 50% for 60 seconds.`, 'item');
-                break;
-            }
-            case 'shard_of_the_ancients': {
-                 const constructionTasks = activeTasks.filter(t => t.type === 'build');
+                    const task = constructionTasks.sort((a,b) => (b.startTime + b.duration) - (a.startTime + a.duration))[0];
+                    setActiveTasks(p => p.map(t => t.id === task.id ? { ...t, duration: Math.max(0, t.duration - (baseItemId === 'scroll_of_haste' ? 15000 : 60000)) } : t));
+                    addToLog(`Used ${item.name} on the ${buildingList.find(b => b.id === task.payload?.buildingType)?.name}.`, 'item');
+                } break;
+            case 'hearty_meal': updateResources({ food: 75 }); addToLog(`Used ${item.name} to gain 75 food.`, 'item'); break;
+            case 'builders_charm': setActiveBuffs(p => ({...p, buildTimeReduction: { percentage: 0.1, uses: 1 }})); addToLog(`Used ${item.name}. Next building is 10% faster.`, 'item'); break;
+            case 'drillmasters_whistle': setActiveBuffs(p => ({...p, trainTimeReduction: { percentage: 0.25, uses: 5 }})); addToLog(`Used ${item.name}. Next 5 units train 25% faster.`, 'item'); break;
+            case 'golden_harvest': setActiveBuffs(p => ({...p, resourceBoost: [...(p.resourceBoost || []), { resource: 'food', multiplier: 1.5, endTime: Date.now() + 60000 }]})); addToLog(`Used ${item.name}. Food gathering boosted by 50% for 60s.`, 'item'); break;
+            case 'shard_of_the_ancients':
                 if (constructionTasks.length > 0) {
-                    const taskToComplete = constructionTasks.sort((a,b) => (b.startTime + b.duration) - (a.startTime + a.duration))[0];
-                    setActiveTasks(prev => prev.filter(t => t.id !== taskToComplete.id));
-                    handleTaskCompletion(taskToComplete);
-                    addToLog(`Used ${item.name} to instantly complete the ${BUILDINGS_INFO.find(b => b.id === taskToComplete.payload?.buildingType)?.name}.`, 'item');
-                }
-                break;
-            }
-            case 'heart_of_the_mountain': {
-                const now = Date.now();
-                setActiveBuffs(prev => ({...prev, resourceBoost: [
-                    ...(prev.resourceBoost || []), 
-                    { resource: 'gold', multiplier: 2, endTime: now + 120000 },
-                    { resource: 'stone', multiplier: 2, endTime: now + 120000 }
-                ]}));
-                addToLog(`Used ${item.name}. Gold and Stone gathering are doubled for 2 minutes.`, 'item');
-                break;
-            }
-            case 'banner_of_command': {
-                // Since there is no combat, we'll make this a permanent training speed boost
-                const currentBonus = activeBuffs.permanentTrainTimeReduction || 0;
-                setActiveBuffs(prev => ({...prev, permanentTrainTimeReduction: currentBonus + 0.05}));
-                addToLog(`Used ${item.name}. All military units will now train 5% faster, permanently.`, 'item');
-                break;
-            }
-            case 'whisper_of_the_creator': {
-                const tasksToComplete = [...activeTasks];
-                setActiveTasks([]);
-                tasksToComplete.forEach(handleTaskCompletion);
-                addToLog(`A divine whisper echoes through your civilization, and all work is instantly finished.`, 'item');
-                break;
-            }
+                    const task = constructionTasks.sort((a,b) => (b.startTime + b.duration) - (a.startTime + a.duration))[0];
+                    setActiveTasks(p => p.filter(t => t.id !== task.id)); handleTaskCompletion(task);
+                    addToLog(`Used ${item.name} to instantly complete the ${buildingList.find(b => b.id === task.payload?.buildingType)?.name}.`, 'item');
+                } break;
+            case 'heart_of_the_mountain':
+                setActiveBuffs(p => ({...p, resourceBoost: [...(p.resourceBoost || []), { resource: 'gold', multiplier: 2, endTime: Date.now() + 120000 }, { resource: 'stone', multiplier: 2, endTime: Date.now() + 120000 }]}));
+                addToLog(`Used ${item.name}. Gold and Stone gathering doubled for 2 minutes.`, 'item'); break;
+            case 'banner_of_command':
+                setActiveBuffs(p => ({...p, permanentTrainTimeReduction: (p.permanentTrainTimeReduction || 0) + 0.05}));
+                addToLog(`Used ${item.name}. Military units train 5% faster, permanently.`, 'item'); break;
+            case 'whisper_of_the_creator':
+                const tasks = [...activeTasks]; setActiveTasks([]); tasks.forEach(handleTaskCompletion);
+                addToLog(`A divine whisper echoes, and all work is instantly finished.`, 'item'); break;
         }
-
-        setInventory(prev => prev.filter(i => i.id !== itemId));
-        setInventoryPanelState({isOpen: false, anchorRect: null});
+        setInventory(prev => prev.filter(i => i.id !== itemId)); setInventoryPanelState({isOpen: false, anchorRect: null});
     };
     
-    const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
-        const buildingType = key as BuildingType;
-        acc[buildingType] = buildings[buildingType].length;
-        return acc;
-    }, {} as Record<BuildingType, number>);
-    
+    const buildingCounts = buildingList.reduce((acc, b) => { acc[b.id] = buildings[b.id]?.length || 0; return acc; }, {} as Record<string, number>);
     const idleVillagerCount = units.villagers.filter(v => !v.currentTask).length;
+    const assignmentTarget = assignmentPanelState.targetType === 'resource' ? resourceNodes.find(n => n.id === assignmentPanelState.targetId) : activeTasks.find(t => t.type === 'build' && t.id === assignmentPanelState.targetId);
     
-    const assignmentTarget = assignmentPanelState.targetType === 'resource'
-        ? resourceNodes.find(n => n.id === assignmentPanelState.targetId)
-        : activeTasks.find(t => t.type === 'build' && t.id === assignmentPanelState.targetId);
+    const currentAgeIndex = ageProgressionList.findIndex(a => a.name === currentAge);
+    const availableBuildings = buildingList.filter(b => {
+        const unlockAgeIndex = ageProgressionList.findIndex(a => a.name === b.unlockedInAge);
+        return unlockAgeIndex !== -1 && unlockAgeIndex <= currentAgeIndex;
+    });
 
     const closeAllPanels = useCallback(() => {
         setUnitManagementPanel(p => p.isOpen ? { isOpen: false, type: null, anchorRect: null } : p);
@@ -1210,185 +734,60 @@ const GamePage: React.FC = () => {
         setInventoryPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
     }, []);
 
-    const handleOpenBuildingPanel = useCallback((type: BuildingType, instanceId: string, rect: DOMRect) => {
+    const handleOpenBuildingPanel = useCallback((type: BuildingType | string, instanceId: string, rect: DOMRect) => {
         closeAllPanels();
         setBuildingManagementPanel({ isOpen: true, type, instanceId, anchorRect: rect });
     }, [closeAllPanels]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            const isAnyPanelOpen = unitManagementPanel.isOpen || 
-                                   buildingManagementPanel.isOpen || 
-                                   buildPanelState.isOpen || 
-                                   assignmentPanelState.isOpen || 
-                                   civPanelState.isOpen ||
-                                   allBuildingsPanel.isOpen ||
-                                   inventoryPanelState.isOpen;
-
-            if (!isAnyPanelOpen) {
-                return;
-            }
-
             const target = event.target as Element;
-            
-            if (target.closest('.sci-fi-panel-popup')) {
-                return;
-            }
-            
-            closeAllPanels();
+            if (!target.closest('.sci-fi-panel-popup')) closeAllPanels();
         };
-
         document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [
-        unitManagementPanel.isOpen, 
-        buildingManagementPanel.isOpen,
-        buildPanelState.isOpen,
-        assignmentPanelState.isOpen,
-        civPanelState.isOpen,
-        allBuildingsPanel.isOpen,
-        inventoryPanelState.isOpen,
-        closeAllPanels,
-    ]);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [closeAllPanels]);
 
     const renderContent = () => {
         switch (gameState) {
-            case GameStatus.MENU:
-                return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
-            case GameStatus.LOADING:
-                return <LoadingScreen />;
+            case GameStatus.MENU: return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
+            case GameStatus.LOADING: return <LoadingScreen />;
             case GameStatus.PLAYING:
                 if (!civilization) return <LoadingScreen />;
                 return (
                     <>
                         <GameUI
-                            civilization={civilization}
-                            resources={resources}
-                            units={units}
-                            buildings={buildings}
-                            population={population}
-                            currentAge={currentAge}
-                            gameLog={gameLog}
-                            resourceDeltas={resourceDeltas}
-                            activityStatus={activityStatus}
-                            unitList={UNIT_INFO}
-                            buildingList={BUILDINGS_INFO}
+                            civilization={civilization} resources={resources} units={units} buildings={buildings} population={population} currentAge={currentAge} gameLog={gameLog} resourceDeltas={resourceDeltas} activityStatus={activityStatus} unitList={UNIT_INFO} buildingList={buildingList}
                             onOpenUnitPanel={(type, rect) => { closeAllPanels(); setUnitManagementPanel({ isOpen: true, type, anchorRect: rect }); }}
                             onOpenBuildingPanel={handleOpenBuildingPanel}
                             onOpenAllBuildingsPanel={(rect) => { closeAllPanels(); setAllBuildingsPanel({ isOpen: true, anchorRect: rect }); }}
-                            playerAction={playerAction}
-                            onConfirmPlacement={handleConfirmPlacement}
-                            onCancelPlayerAction={handleCancelPlayerAction}
-                            onBuildingClick={(building, rect) => {
-                                closeAllPanels();
-                                const type = Object.keys(buildings).find(key => buildings[key as BuildingType].some(b => b.id === building.id)) as BuildingType | undefined;
-                                if(type) setBuildingManagementPanel({ isOpen: true, type, instanceId: building.id, anchorRect: rect });
-                            }}
-                            mapDimensions={MAP_DIMENSIONS}
-                            activeTasks={activeTasks}
-                            onExitGame={handleExitGame}
+                            playerAction={playerAction} onConfirmPlacement={handleConfirmPlacement} onCancelPlayerAction={handleCancelPlayerAction}
+                            onBuildingClick={(building, rect) => { closeAllPanels(); const type = Object.keys(buildings).find(key => buildings[key as string]?.some(b => b.id === building.id)); if(type) setBuildingManagementPanel({ isOpen: true, type, instanceId: building.id, anchorRect: rect }); }}
+                            mapDimensions={MAP_DIMENSIONS} activeTasks={activeTasks} onExitGame={handleExitGame}
                             onOpenCivPanel={(rect) => { closeAllPanels(); setCivPanelState({ isOpen: true, anchorRect: rect }); }}
                             resourceNodes={resourceNodes}
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
-                            gatherInfo={GATHER_INFO}
-                            currentEvent={currentEvent}
-                            onEventChoice={handleEventChoice}
-                            inventory={inventory}
+                            gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
                             onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
                         />
-                        <BuildPanel 
-                            isOpen={buildPanelState.isOpen}
-                            onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })}
-                            onStartPlacement={handleStartPlacement}
-                            resources={resources}
-                            buildingCounts={buildingCounts}
-                            buildingList={BUILDINGS_INFO}
-                            anchorRect={buildPanelState.anchorRect}
-                        />
-                        <UnitManagementPanel
-                            isOpen={unitManagementPanel.isOpen}
-                            onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })}
-                            type={unitManagementPanel.type}
-                            units={units}
-                            onUpdateUnit={handleUpdateUnit}
-                            onDismissUnit={handleDismissSpecificUnit}
-                            onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }}
-                            getVillagerTaskDetails={getVillagerTaskDetails}
-                            anchorRect={unitManagementPanel.anchorRect}
-                        />
-                        <BuildingManagementPanel
-                            isOpen={buildingManagementPanel.isOpen}
-                            onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })}
-                            panelState={buildingManagementPanel}
-                            buildings={buildings}
-                            buildingList={BUILDINGS_INFO}
-                            onUpdateBuilding={handleUpdateBuilding}
-                            onDemolishBuilding={handleDemolishBuilding}
-                            onTrainUnits={handleTrainUnits}
-                            onTrainVillagers={handleTrainVillagers}
-                            resources={resources}
-                            population={population}
-                            unitList={UNIT_INFO}
-                            onAdvanceAge={handleAdvanceAge}
-                            activeTasks={activeTasks}
-                            anchorRect={buildingManagementPanel.anchorRect}
-                        />
-                        <ResourceAssignmentPanel
-                            isOpen={assignmentPanelState.isOpen}
-                            onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })}
-                            assignmentTarget={assignmentTarget || null}
-                            idleVillagerCount={idleVillagerCount}
-                            onAssignVillagers={handleAssignVillagers}
-                            onRecallVillagers={handleRecallVillagers}
-                            gatherInfo={GATHER_INFO}
-                            buildingList={BUILDINGS_INFO}
-                            units={units}
-                            anchorRect={assignmentPanelState.anchorRect}
-                        />
-                        <CivilizationPanel
-                            isOpen={civPanelState.isOpen}
-                            onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })}
-                            civilization={civilization}
-                            anchorRect={civPanelState.anchorRect}
-                        />
-                        <AllBuildingsPanel
-                            isOpen={allBuildingsPanel.isOpen}
-                            onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })}
-                            buildingList={BUILDINGS_INFO}
-                            buildingCounts={buildingCounts}
-                            activeTasks={activeTasks}
-                            onOpenBuildingPanel={handleOpenBuildingPanel}
-                            anchorRect={allBuildingsPanel.anchorRect}
-                        />
-                        <InventoryPanel
-                            isOpen={inventoryPanelState.isOpen}
-                            onClose={() => setInventoryPanelState({ isOpen: false, anchorRect: null })}
-                            inventory={inventory}
-                            onUseItem={handleUseItem}
-                            activeTasks={activeTasks}
-                            activeBuffs={activeBuffs}
-                            anchorRect={inventoryPanelState.anchorRect}
-                        />
+                        <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
+                        <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />
+                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} resources={resources} population={population} unitList={UNIT_INFO} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} />
+                        <ResourceAssignmentPanel isOpen={assignmentPanelState.isOpen} onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })} assignmentTarget={assignmentTarget || null} idleVillagerCount={idleVillagerCount} onAssignVillagers={handleAssignVillagers} onRecallVillagers={handleRecallVillagers} gatherInfo={GATHER_INFO} buildingList={buildingList} units={units} anchorRect={assignmentPanelState.anchorRect} />
+                        <CivilizationPanel isOpen={civPanelState.isOpen} onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })} civilization={civilization} anchorRect={civPanelState.anchorRect} />
+                        <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })} buildingList={buildingList} buildingCounts={buildingCounts} activeTasks={activeTasks} onOpenBuildingPanel={handleOpenBuildingPanel} anchorRect={allBuildingsPanel.anchorRect} />
+                        <InventoryPanel isOpen={inventoryPanelState.isOpen} onClose={() => setInventoryPanelState({ isOpen: false, anchorRect: null })} inventory={inventory} onUseItem={handleUseItem} activeTasks={activeTasks} activeBuffs={activeBuffs} anchorRect={inventoryPanelState.anchorRect} />
                     </>
                 );
-            default:
-                return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
+            default: return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
         }
     };
 
     return (
         <div className="min-h-screen bg-stone-dark flex items-center justify-center p-4">
             {gameState === GameStatus.PLAYING && (
-                 <button
-                    onClick={handleToggleUnlimitedResources}
-                    className="fixed bottom-4 left-4 z-[101] bg-brand-gold text-stone-dark font-bold py-1 px-3 rounded-full text-xs shadow-lg hover:scale-105 transition-transform"
-                    aria-label="Toggle unlimited resources test mode"
-                >
-                    Test Mode: {unlimitedResources ? 'ON' : 'OFF'}
-                </button>
+                 <button onClick={handleToggleUnlimitedResources} className="fixed bottom-4 left-4 z-[101] bg-brand-gold text-stone-dark font-bold py-1 px-3 rounded-full text-xs shadow-lg hover:scale-105 transition-transform" aria-label="Toggle unlimited resources test mode">Test Mode: {unlimitedResources ? 'ON' : 'OFF'}</button>
             )}
             <NotificationManager notifications={notifications} onRemoveNotification={removeNotification} />
             <main className="w-full max-w-7xl mx-auto">

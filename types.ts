@@ -1,5 +1,6 @@
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -64,7 +65,7 @@ export interface Buildings {
     siegeWorkshop: BuildingInstance[];
     blacksmith: BuildingInstance[];
     watchTower: BuildingInstance[];
-    townCenter: BuildingInstance[];
+    [key: string]: BuildingInstance[]; // Allow for custom building types
 }
 
 export interface GameStatePayload {
@@ -110,7 +111,7 @@ export interface GameEvent {
     choices: GameEventChoice[];
 }
 
-export type LogIconType = keyof Resources | 'villager' | MilitaryUnitType | 'age' | 'event' | 'system' | BuildingType | 'item';
+export type LogIconType = keyof Resources | 'villager' | MilitaryUnitType | 'age' | 'event' | 'system' | BuildingType | string | 'item';
 
 export interface GameLogEntry {
     id: string;
@@ -155,7 +156,7 @@ export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' 
 
 export type PlayerActionState = {
     mode: 'build';
-    buildingType: BuildingType;
+    buildingType: BuildingType | string;
     villagerId: string;
 } | null;
 
@@ -172,7 +173,7 @@ export interface GameTask {
         count?: number;
         
         // Build task
-        buildingType?: BuildingType;
+        buildingType?: BuildingType | string;
         position?: { x: number; y: number };
         
         // Train military task
@@ -202,6 +203,22 @@ export interface AgeConfig {
     isPredefined: boolean;
     order: number;
 }
+
+export interface BuildingConfig {
+    id: BuildingType | string;
+    name: string;
+    description: string;
+    cost: BuildingCosts;
+    isUnique: boolean;
+    buildTime: number; // in seconds
+    hp: number;
+    unlockedInAge: string; // name of the age
+    iconId: string; // key from buildingIconMap
+    isActive: boolean;
+    isPredefined: boolean;
+    order: number;
+}
+
 
 export interface FullGameState {
     civilization: Civilization;

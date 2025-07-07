@@ -1,7 +1,9 @@
 
+
 import React, { useState, useEffect } from 'react';
-import type { BuildingType, BuildingInfo, GameTask } from '../types';
+import type { BuildingType, BuildingConfig, GameTask } from '../types';
 import { iconMap } from './GameUI';
+import { buildingIconMap } from './icons/iconRegistry';
 
 // StatBox component copied from GameUI for reuse in this panel.
 const StatBox: React.FC<{ 
@@ -33,10 +35,10 @@ const StatBox: React.FC<{
 interface AllBuildingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    buildingList: BuildingInfo[];
-    buildingCounts: Record<BuildingType, number>;
+    buildingList: BuildingConfig[];
+    buildingCounts: Record<string, number>;
     activeTasks: GameTask[];
-    onOpenBuildingPanel: (type: BuildingType, instanceId: string, rect: DOMRect) => void;
+    onOpenBuildingPanel: (type: BuildingType | string, instanceId: string, rect: DOMRect) => void;
     anchorRect: DOMRect | null;
 }
 
@@ -100,25 +102,15 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
 
                 <div className="space-y-2 flex-grow overflow-y-auto pr-2">
                     {(totalBuildings > 0 || constructionTasks.length > 0) ? (
-                        Object.entries(buildingCounts)
-                            .sort(([typeA], [typeB]) => {
-                                const order = ['townCenter', 'houses'];
-                                const indexA = order.indexOf(typeA);
-                                const indexB = order.indexOf(typeB);
-                                if(indexA !== -1 && indexB !== -1) return indexA - indexB;
-                                if(indexA !== -1) return -1;
-                                if(indexB !== -1) return 1;
-                                return typeA.localeCompare(typeB);
-                            })
-                            .map(([type, count]) => {
+                        buildingList
+                            .sort((a, b) => a.order - b.order)
+                            .map((info) => {
+                                const type = info.id;
+                                const count = buildingCounts[type] || 0;
                                 const isConstructing = constructionTasks.some(t => t.payload?.buildingType === type);
                                 if(count === 0 && !isConstructing) return null;
-
-                                const info = buildingList.find(b => b.id === type);
-                                if (!info) return null;
                                 
-                                const Icon = iconMap[type as BuildingType];
-                                if (!Icon) return null;
+                                const IconComponent = buildingIconMap[info.iconId] || buildingIconMap.default;
 
                                 const constructingCount = constructionTasks.filter(t => t.payload?.buildingType === type).length;
                                 const displayValue = count > 0 ? `${count}${constructingCount > 0 ? ` (+${constructingCount})` : ''}` : `Constructing...`;
@@ -126,12 +118,12 @@ const AllBuildingsPanel: React.FC<AllBuildingsPanelProps> = ({ isOpen, onClose, 
                                 return (
                                     <StatBox 
                                         key={type} 
-                                        icon={Icon} 
+                                        icon={<IconComponent />}
                                         label={info.name}
                                         value={displayValue} 
                                         colorClass="text-parchment-dark" 
                                         onActionClick={count > 0 ? (e) => {
-                                            onOpenBuildingPanel(type as BuildingType, '', e.currentTarget.getBoundingClientRect());
+                                            onOpenBuildingPanel(type, '', e.currentTarget.getBoundingClientRect());
                                         } : undefined}
                                     />
                                 );

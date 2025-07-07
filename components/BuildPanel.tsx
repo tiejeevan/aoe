@@ -1,27 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import type { BuildingInfo, BuildingType, Resources, BuildingCosts } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, BarracksIcon, HouseIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, TownCenterIcon, ClockIcon, BuildIcon } from './icons/ResourceIcons';
+import type { BuildingConfig, BuildingType, Resources, BuildingCosts } from '../types';
+import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, ClockIcon, BuildIcon } from './icons/ResourceIcons';
+import { buildingIconMap } from './icons/iconRegistry';
 
 interface BuildPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    onStartPlacement: (buildingId: BuildingType) => void;
+    onStartPlacement: (buildingId: BuildingType | string) => void;
     resources: Resources;
-    buildingCounts: Record<BuildingType, number>;
-    buildingList: BuildingInfo[];
+    buildingCounts: Record<string, number>;
+    buildingList: BuildingConfig[];
     anchorRect: DOMRect | null;
 }
-
-const buildingIcons: Record<BuildingType, React.FC> = {
-    houses: HouseIcon,
-    barracks: BarracksIcon,
-    archeryRange: ArcheryRangeIcon,
-    stable: StableIcon,
-    siegeWorkshop: SiegeWorkshopIcon,
-    blacksmith: BlacksmithIcon,
-    watchTower: WatchTowerIcon,
-    townCenter: TownCenterIcon,
-};
 
 const CostDisplay: React.FC<{ cost: BuildingCosts, resources: Resources }> = ({ cost, resources }) => {
     return (
@@ -43,7 +33,7 @@ const CostDisplay: React.FC<{ cost: BuildingCosts, resources: Resources }> = ({ 
 
 const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlacement, resources, buildingCounts, buildingList, anchorRect }) => {
     const constructibleBuildings = buildingList.filter(b => b.id !== 'townCenter');
-    const [selectedBuilding, setSelectedBuilding] = useState<BuildingInfo>(constructibleBuildings[0] ?? null);
+    const [selectedBuilding, setSelectedBuilding] = useState<BuildingConfig | null>(constructibleBuildings[0] ?? null);
     
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ anchorRect, buildingList });
@@ -74,7 +64,7 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
     if (!currentAnchor) return null;
 
     const isAffordable = selectedBuilding ? Object.entries(selectedBuilding.cost).every(([res, cost]) => resources[res as keyof Resources] >= (cost || 0)) : false;
-    const isBuilt = selectedBuilding ? selectedBuilding.isUnique && buildingCounts[selectedBuilding.id] > 0 : false;
+    const isBuilt = selectedBuilding ? selectedBuilding.isUnique && (buildingCounts[selectedBuilding.id] || 0) > 0 : false;
     const canBuild = isAffordable && !isBuilt;
 
     const panelWidth = 500;
@@ -121,7 +111,7 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
                     <div className="w-2/5 pr-4 border-r border-stone-light/20">
                          <div className="grid grid-cols-3 gap-2">
                             {constructibleBuildings.map((building) => {
-                                const Icon = buildingIcons[building.id];
+                                const Icon = buildingIconMap[building.iconId] || buildingIconMap.default;
                                 const isSelected = selectedBuilding?.id === building.id;
                                 return (
                                     <div key={building.id} className="relative group">
@@ -164,7 +154,7 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
                                     </div>
                                      {selectedBuilding.isUnique && (
                                         <p className="text-xs text-brand-blue mt-2">
-                                            Unique Building ({buildingCounts[selectedBuilding.id]} / 1 built)
+                                            Unique Building ({buildingCounts[selectedBuilding.id] || 0} / 1 built)
                                         </p>
                                      )}
                                 </div>
@@ -185,7 +175,7 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
                             </>
                         ) : (
                             <div className="flex items-center justify-center h-full text-parchment-dark">
-                                <p>Select a building.</p>
+                                <p>Select a building to construct.</p>
                             </div>
                         )}
                     </div>

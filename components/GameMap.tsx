@@ -1,11 +1,12 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingInfo, PlayerActionState, ResourceNode, ResourceNodeType, Units, Villager } from '../types';
+import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfig, PlayerActionState, ResourceNode, ResourceNodeType, Units, Villager } from '../types';
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 import { VillagerIcon } from './icons/ResourceIcons';
 
-const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingInfo | undefined; builderCount: number }> = ({ task, buildingInfo, builderCount }) => {
+const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingConfig | undefined; builderCount: number }> = ({ task, buildingInfo, builderCount }) => {
     const [remainingTime, setRemainingTime] = useState(0);
 
     useEffect(() => {
@@ -59,7 +60,7 @@ interface GameMapProps {
     onCancelPlayerAction: () => void;
     onBuildingClick: (building: BuildingInstance, rect: DOMRect) => void;
     mapDimensions: { width: number; height: number; };
-    buildingList: BuildingInfo[];
+    buildingList: BuildingConfig[];
     resourceNodes: ResourceNode[];
     units: Units;
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
@@ -109,7 +110,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
     
     const getBuildingAt = (x: number, y: number): BuildingInstance | undefined => {
         for (const buildingType in buildings) {
-            const found = buildings[buildingType as BuildingType].find(b => b.position.x === x && b.position.y === y);
+            const found = buildings[buildingType as string].find(b => b.position.x === x && b.position.y === y);
             if (found) return found;
         }
         return undefined;
@@ -184,15 +185,15 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                     >
                         {building && (
                              <div className="absolute inset-0 p-1 text-parchment-light cursor-pointer">
-                                {iconMap[Object.keys(buildings).find(key => buildings[key as BuildingType].some(b => b.id === building.id)) as BuildingType]}
+                                {iconMap[Object.keys(buildings).find(key => buildings[key as string].some(b => b.id === building.id)) as string]}
                                 <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
                                     {building.name}
                                 </div>
                              </div>
                         )}
-                        {constructionTask && constructionTask.payload?.buildingType && (
+                        {constructionTask && buildingInfo && (
                             <div className="absolute inset-0 p-1 text-parchment-light opacity-60 flex flex-col justify-center items-center gap-1 group">
-                                {iconMap[constructionTask.payload.buildingType]}
+                                {iconMap[buildingInfo.iconId]}
                                 <ProgressBar startTime={constructionTask.startTime} duration={constructionTask.duration} className="w-10/12 h-1.5"/>
                                 {buildingInfo && <ConstructionTooltip task={constructionTask} buildingInfo={buildingInfo} builderCount={constructionTask.payload.villagerIds?.length || 0} />}
                                 {(constructionTask.payload.villagerIds?.length || 0) > 0 && (
@@ -222,7 +223,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                         )}
                         {playerAction?.mode === 'build' && hoveredCell?.x === x && hoveredCell?.y === y && !isOccupied && (
                             <div className="absolute inset-0 p-1 text-parchment-light opacity-50">
-                               {iconMap[playerAction.buildingType]}
+                               {iconMap[buildingList.find(b => b.id === playerAction.buildingType)!.iconId]}
                             </div>
                         )}
                     </div>

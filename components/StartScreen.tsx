@@ -32,7 +32,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
     };
 
     return (
-        <div className="text-center bg-stone-dark p-8 rounded-lg shadow-2xl border-2 border-stone-light w-full max-w-2xl">
+        <div className="text-center bg-stone-dark p-8 rounded-lg shadow-2xl border-2 border-stone-light w-full max-w-2xl mx-auto">
             <h1 className="text-6xl font-serif text-parchment-light mb-2 tracking-wider">Gemini Empires</h1>
             
             {isNaming ? (

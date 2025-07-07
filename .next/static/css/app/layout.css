@@ -1838,6 +1838,18 @@ video {
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
 }
+.text-\[\#f59e0b\] {
+  --tw-text-opacity: 1;
+  color: rgb(245 158 11 / var(--tw-text-opacity, 1));
+}
+.text-blue-400 {
+  --tw-text-opacity: 1;
+  color: rgb(96 165 250 / var(--tw-text-opacity, 1));
+}
+.text-purple-400 {
+  --tw-text-opacity: 1;
+  color: rgb(192 132 252 / var(--tw-text-opacity, 1));
+}
 .underline-offset-4 {
   text-underline-offset: 4px;
 }

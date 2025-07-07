@@ -1,12 +1,9 @@
 
 import React from 'react';
-import { Target } from 'lucide-react';
+import { Target, Gem, FlaskConical, Wheat } from 'lucide-react';
 
 export const FoodIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
-        <path fill="#f59e0b" d="M19.78,11.78A5.5,5.5,0,0,0,12,6,5.5,5.5,0,0,0,6.22,11.78a8,8,0,0,0,0,8.44h13.56A8,8,0,0,0,19.78,11.78Z" />
-        <path fill="#d97706" d="M19.78,11.78a5.5,5.5,0,0,0-2.33-4.14,5.45,5.45,0,0,1-2.95,5.32,2.5,2.5,0,0,1-5,0,5.45,5.45,0,0,1-2.95-5.32A5.5,5.5,0,0,0,4.22,11.78,8,8,0,0,0,4,20.22h16A8,8,0,0,0,19.78,11.78Z" />
-    </svg>
+   <Wheat className="w-full h-full text-[#f59e0b]" />
 );
 
 export const WoodIcon: React.FC = () => (
@@ -36,6 +33,15 @@ export const StoneIcon: React.FC = () => (
       <path fill="#a8a29e" d="M9.8,11.3a5,5,0,0,0-7.1-7.1L2,4.9a1,1,0,0,0,0,1.4l6.1,6.1a1.4,1.4,0,0,0,1,.4,1.3,1.3,0,0,0,.6,0l3.5-.6a1,1,0,0,0,.1-2Z"/>
     </svg>
 );
+
+export const CrystalIcon: React.FC = () => (
+    <Gem className="w-full h-full text-blue-400" />
+);
+
+export const ManaIcon: React.FC = () => (
+    <FlaskConical className="w-full h-full text-purple-400" />
+);
+
 
 export const PopulationIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">

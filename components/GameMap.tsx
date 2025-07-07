@@ -2,8 +2,9 @@
 
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfig, PlayerActionState, ResourceNode, ResourceNodeType, Units, Villager } from '../types';
+import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfig, PlayerActionState, ResourceNode, Units, Villager } from '../types';
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 import { VillagerIcon } from './icons/ResourceIcons';
@@ -36,8 +37,8 @@ const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingConf
     );
 };
 
-const ResourceNodeTooltip: React.FC<{ node: ResourceNode; gatherInfo: Record<ResourceNodeType, { rate: number }>; villagerCount: number }> = ({ node, gatherInfo, villagerCount }) => {
-    const gatherRate = villagerCount > 0 ? villagerCount * gatherInfo[node.type].rate * (node.richness || 1) : 0;
+const ResourceNodeTooltip: React.FC<{ node: ResourceNode; gatherInfo: Record<string, { rate: number }>; villagerCount: number }> = ({ node, gatherInfo, villagerCount }) => {
+    const gatherRate = villagerCount > 0 ? villagerCount * (gatherInfo[node.type]?.rate || 0) * (node.richness || 1) : 0;
     
     return (
         <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
@@ -68,7 +69,7 @@ interface GameMapProps {
     units: Units;
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
     onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
-    gatherInfo: Record<ResourceNodeType, { rate: number }>;
+    gatherInfo: Record<string, { rate: number }>;
 }
 
 const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, units, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {

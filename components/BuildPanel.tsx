@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { BuildingConfig, BuildingType, Resources, BuildingCosts } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, ClockIcon, BuildIcon } from './icons/ResourceIcons';
-import { buildingIconMap } from './icons/iconRegistry';
+import { ClockIcon, BuildIcon } from './icons/ResourceIcons';
+import { buildingIconMap, resourceIconMap } from './icons/iconRegistry';
 
 interface BuildPanelProps {
     isOpen: boolean;
@@ -18,8 +18,8 @@ const CostDisplay: React.FC<{ cost: BuildingCosts, resources: Resources }> = ({ 
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
             {(Object.entries(cost) as [keyof Resources, number][]).map(([resource, amount]) => {
                 if (!amount) return null;
-                const hasEnough = resources[resource] >= amount;
-                const Icon = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[resource];
+                const hasEnough = (resources[resource] || 0) >= amount;
+                const Icon = resourceIconMap[resource] || resourceIconMap.default;
                 return (
                     <span key={resource} className={`flex items-center ${hasEnough ? '' : 'text-brand-red'}`}>
                         <div className="w-4 h-4"><Icon /></div>
@@ -63,7 +63,7 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
     const { anchorRect: currentAnchor } = currentData;
     if (!currentAnchor) return null;
 
-    const isAffordable = selectedBuilding ? Object.entries(selectedBuilding.cost).every(([res, cost]) => resources[res as keyof Resources] >= (cost || 0)) : false;
+    const isAffordable = selectedBuilding ? Object.entries(selectedBuilding.cost).every(([res, cost]) => (resources[res as keyof Resources] || 0) >= (cost || 0)) : false;
 
     const buildLimit = selectedBuilding ? (selectedBuilding.isUnique ? 1 : selectedBuilding.buildLimit || 0) : 0;
     const isAtLimit = selectedBuilding ? buildLimit > 0 && (buildingCounts[selectedBuilding.id] || 0) >= buildLimit : false;

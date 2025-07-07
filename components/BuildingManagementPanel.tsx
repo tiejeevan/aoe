@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask, BuildingUpgradePath } from '../types';
-import { FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
+import { AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
-import { unitIconMap } from './icons/iconRegistry';
+import { unitIconMap, resourceIconMap } from './icons/iconRegistry';
 import { Trash2, Wrench, ChevronsUp, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
 import { Button } from '@/src/components/ui/button';
@@ -29,12 +29,12 @@ interface BuildingManagementPanelProps {
     anchorRect: DOMRect | null;
 }
 
-const CostDisplay: React.FC<{ cost: { [key in keyof Resources]?: number }, resources: Resources, isUpgradeCost?: boolean }> = ({ cost, resources, isUpgradeCost }) => (
+const CostDisplay: React.FC<{ cost: { [key: string]: number }, resources: Resources, isUpgradeCost?: boolean }> = ({ cost, resources, isUpgradeCost }) => (
     <div className={`flex flex-wrap ${isUpgradeCost ? 'gap-x-2' : 'gap-x-3 gap-y-1'} text-xs`}>
-        {(Object.entries(cost) as [keyof Resources, number][]).map(([resource, amount]) => {
+        {(Object.entries(cost)).map(([resource, amount]) => {
             if (!amount) return null;
-            const hasEnough = resources[resource] >= amount;
-            const Icon = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[resource];
+            const hasEnough = (resources[resource] || 0) >= amount;
+            const Icon = resourceIconMap[resource] || resourceIconMap.default;
             return (
                 <span key={resource} className={`flex items-center ${hasEnough ? '' : 'text-brand-red'}`}>
                     <div className="w-4 h-4"><Icon /></div>
@@ -71,7 +71,7 @@ const UpgradePopoverContent: React.FC<{
                         const targetBuilding = buildingList.find(b => b.id === path.id);
                         if (!targetBuilding) return null;
                         
-                        const canAfford = Object.entries(path.cost).every(([res, cost]) => resources[res as keyof Resources] >= (cost || 0));
+                        const canAfford = Object.entries(path.cost).every(([res, cost]) => (resources[res as keyof Resources] || 0) >= (cost || 0));
 
                         return (
                             <div key={path.id} className="sci-fi-unit-row !p-2 flex items-center justify-between gap-2">
@@ -231,12 +231,12 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     
     const villagerTrainCount = trainCounts['villager'] || 1;
     const totalVillagerCost = { food: 50 * villagerTrainCount };
-    const canAffordVillagers = resources.food >= totalVillagerCost.food;
+    const canAffordVillagers = (resources['food'] || 0) >= totalVillagerCost.food;
     const hasPopForVillagers = popSpace >= villagerTrainCount;
     const canTrainVillagers = canAffordVillagers && hasPopForVillagers && !activeVillagerTask;
 
     const getTrainVillagerTooltip = () => { if (activeVillagerTask) return 'Training in progress...'; if (!hasPopForVillagers) return `Need ${villagerTrainCount - popSpace} more housing.`; if (!canAffordVillagers) return 'Insufficient Food.'; return `Train ${villagerTrainCount} Villager(s)`; };
-    const getAdvanceAgeTooltip = () => { if (activeAgeTask) return 'Advancement in progress.'; if (resources.food < 500 || resources.gold < 200) return 'Insufficient resources to advance.'; return 'Advance to the next age (60s)'; };
+    const getAdvanceAgeTooltip = () => { if (activeAgeTask) return 'Advancement in progress.'; if ((resources['food'] || 0) < 500 || (resources['gold'] || 0) < 200) return 'Insufficient resources to advance.'; return 'Advance to the next age (60s)'; };
     
     const panelWidth = 384; const panelHeightEstimate = 400; const panelGap = 8;
     const panelStyle: React.CSSProperties = {};
@@ -284,7 +284,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                                 <div className="sci-fi-unit-row !p-2 flex items-center gap-3 mt-2">
                                     <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-gold"><AgeIcon/></div>
                                     <div className="flex-grow"><CostDisplay cost={{ food: 500, gold: 200 }} resources={resources} /></div>
-                                    <div className="relative group"><button onClick={onAdvanceAge} disabled={!!activeAgeTask || resources.food < 500 || resources.gold < 200} className="sci-fi-action-button"><div className="w-6 h-6"><AgeIcon /></div></button><div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getAdvanceAgeTooltip()}</div></div>
+                                    <div className="relative group"><button onClick={onAdvanceAge} disabled={!!activeAgeTask || (resources['food'] || 0) < 500 || (resources['gold'] || 0) < 200} className="sci-fi-action-button"><div className="w-6 h-6"><AgeIcon /></div></button><div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getAdvanceAgeTooltip()}</div></div>
                                 </div>
                             )}
                         </>
@@ -295,7 +295,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                         const activeTrainTask = activeTasks.find(t => t.type === 'train_military' && t.payload?.unitType === unitToTrain?.id);
                         const hasPopCapacity = popSpace >= trainCount;
                         const totalUnitCost = Object.entries(unitToTrain.cost).reduce((acc, [res, val]) => ({ ...acc, [res]: (val || 0) * trainCount }), {} as any);
-                        const canAffordUnit = Object.entries(totalUnitCost).every(([res, cost]) => resources[res as keyof Resources] >= (cost as number));
+                        const canAffordUnit = Object.entries(totalUnitCost).every(([res, cost]) => (resources[res as keyof Resources] || 0) >= (cost as number));
                         const canTrainUnit = canAffordUnit && hasPopCapacity && !activeTrainTask;
                         const getTrainUnitTooltip = () => { if (activeTrainTask) return 'Training in progress...'; if (!hasPopCapacity) return `Need ${trainCount - popSpace} more housing.`; if (!canAffordUnit) return 'Insufficient Resources.'; return `Train ${trainCount} ${unitToTrain.name}(s)`; };
 

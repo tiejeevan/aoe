@@ -1,5 +1,5 @@
-import { BarracksIcon, HouseIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, TownCenterIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon } from './ResourceIcons';
-import { Package } from 'lucide-react';
+import { BarracksIcon, HouseIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, TownCenterIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, FoodIcon, WoodIcon, GoldIcon, StoneIcon, CrystalIcon, ManaIcon } from './ResourceIcons';
+import { Package, Sprout } from 'lucide-react';
 
 export const buildingIconMap: Record<string, React.FC> = {
     houses: HouseIcon,
@@ -19,4 +19,14 @@ export const unitIconMap: Record<string, React.FC> = {
     knight: KnightIcon,
     catapult: CatapultIcon,
     default: SwordIcon,
+};
+
+export const resourceIconMap: Record<string, React.FC> = {
+    food: FoodIcon,
+    wood: WoodIcon,
+    gold: GoldIcon,
+    stone: StoneIcon,
+    crystal: CrystalIcon,
+    mana: ManaIcon,
+    default: Sprout,
 };

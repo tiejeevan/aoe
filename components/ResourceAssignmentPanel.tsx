@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { ResourceNode, ResourceNodeType, GameTask, BuildingConfig, Units } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, VillagerIcon, ClockIcon, GatherIcon, BuildIcon } from './icons/ResourceIcons';
+import type { ResourceNode, GameTask, BuildingConfig, Units } from '../types';
+import { VillagerIcon, ClockIcon, GatherIcon, BuildIcon } from './icons/ResourceIcons';
 import { iconMap } from './GameUI';
 import { Undo2 } from 'lucide-react';
+import { resourceIconMap } from './icons/iconRegistry';
 
 interface ResourceAssignmentPanelProps {
     isOpen: boolean;
@@ -12,7 +13,7 @@ interface ResourceAssignmentPanelProps {
     idleVillagerCount: number;
     onAssignVillagers: (targetId: string, count: number) => void;
     onRecallVillagers: (targetId: string, count: number, type: 'resource' | 'construction') => void;
-    gatherInfo: Record<ResourceNodeType, { rate: number }>;
+    gatherInfo: Record<string, { rate: number }>;
     buildingList: BuildingConfig[];
     units: Units;
     anchorRect: DOMRect | null;
@@ -80,8 +81,8 @@ const ResourceAssignmentPanel: React.FC<ResourceAssignmentPanelProps> = (props) 
         const node = currentTarget as ResourceNode;
         const assignedVillagersCount = currentUnits.villagers.filter(v => v.currentTask === `gather-${node.id}`).length;
         title = `Gather ${node.type}`;
-        const IconComponent = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[node.type];
-        MainIcon = IconComponent ? <IconComponent /> : <GatherIcon />;
+        const IconComponent = resourceIconMap[node.type] || resourceIconMap.default;
+        MainIcon = <IconComponent />;
         const currentRate = assignedVillagersCount * (gatherInfo[node.type]?.rate || 0);
         InfoIcons = (
             <>

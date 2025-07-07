@@ -1,11 +1,12 @@
-import type { FullGameState, AgeConfig, BuildingConfig, UnitConfig } from '../types';
+import type { FullGameState, AgeConfig, BuildingConfig, UnitConfig, ResourceConfig } from '../types';
 
 const DB_NAME = 'GeminiEmpiresDB';
 const GAME_STATE_STORE_NAME = 'gameState';
 const AGES_CONFIG_STORE_NAME = 'ageConfigurations';
 const BUILDING_CONFIG_STORE_NAME = 'buildingConfigurations';
 const UNIT_CONFIG_STORE_NAME = 'unitConfigurations';
-const DB_VERSION = 5; // Incremented version
+const RESOURCE_CONFIG_STORE_NAME = 'resourceConfigurations'; // New store
+const DB_VERSION = 6; // Incremented version
 
 const openDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -24,6 +25,9 @@ const openDB = (): Promise<IDBDatabase> => {
             }
              if (!db.objectStoreNames.contains(UNIT_CONFIG_STORE_NAME)) {
                 db.createObjectStore(UNIT_CONFIG_STORE_NAME, { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains(RESOURCE_CONFIG_STORE_NAME)) {
+                db.createObjectStore(RESOURCE_CONFIG_STORE_NAME, { keyPath: 'id' });
             }
         };
 
@@ -287,5 +291,64 @@ export const deleteUnitConfig = async (id: string): Promise<void> => {
         });
     } catch (error) {
         console.error("Failed to delete unit config:", error);
+    }
+};
+
+
+// --- Resource Configuration Functions ---
+
+export const saveResourceConfig = async (resource: ResourceConfig): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(RESOURCE_CONFIG_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(RESOURCE_CONFIG_STORE_NAME);
+        store.put(resource);
+        
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to save resource config:", error);
+    }
+};
+
+export const getAllResourceConfigs = async (): Promise<ResourceConfig[]> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(RESOURCE_CONFIG_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(RESOURCE_CONFIG_STORE_NAME);
+        const request = store.getAll();
+        
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                const resources = request.result as ResourceConfig[];
+                resources.sort((a, b) => a.order - b.order);
+                resolve(resources);
+            };
+            request.onerror = () => {
+                console.error("Failed to load resource configs:", request.error);
+                reject(request.error);
+            };
+        });
+    } catch (error) {
+        console.error("Failed to open DB for loading resource configs:", error);
+        return [];
+    }
+};
+
+export const deleteResourceConfig = async (id: string): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(RESOURCE_CONFIG_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(RESOURCE_CONFIG_STORE_NAME);
+        store.delete(id);
+        
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to delete resource config:", error);
     }
 };

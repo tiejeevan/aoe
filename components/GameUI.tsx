@@ -1,11 +1,12 @@
 
 
+
 import React from 'react';
-import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitConfig, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice, GameItem } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, VillagerIcon, SwordIcon, AgeIcon, EventIcon, SystemIcon, WatchTowerIcon, ExitIcon } from './icons/ResourceIcons';
+import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitConfig, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, GameEvent, GameEventChoice, GameItem, ResourceConfig } from '../types';
+import { PopulationIcon, VillagerIcon, SwordIcon, AgeIcon, EventIcon, SystemIcon, WatchTowerIcon, ExitIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText, Package as PackageIcon } from 'lucide-react';
-import { unitIconMap } from './icons/iconRegistry';
+import { resourceIconMap, unitIconMap } from './icons/iconRegistry';
 
 interface GameUIProps {
     civilization: Civilization;
@@ -33,11 +34,12 @@ interface GameUIProps {
     resourceNodes: ResourceNode[];
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
     onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
-    gatherInfo: Record<ResourceNodeType, { rate: number }>;
+    gatherInfo: Record<string, { rate: number }>;
     currentEvent: GameEvent | null;
     onEventChoice: (choice: GameEventChoice) => void;
     inventory: GameItem[];
     onOpenInventoryPanel: (rect: DOMRect) => void;
+    resourceList: ResourceConfig[];
 }
 
 const ResourceChange: React.FC<{ change: number }> = ({ change }) => {
@@ -63,7 +65,7 @@ const HeaderStat: React.FC<{ icon: React.ReactNode; value: string | number; delt
 
 export const iconMap: Record<string, React.ReactNode> = {
     ...unitIconMap,
-    food: <FoodIcon />, wood: <WoodIcon />, gold: <GoldIcon />, stone: <StoneIcon />,
+    ...resourceIconMap,
     villager: <VillagerIcon />, 
     age: <AgeIcon />, event: <EventIcon />, system: <SystemIcon />,
     item: <PackageIcon />,
@@ -77,7 +79,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel
+        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel, resourceList
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -115,10 +117,15 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                 <HeaderStat icon={<PopulationIcon/>} value={`${population.current}/${population.capacity}`} tooltip="Population / Capacity" colorClass="text-brand-blue" />
 
                 <div className="flex items-center space-x-2">
-                    <HeaderStat icon={<FoodIcon/>} value={Math.floor(resources.food)} delta={resourceDeltas.food} tooltip="Food"/>
-                    <HeaderStat icon={<WoodIcon/>} value={Math.floor(resources.wood)} delta={resourceDeltas.wood} tooltip="Wood"/>
-                    <HeaderStat icon={<GoldIcon/>} value={Math.floor(resources.gold)} delta={resourceDeltas.gold} tooltip="Gold"/>
-                    <HeaderStat icon={<StoneIcon/>} value={Math.floor(resources.stone)} delta={resourceDeltas.stone} tooltip="Stone"/>
+                   {resourceList.filter(r => r.isActive).map(resource => (
+                        <HeaderStat 
+                            key={resource.id}
+                            icon={React.createElement(resourceIconMap[resource.iconId] || resourceIconMap.default)} 
+                            value={Math.floor(resources[resource.id] || 0)} 
+                            delta={resourceDeltas[resource.id]} 
+                            tooltip={resource.name}
+                        />
+                   ))}
                     
                     <div className="relative group pl-4">
                          <button 

@@ -13,6 +13,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -31,14 +32,8 @@ export interface Civilization {
     bannerUrl: string;
 }
 
-export interface Resources {
-    food: number;
-    wood: number;
-    gold: number;
-    stone: number;
-}
-
-export type ResourceDeltas = Partial<Resources>;
+export type Resources = Record<string, number>;
+export type ResourceDeltas = Record<string, number>;
 
 export interface Villager {
     id: string;
@@ -69,16 +64,7 @@ export interface BuildingInstance {
     currentHp: number;
 }
 
-export interface Buildings {
-    houses: BuildingInstance[];
-    barracks: BuildingInstance[];
-    archeryRange: BuildingInstance[];
-    stable: BuildingInstance[];
-    siegeWorkshop: BuildingInstance[];
-    blacksmith: BuildingInstance[];
-    watchTower: BuildingInstance[];
-    [key: string]: BuildingInstance[]; // Allow for custom building types
-}
+export type Buildings = Record<string, BuildingInstance[]>;
 
 export interface GameStatePayload {
     civ: Civilization;
@@ -94,7 +80,7 @@ export interface GameStatePayload {
     buildings: { [key in BuildingType]?: number };
 }
 
-export type BuildingCosts = { [key in keyof Resources]?: number };
+export type BuildingCosts = Record<string, number>;
 
 export type ItemRarity = 'Common' | 'Epic' | 'Legendary' | 'Spiritual';
 
@@ -106,7 +92,7 @@ export interface GameItem {
 }
 
 export type Reward = 
-    { type: 'resource', resource: keyof Resources, amount: number | [number, number] } |
+    { type: 'resource', resource: string, amount: number | [number, number] } |
     { type: 'item', itemId: string, amount: number } |
     { type: 'unit', unitType: 'villager', amount: number } |
     { type: 'building', buildingId: string, amount: number };
@@ -124,7 +110,7 @@ export interface GameEvent {
     choices: GameEventChoice[];
 }
 
-export type LogIconType = keyof Resources | 'villager' | MilitaryUnitType | 'age' | 'event' | 'system' | BuildingType | string | 'item';
+export type LogIconType = string;
 
 export interface GameLogEntry {
     id: string;
@@ -212,11 +198,9 @@ export interface UINotification {
     message: string;
 }
 
-export type ResourceNodeType = 'food' | 'wood' | 'gold' | 'stone';
-
 export interface ResourceNode {
   id: string;
-  type: ResourceNodeType;
+  type: string; // Now a string to be dynamic
   position: { x: number; y: number; };
   amount: number;
   richness?: number; // e.g., 1 for normal, 2 for rich
@@ -263,7 +247,7 @@ export interface ActiveBuffs {
     buildTimeReduction?: { percentage: number; uses: number };
     trainTimeReduction?: { percentage: number; uses: number };
     resourceBoost?: {
-        resource: keyof Resources;
+        resource: string;
         multiplier: number;
         endTime: number;
     }[];
@@ -308,7 +292,7 @@ export interface BuildingConfig {
     // Comprehensive Attributes
     populationCapacity?: number;
     garrisonCapacity?: number;
-    generatesResource?: keyof Resources | 'none';
+    generatesResource?: string | 'none';
     generationRate?: number; // per minute
     attack?: number;
     attackRate?: number; // attacks per second
@@ -346,4 +330,28 @@ export interface FullGameState {
     resourceNodes: ResourceNode[];
     inventory: GameItem[];
     activeBuffs: ActiveBuffs;
+}
+
+export type ResourceRarity = 'Abundant' | 'Common' | 'Uncommon' | 'Rare' | 'Strategic';
+
+export interface ResourceConfig {
+    id: string;
+    name: string;
+    description: string;
+    iconId: string;
+    isActive: boolean;
+    isPredefined: boolean;
+    order: number;
+
+    // --- Economy & Spawning ---
+    rarity: ResourceRarity;
+    initialAmount: number;
+    baseGatherRate: number;
+    spawnInSafeZone: boolean;
+    isTradable: boolean;
+
+    // --- Advanced Mechanics (Future-Proofing) ---
+    decaysOverTime?: boolean;
+    decayRate?: number; // percentage per minute
+    storageBuildingId?: string; // ID of building that increases capacity
 }

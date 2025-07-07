@@ -4,8 +4,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '../../../types';
-import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '../../../services/dbService';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '../../types';
+import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '../../services/dbService';
 import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target, WandSparkles, LoaderCircle } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
@@ -17,16 +17,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ScrollArea } from '../../components/ui/scroll-area';
-import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
-import { Alert, AlertDescription, AlertTitle } from '@/src/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import TechnologyGeneratorCard from './components/TechnologyGeneratorCard';
 
 
-import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
-import { INITIAL_UNITS } from '../../../data/unitInfo';
-import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
-import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../../components/icons/iconRegistry';
-import { INITIAL_AGES } from '../../../data/ageInfo';
-import { INITIAL_RESEARCH } from '../../../data/researchInfo';
+import { INITIAL_BUILDINGS } from '../../data/buildingInfo';
+import { INITIAL_UNITS } from '../../data/unitInfo';
+import { INITIAL_RESOURCES } from '../../data/resourceInfo';
+import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../components/icons/iconRegistry';
+import { INITIAL_AGES } from '../../data/ageInfo';
+import { INITIAL_RESEARCH } from '../../data/researchInfo';
 import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '../actions';
 
 const BuildingEditor: React.FC<{
@@ -1303,31 +1304,13 @@ const AdminPage: React.FC = () => {
                                         </Button>
                                     </CardContent>
                                 </Card>
-
-                                <Card className="bg-stone-dark/20 border-stone-light/20">
-                                    <CardHeader>
-                                        <CardTitle className="text-base font-serif">Technology Generator</CardTitle>
-                                        <CardDescription className="text-parchment-dark">Generate a single new technology based on a theme.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="flex items-end gap-4">
-                                        <div className="flex-grow">
-                                            <Label htmlFor="dge-tech-theme">Theme</Label>
-                                            <Input 
-                                                id="dge-tech-theme" 
-                                                type="text" 
-                                                value={dgeTechTheme} 
-                                                onChange={(e) => setDgeTechTheme(e.target.value)}
-                                                placeholder="e.g., Naval Combat"
-                                                className="sci-fi-input" 
-                                                disabled={isGenerating}
-                                            />
-                                        </div>
-                                        <Button onClick={handleGenerateTechnology} disabled={isGenerating}>
-                                            {isGenerating ? <LoaderCircle className="mr-2 animate-spin"/> : <WandSparkles className="mr-2" />}
-                                            {isGenerating ? 'Generating...' : 'Generate'}
-                                        </Button>
-                                    </CardContent>
-                                </Card>
+                                
+                                <TechnologyGeneratorCard
+                                  theme={dgeTechTheme}
+                                  onThemeChange={setDgeTechTheme}
+                                  onGenerate={handleGenerateTechnology}
+                                  isGenerating={isGenerating}
+                                />
                                 
                                 {dgeError && (
                                     <div className="md:col-span-2 lg:col-span-3">

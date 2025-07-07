@@ -249,7 +249,7 @@ const AdminPage: React.FC = () => {
         await saveBuildingConfig({ ...building, isActive: !building.isActive }); await fetchBuildings();
     };
     const handleSaveBuilding = async (buildingToSave: BuildingConfig) => {
-        await saveBuildingConfig(buildingToSave);
+        await saveAgeConfig(buildingToSave);
         setEditingBuilding(null);
         await fetchBuildings();
     };
@@ -282,9 +282,16 @@ const AdminPage: React.FC = () => {
                                             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
                                                 {ages.map((age, index) => (
                                                     <div key={age.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-2 flex-grow">
-                                                            <div className="flex flex-col"><button onClick={() => handleMoveAge(index, 'up')} disabled={index === 0} className="disabled:opacity-20 hover:text-brand-gold"><ArrowUp className="w-4 h-4" /></button><button onClick={() => handleMoveAge(index, 'down')} disabled={index === ages.length - 1} className="disabled:opacity-20 hover:text-brand-gold"><ArrowDown className="w-4 h-4" /></button></div>
-                                                            <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{age.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{age.name}</h3><p className="text-sm text-parchment-dark">{age.description}</p></div>
+                                                        <div className="flex items-center gap-4 flex-grow">
+                                                            <span className="font-serif text-2xl text-stone-light/80 w-6 text-center">{index + 1}.</span>
+                                                            <div className="flex flex-col">
+                                                                <button onClick={() => handleMoveAge(index, 'up')} disabled={index === 0} className="disabled:opacity-20 hover:text-brand-gold"><ArrowUp className="w-4 h-4" /></button>
+                                                                <button onClick={() => handleMoveAge(index, 'down')} disabled={index === ages.length - 1} className="disabled:opacity-20 hover:text-brand-gold"><ArrowDown className="w-4 h-4" /></button>
+                                                            </div>
+                                                            <div className="flex-grow">
+                                                                <h3 className="font-bold flex items-center gap-2">{age.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{age.name}</h3>
+                                                                <p className="text-sm text-parchment-dark">{age.description}</p>
+                                                            </div>
                                                         </div>
                                                         <div className="flex flex-col items-center gap-2">
                                                             <div className="flex items-center space-x-2"><Label htmlFor={`active-age-${age.id}`} className="text-xs">Active</Label><Switch id={`active-age-${age.id}`} checked={age.isActive} onCheckedChange={() => handleToggleAgeActive(age)} /></div>

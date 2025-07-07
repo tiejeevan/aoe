@@ -1,34 +1,33 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '../../types';
-import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '../../services/dbService';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '@/types';
+import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '@/services/dbService';
 import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target, WandSparkles, LoaderCircle } from 'lucide-react';
-import { Switch } from '../../components/ui/switch';
-import { Label } from '../../components/ui/label';
-import { Input } from '../../components/ui/input';
-import { Textarea } from '../../components/ui/textarea';
-import { Button } from '../../components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Checkbox } from '../../components/ui/checkbox';
-import { ScrollArea } from '../../components/ui/scroll-area';
-import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
-import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import TechnologyGeneratorCard from './components/TechnologyGeneratorCard';
 
 
-import { INITIAL_BUILDINGS } from '../../data/buildingInfo';
-import { INITIAL_UNITS } from '../../data/unitInfo';
-import { INITIAL_RESOURCES } from '../../data/resourceInfo';
-import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../components/icons/iconRegistry';
-import { INITIAL_AGES } from '../../data/ageInfo';
-import { INITIAL_RESEARCH } from '../../data/researchInfo';
-import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '../actions';
+import { INITIAL_BUILDINGS } from '@/data/buildingInfo';
+import { INITIAL_UNITS } from '@/data/unitInfo';
+import { INITIAL_RESOURCES } from '@/data/resourceInfo';
+import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '@/components/icons/iconRegistry';
+import { INITIAL_AGES } from '@/data/ageInfo';
+import { INITIAL_RESEARCH } from '@/data/researchInfo';
+import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '@/src/app/actions';
 
 const BuildingEditor: React.FC<{
     building: BuildingConfig;

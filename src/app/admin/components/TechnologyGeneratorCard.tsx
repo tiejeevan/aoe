@@ -1,10 +1,11 @@
+
 'use client';
 
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/card';
-import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
-import { Label } from '../../../components/ui/label';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { WandSparkles, LoaderCircle } from 'lucide-react';
 
 interface TechnologyGeneratorCardProps {

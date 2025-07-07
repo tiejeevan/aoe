@@ -3,6 +3,7 @@
     "target": "ES2020",
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
+    "baseUrl": ".",
     "module": "ESNext",
     "lib": [
       "ES2020",
@@ -26,7 +27,7 @@
     "noUncheckedSideEffectImports": true,
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     },
     "incremental": true,

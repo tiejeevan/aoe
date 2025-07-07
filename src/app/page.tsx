@@ -632,12 +632,22 @@ const GamePage: React.FC = () => {
 
     const handleDemolishBuilding = (type: BuildingType | string, id: string) => {
         if (type === 'townCenter') { addNotification("The Town Center is the heart of your civilization and cannot be demolished."); return; }
-        if(activeTasks.some(t => t.payload?.buildingId === id)) { addNotification("Cannot demolish a building with an active task."); return; }
+        
+        // Expanded check for active tasks related to this building
+        if (activeTasks.some(task => 
+            (task.payload?.buildingId === id) || 
+            (task.type === 'upgrade_building' && task.payload?.originalBuildingId === id)
+        )) { 
+            addNotification("Cannot demolish a building with an active task (e.g., training or upgrading)."); 
+            return; 
+        }
+
         const buildingInfo = buildingList.find(b => b.id === type);
         const buildingInstance = buildings[type as string].find(b => b.id === id);
         if (!buildingInfo || !buildingInstance) return;
         
         const capacityWithoutThisBuilding = populationCapacity - (buildingInfo.populationCapacity || 0);
+        // Corrected population check
         if ((buildingInfo.populationCapacity || 0) > 0 && population.current > capacityWithoutThisBuilding) {
              addNotification("Cannot demolish this building, your people would be homeless."); return;
         }
@@ -973,3 +983,4 @@ const GamePage: React.FC = () => {
 };
 
 export default GamePage;
+

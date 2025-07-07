@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -26,7 +27,7 @@ import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
 import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../../components/icons/iconRegistry';
 import { INITIAL_AGES } from '../../../data/ageInfo';
 import { INITIAL_RESEARCH } from '../../../data/researchInfo';
-import { generateResourcesAction, generateAgesAction } from '../actions';
+import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '../actions';
 
 const BuildingEditor: React.FC<{
     building: BuildingConfig;
@@ -751,6 +752,7 @@ const AdminPage: React.FC = () => {
     // DGE State
     const [dgeResourceCount, setDgeResourceCount] = useState<number>(3);
     const [dgeAgeCount, setDgeAgeCount] = useState<number>(4);
+    const [dgeTechTheme, setDgeTechTheme] = useState<string>('Economic');
     const [isGenerating, setIsGenerating] = useState<boolean>(false);
     const [dgeError, setDgeError] = useState<string | null>(null);
 
@@ -866,7 +868,7 @@ const AdminPage: React.FC = () => {
 
     useEffect(() => {
         const loadAll = async () => {
-            await fetchResources();
+            const allResources = await fetchResources();
             const allAges = await fetchAges();
             await fetchBuildings(allAges);
             await fetchUnits();
@@ -1018,6 +1020,46 @@ const AdminPage: React.FC = () => {
             await fetchAges();
         } catch (error) {
             setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during age generation.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+    
+    const handleGenerateTechnology = async () => {
+        setIsGenerating(true);
+        setDgeError(null);
+        try {
+            const existingTechNames = research.map(r => r.name);
+            const response = await generateTechnologyAction({ theme: dgeTechTheme, existingTechNames });
+
+            if (response.error) throw new Error(response.error);
+            if (!response.data) throw new Error("No technology data returned from AI.");
+
+            const genTech = response.data;
+            const highestOrder = research.length > 0 ? Math.max(...research.map(r => r.order)) : 0;
+            
+            const newTech: ResearchConfig = {
+                id: `custom-tech-${genTech.name.toLowerCase().replace(/\s+/g, '_')}-${Date.now()}`,
+                name: genTech.name,
+                description: genTech.description,
+                iconId: genTech.iconId,
+                cost: genTech.cost,
+                researchTime: genTech.researchTime,
+                prerequisites: [],
+                effects: [],
+                treeId: genTech.treeId.toLowerCase().replace(/\s+/g, '_'),
+                treeName: genTech.treeName,
+                requiredBuildingId: 'blacksmith', // Default, can be changed by admin
+                ageRequirement: ages[0]?.name || 'Nomadic Age', // Default
+                isActive: true,
+                isPredefined: false,
+                order: highestOrder + 1,
+            };
+
+            await saveResearchConfig(newTech);
+            await fetchResearch(ages); // Refresh the list
+        } catch (error) {
+            setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during technology generation.');
         } finally {
             setIsGenerating(false);
         }
@@ -1210,7 +1252,7 @@ const AdminPage: React.FC = () => {
                                 <CardTitle className="text-brand-gold flex items-center gap-2"><WandSparkles /> Data Generator Engine (DGE)</CardTitle>
                                 <CardDescription className="text-parchment-dark">Use AI to procedurally generate new content for your game.</CardDescription>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <Card className="bg-stone-dark/20 border-stone-light/20">
                                     <CardHeader>
                                         <CardTitle className="text-base font-serif">Resource Generator</CardTitle>
@@ -1261,16 +1303,41 @@ const AdminPage: React.FC = () => {
                                         </Button>
                                     </CardContent>
                                 </Card>
+
+                                <Card className="bg-stone-dark/20 border-stone-light/20">
+                                    <CardHeader>
+                                        <CardTitle className="text-base font-serif">Technology Generator</CardTitle>
+                                        <CardDescription className="text-parchment-dark">Generate a single new technology based on a theme.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="flex items-end gap-4">
+                                        <div className="flex-grow">
+                                            <Label htmlFor="dge-tech-theme">Theme</Label>
+                                            <Input 
+                                                id="dge-tech-theme" 
+                                                type="text" 
+                                                value={dgeTechTheme} 
+                                                onChange={(e) => setDgeTechTheme(e.target.value)}
+                                                placeholder="e.g., Naval Combat"
+                                                className="sci-fi-input" 
+                                                disabled={isGenerating}
+                                            />
+                                        </div>
+                                        <Button onClick={handleGenerateTechnology} disabled={isGenerating}>
+                                            {isGenerating ? <LoaderCircle className="mr-2 animate-spin"/> : <WandSparkles className="mr-2" />}
+                                            {isGenerating ? 'Generating...' : 'Generate'}
+                                        </Button>
+                                    </CardContent>
+                                </Card>
                                 
                                 {dgeError && (
-                                    <div className="md:col-span-2">
+                                    <div className="md:col-span-2 lg:col-span-3">
                                         <Alert variant="destructive">
                                             <AlertTitle>Generation Failed</AlertTitle>
                                             <AlertDescription>{dgeError}</AlertDescription>
                                         </Alert>
                                     </div>
                                 )}
-                                 <p className="text-center text-parchment-dark md:col-span-2 mt-4">More generators for Buildings and Research are coming soon!</p>
+                                 <p className="text-center text-parchment-dark md:col-span-2 lg:col-span-3 mt-4">More generators for Buildings and full Research Trees are coming soon!</p>
                             </CardContent>
                         </Card>
                     </TabsContent>

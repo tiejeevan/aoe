@@ -40,6 +40,19 @@ export const PREDEFINED_BANNER_URLS: string[] = [
 
 export const PREDEFINED_EVENTS: GameEvent[] = [
     {
+        message: "A master builder, impressed by your leadership, offers to construct a building for you.",
+        choices: [
+            {
+                text: "Accept their gift (Free Barracks)",
+                successEffects: { rewards: [{ type: 'building', buildingId: 'barracks', amount: 1 }], log: "The master builder quickly erects a new Barracks for your settlement!" }
+            },
+            {
+                text: "Thank them, but decline",
+                successEffects: { rewards: [], log: "You politely decline the generous offer." }
+            }
+        ]
+    },
+    {
         message: "A traveling merchant has arrived, offering a bulk discount on wood.",
         choices: [
             { 
@@ -1424,7 +1437,7 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
             {
                 text: "Accept his teachings (Cost: 50 food)",
                 cost: { food: 50 },
-                successEffects: { rewards: [{ type: 'item', itemId: 'pact_of_plenty', amount: 1 }], log: "Meditation brings focus and efficiency, leading to a pact of plenty." }
+                successEffects: { rewards: [{ type: 'item', itemId: 'pact_of_plenty', amount: 1 }], log: "Meditation brings focus and efficiency, leading to an era of plenty." }
             },
             {
                 text: "We prefer action to inaction",

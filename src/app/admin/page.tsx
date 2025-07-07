@@ -46,7 +46,7 @@ const BuildingEditor: React.FC<{
     const handleInputChange = (field: keyof BuildingConfig, value: any) => {
         setEditedBuilding(prev => ({ ...prev, [field]: value }));
     };
-    const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
+    const handleCostChange = (resource: keyof Resources, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedBuilding(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
     };
@@ -117,7 +117,7 @@ const BuildingEditor: React.FC<{
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                     <Switch
                         id="edit-canTrainUnits"
                         checked={editedBuilding.canTrainUnits}
@@ -358,9 +358,15 @@ const AdminPage: React.FC = () => {
         setNewAgeName(''); setNewAgeDescription('');
         await fetchAges();
     };
-    const handleDeleteAge = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this custom age?')) {
-            await deleteAgeConfig(id); await fetchAges();
+    const handleDeleteAge = async (ageToDelete: AgeConfig) => {
+        const isAgeInUse = buildings.some(b => b.unlockedInAge === ageToDelete.name);
+        if (isAgeInUse) {
+            alert(`Cannot delete "${ageToDelete.name}". One or more buildings are assigned to this age. Please reassign them before deleting.`);
+            return;
+        }
+        if (window.confirm(`Are you sure you want to delete the custom age "${ageToDelete.name}"?`)) {
+            await deleteAgeConfig(ageToDelete.id);
+            await fetchAges();
         }
     };
     const handleToggleAgeActive = async (age: AgeConfig) => {
@@ -392,7 +398,7 @@ const AdminPage: React.FC = () => {
             buildLimit: 0,
             buildTime: 30,
             hp: 1000,
-            unlockedInAge: ages[0]?.name || 'Nomadic Age',
+            unlockedInAge: ages.find(a => a.isActive)?.name || 'Nomadic Age',
             iconId: 'default',
             isActive: true,
             isPredefined: false,
@@ -402,9 +408,20 @@ const AdminPage: React.FC = () => {
         };
         setEditingBuilding(newBuilding);
     };
-    const handleDeleteBuilding = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this custom building?')) {
-            await deleteBuildingConfig(id); await fetchBuildings();
+    const handleDeleteBuilding = async (buildingToDelete: BuildingConfig) => {
+        const isUpgradeTarget = buildings.some(b => b.upgradesTo?.includes(buildingToDelete.id));
+        if (isUpgradeTarget) {
+            alert(`Cannot delete "${buildingToDelete.name}". It is targeted by another building's upgrade path.`);
+            return;
+        }
+        const isRequiredForUnit = units.some(u => u.requiredBuilding === buildingToDelete.id);
+        if (isRequiredForUnit) {
+            alert(`Cannot delete "${buildingToDelete.name}". One or more units require this building for training.`);
+            return;
+        }
+        if (window.confirm(`Are you sure you want to delete the custom building "${buildingToDelete.name}"?`)) {
+            await deleteBuildingConfig(buildingToDelete.id);
+            await fetchBuildings();
         }
     };
     const handleToggleBuildingActive = async (building: BuildingConfig) => {
@@ -418,9 +435,9 @@ const AdminPage: React.FC = () => {
 
     // --- Units Handlers ---
      const handleShowAddUnit = () => {
-        const trainingBuildings = buildings.filter(b => b.canTrainUnits);
+        const trainingBuildings = buildings.filter(b => b.canTrainUnits && b.isActive);
         if (trainingBuildings.length === 0) {
-            alert("Please create a building with 'Can Train Units' enabled before adding a unit.");
+            alert("Please create and activate a building with 'Can Train Units' enabled before adding a unit.");
             return;
         }
         const newUnit: UnitConfig = {
@@ -495,7 +512,7 @@ const AdminPage: React.FC = () => {
                                                         </div>
                                                         <div className="flex flex-col items-center gap-2">
                                                             <div className="flex items-center space-x-2"><Label htmlFor={`active-age-${age.id}`} className="text-xs">Active</Label><Switch id={`active-age-${age.id}`} checked={age.isActive} onCheckedChange={() => handleToggleAgeActive(age)} /></div>
-                                                            {!age.isPredefined && <button onClick={() => handleDeleteAge(age.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full disabled:text-parchment-dark/20 disabled:cursor-not-allowed"><Trash2 className="w-5 h-5" /></button>}
+                                                            {!age.isPredefined && <button onClick={() => handleDeleteAge(age)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full disabled:text-parchment-dark/20 disabled:cursor-not-allowed"><Trash2 className="w-5 h-5" /></button>}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -536,7 +553,7 @@ const AdminPage: React.FC = () => {
                                                 building={editingBuilding} 
                                                 onSave={handleSaveBuilding} 
                                                 onCancel={() => setEditingBuilding(null)} 
-                                                allAges={ages} 
+                                                allAges={ages.filter(a => a.isActive)} 
                                                 allBuildings={buildings}
                                             />
                                         )}
@@ -553,7 +570,7 @@ const AdminPage: React.FC = () => {
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex items-center space-x-2"><Label htmlFor={`active-bld-${b.id}`} className="text-xs">Active</Label><Switch id={`active-bld-${b.id}`} checked={b.isActive} onCheckedChange={() => handleToggleBuildingActive(b)} /></div>
                                                         <Button variant="ghost" size="icon" onClick={() => setEditingBuilding(b)} className="text-parchment-dark/70 hover:text-brand-blue" disabled={!!editingBuilding}><Edit className="w-4 h-4"/></Button>
-                                                        {!b.isPredefined && <button onClick={() => handleDeleteBuilding(b.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                        {!b.isPredefined && <button onClick={() => handleDeleteBuilding(b)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
                                                     </div>
                                                 </div>
                                             ))}
@@ -581,7 +598,7 @@ const AdminPage: React.FC = () => {
                                                 unit={editingUnit} 
                                                 onSave={handleSaveUnit} 
                                                 onCancel={() => setEditingUnit(null)}
-                                                allBuildings={buildings} 
+                                                allBuildings={buildings.filter(b => b.isActive)} 
                                             />
                                         )}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">

@@ -4,6 +4,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -99,7 +100,8 @@ export interface GameItem {
 export type Reward = 
     { type: 'resource', resource: keyof Resources, amount: number | [number, number] } |
     { type: 'item', itemId: string, amount: number } |
-    { type: 'unit', unitType: 'villager', amount: number };
+    { type: 'unit', unitType: 'villager', amount: number } |
+    { type: 'building', buildingId: string, amount: number };
 
 export interface GameEventChoice {
     text: string;

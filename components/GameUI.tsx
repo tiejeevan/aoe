@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType } from '../types';
+import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText } from 'lucide-react';
@@ -32,6 +32,8 @@ interface GameUIProps {
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
     onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
+    currentEvent: GameEvent | null;
+    onEventChoice: (choice: GameEventChoice) => void;
 }
 
 const ResourceChange: React.FC<{ change: number }> = ({ change }) => {
@@ -77,7 +79,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo
+        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -214,10 +216,35 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                         <h2 className="text-2xl font-serif text-center mb-1">Chronicles</h2>
                         <p className="text-center text-parchment-dark text-sm italic mb-3 h-5">{activityStatus}</p>
                         
-                        <div className="bg-black/30 p-4 rounded-lg shadow-inner min-h-[150px] mb-4 flex flex-col justify-center items-center relative overflow-hidden scanning-effect">
-                            <p className="text-center text-brand-blue z-10 font-serif">Awaiting new developments...</p>
-                            <p className="text-center text-parchment-dark/70 text-xs mt-1 z-10 italic">Analyzing historical data streams...</p>
+                        <div className="bg-black/30 p-4 rounded-lg shadow-inner min-h-[150px] mb-4 flex flex-col justify-center items-center relative overflow-hidden">
+                            {currentEvent ? (
+                                <div className="w-full text-center z-10">
+                                    <div className="w-10 h-10 text-brand-gold mb-2 mx-auto">
+                                        <EventIcon />
+                                    </div>
+                                    <h3 className="text-lg font-serif mb-2 text-brand-gold">An Event Occurs</h3>
+                                    <p className="text-parchment-dark mb-4 text-sm min-h-[40px] px-4">{currentEvent.message}</p>
+                                    <div className="flex flex-col sm:flex-row gap-2 justify-center w-full max-w-md mx-auto">
+                                        {currentEvent.choices.map(choice => (
+                                            <button 
+                                                key={choice.text} 
+                                                onClick={() => onEventChoice(choice)} 
+                                                className="sci-fi-button !text-sm !font-serif !px-4 !py-1.5 flex-grow"
+                                            >
+                                                {choice.text}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="absolute inset-0 scanning-effect"></div>
+                                    <p className="text-center text-brand-blue z-10 font-serif">Awaiting new developments...</p>
+                                    <p className="text-center text-parchment-dark/70 text-xs mt-1 z-10 italic">Analyzing historical data streams...</p>
+                                </>
+                            )}
                         </div>
+
 
                         <div className="flex-grow bg-black/30 p-3 rounded-lg overflow-y-auto h-48">
                             {gameLog.map((log, index) => (

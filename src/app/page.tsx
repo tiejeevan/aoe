@@ -16,7 +16,6 @@ import BuildingManagementPanel from '@/components/BuildingManagementPanel';
 import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
 import CivilizationPanel from '@/components/CivilizationPanel';
 import AllBuildingsPanel from '@/components/AllBuildingsPanel';
-import EventPanel from '@/components/EventPanel';
 
 const BUILDINGS_INFO: BuildingInfo[] = [
     { id: 'houses', name: 'House', description: 'Increases population capacity by 5.', cost: { wood: 50 }, isUnique: false, buildTime: 15 },
@@ -501,9 +500,11 @@ const GamePage: React.FC = () => {
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) return;
 
+        // This timer is now independent of other tasks.
         if (!currentEvent) {
             scheduleNextEvent();
         } else if (eventTimerRef.current) {
+            // If an event is showing, we stop the timer until it's resolved.
             clearTimeout(eventTimerRef.current);
         }
 
@@ -1111,6 +1112,8 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO}
+                            currentEvent={currentEvent}
+                            onEventChoice={handleEventChoice}
                         />
                         <BuildPanel 
                             isOpen={buildPanelState.isOpen}
@@ -1175,10 +1178,6 @@ const GamePage: React.FC = () => {
                             activeTasks={activeTasks}
                             onOpenBuildingPanel={handleOpenBuildingPanel}
                             anchorRect={allBuildingsPanel.anchorRect}
-                        />
-                        <EventPanel
-                            event={currentEvent}
-                            onChoice={handleEventChoice}
                         />
                     </>
                 );

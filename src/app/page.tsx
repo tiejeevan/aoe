@@ -5,9 +5,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs } from '@/services/dbService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
+import { INITIAL_AGES } from '@/data/ageInfo';
+import { INITIAL_BUILDINGS } from '@/data/buildingInfo';
+import { INITIAL_UNITS } from '@/data/unitInfo';
 import GameUI from '@/components/GameUI';
 import StartScreen from '@/components/StartScreen';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -32,13 +35,6 @@ const initialBuildingsState: Buildings = {
 };
 
 const MAP_DIMENSIONS = { width: 25, height: 18 };
-
-const FALLBACK_AGES = [
-    { name: 'Nomadic Age', description: 'A scattered tribe, learning to survive.' },
-    { name: 'Feudal Age', description: 'Society organizes under lords and vassals.' },
-    { name: 'Castle Age', description: 'Powerful fortifications and siege weaponry appear.' },
-    { name: 'Imperial Age', description: 'Your civilization becomes a true empire.' },
-];
 
 
 const GamePage: React.FC = () => {
@@ -98,14 +94,49 @@ const GamePage: React.FC = () => {
         
         let allAgeConfigs = await getAllAgeConfigs();
         if (allAgeConfigs.length === 0) {
-            allAgeConfigs = FALLBACK_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
+            allAgeConfigs = [];
+            for (const [index, pa] of INITIAL_AGES.entries()) {
+                 const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
+                 await saveAgeConfig(newPredefinedAge);
+                 allAgeConfigs.push(newPredefinedAge);
+            }
         }
         setMasterAgeList(allAgeConfigs);
 
-        const allBuildingConfigs = await getAllBuildingConfigs();
+        let allBuildingConfigs = await getAllBuildingConfigs();
+        if (allBuildingConfigs.length === 0) {
+            allBuildingConfigs = [];
+            const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || 'Nomadic Age';
+            for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
+                const newPredefinedBuilding: BuildingConfig = {
+                    ...pb,
+                    buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
+                    isActive: true,
+                    isPredefined: true,
+                    order: index,
+                    unlockedInAge: defaultAge, 
+                    iconId: pb.id,
+                };
+                await saveBuildingConfig(newPredefinedBuilding);
+                allBuildingConfigs.push(newPredefinedBuilding);
+            }
+        }
         setMasterBuildingList(allBuildingConfigs);
 
-        const allUnitConfigs = await getAllUnitConfigs();
+        let allUnitConfigs = await getAllUnitConfigs();
+        if (allUnitConfigs.length === 0) {
+            allUnitConfigs = [];
+            for (const [index, pu] of INITIAL_UNITS.entries()) {
+                 const newPredefinedUnit: UnitConfig = {
+                    ...pu,
+                    isActive: true,
+                    isPredefined: true,
+                    order: index,
+                };
+                await saveUnitConfig(newPredefinedUnit);
+                allUnitConfigs.push(newPredefinedUnit);
+            }
+        }
         setMasterUnitList(allUnitConfigs);
         
         return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
@@ -349,7 +380,7 @@ const GamePage: React.FC = () => {
         const initialTC = { id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
-        setCurrentAge(localAgeProgressionList[0]?.name || FALLBACK_AGES[0].name);
+        setCurrentAge(localAgeProgressionList[0]?.name || INITIAL_AGES[0].name);
         setGameLog([]); setCurrentEvent(null); setUnlimitedResources(false); setActiveTasks([]); setInventory([]); setActiveBuffs({ resourceBoost: [] });
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');

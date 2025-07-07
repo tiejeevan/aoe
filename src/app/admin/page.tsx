@@ -21,14 +21,8 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
 import { INITIAL_UNITS } from '../../../data/unitInfo';
 import { buildingIconMap, unitIconMap } from '../../../components/icons/iconRegistry';
+import { INITIAL_AGES } from '../../../data/ageInfo';
 
-// This is the fallback if DB fails or is empty on first load.
-const INITIAL_AGES = [
-    { name: 'Nomadic Age', description: 'A scattered tribe, learning to survive.' },
-    { name: 'Feudal Age', description: 'Society organizes under lords and vassals, unlocking new military and economic structures.' },
-    { name: 'Castle Age', description: 'Powerful fortifications and advanced siege weaponry mark this new era of warfare and defense.' },
-    { name: 'Imperial Age', description: 'Your civilization becomes a true empire, with unparalleled economic and military might.' },
-];
 
 // Reusable component for editing a building's details
 const BuildingEditor: React.FC<{

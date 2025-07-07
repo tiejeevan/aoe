@@ -102,7 +102,7 @@ const UnitRow: React.FC<{
                     <p className="text-sm text-brand-gold italic">"{unit.title}"</p>
                 )}
                  {type === 'military' && 'unitType' in unit && (
-                    <p className="text-xs text-brand-blue capitalize">{unit.unitType}</p>
+                    <p className="text-xs text-brand-blue capitalize">{unit.unitType.replace(/([A-Z])/g, ' $1').trim()}</p>
                 )}
                 {isBusy && <p className="text-xs text-brand-gold italic">{taskDetails}</p>}
             </div>

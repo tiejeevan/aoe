@@ -1,6 +1,4 @@
 
-
-
 import React from 'react';
 import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitConfig, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, GameEvent, GameEventChoice, GameItem, ResourceConfig } from '../types';
 import { PopulationIcon, VillagerIcon, SwordIcon, AgeIcon, EventIcon, SystemIcon, WatchTowerIcon, ExitIcon } from './icons/ResourceIcons';
@@ -194,7 +192,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                                     <p className="font-bold">Military Forces</p>
                                     {Object.keys(militaryUnitCounts).length > 0 ? (
                                         Object.entries(militaryUnitCounts).map(([type, count]) => (
-                                            <p key={type} className="capitalize text-parchment-dark">{type}: {count}</p>
+                                            <p key={type} className="capitalize text-parchment-dark">{unitList.find(u => u.id === type)?.name || type}: {count}</p>
                                         ))
                                     ) : <p>No forces trained.</p>}
                                 </div>

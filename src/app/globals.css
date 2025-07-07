@@ -57,3 +57,30 @@ body {
 input[type=range].sci-fi-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; outline: none; border: 1px solid rgba(69, 133, 136, 0.5); }
 input[type=range].sci-fi-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; background: #a7f3d0; cursor: pointer; border-radius: 50%; border: 1px solid rgba(13, 33, 51, 0.8); box-shadow: 0 0 5px rgba(167, 243, 208, 0.5); }
 input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; background: #a7f3d0; cursor: pointer; border-radius: 50%; border: 1px solid rgba(13, 33, 51, 0.8); box-shadow: 0 0 5px rgba(167, 243, 208, 0.5); }
+
+@keyframes scan-animation {
+    0% {
+        transform: translateY(-100%);
+    }
+    100% {
+        transform: translateY(100%);
+    }
+}
+
+.scanning-effect::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 200%;
+    background: linear-gradient(to bottom, 
+        transparent 0%, 
+        rgba(131, 165, 152, 0.05) 48%, 
+        rgba(131, 165, 152, 0.4) 50%, 
+        rgba(131, 165, 152, 0.05) 52%, 
+        transparent 100%
+    );
+    animation: scan-animation 3s infinite linear;
+    pointer-events: none;
+}

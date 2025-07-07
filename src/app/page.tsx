@@ -312,22 +312,19 @@ const GamePage: React.FC = () => {
 
 
     const handleNewEvent = useCallback(() => {
-        // Events should not trigger if a major task (build, train, advance age) is in progress.
-        // Gathering resources is a background task and should not block events.
-        const majorTaskInProgress = activeTasks.some(t => t.type !== 'gather');
-        if (!civilization || currentEvent || majorTaskInProgress) return;
+        if (!civilization || currentEvent) return;
         
-        addToLog('A new chapter unfolds...', 'event');
         const event = getPredefinedGameEvent();
         setCurrentEvent(event);
         setActivityStatus('A new event requires your attention!');
-    }, [civilization, currentEvent, activeTasks, addToLog]);
+    }, [civilization, currentEvent]);
     
     const scheduleNextEvent = useCallback(() => {
         if (eventTimerRef.current) {
             clearTimeout(eventTimerRef.current);
         }
-        const nextEventTime = (45 + Math.random() * 45) * 1000; // 45-90 seconds
+        // Events should trigger every 10 to 25 seconds
+        const nextEventTime = (10 + Math.random() * 15) * 1000;
         eventTimerRef.current = setTimeout(() => handleNewEvent(), nextEventTime);
     }, [handleNewEvent]);
 
@@ -503,10 +500,8 @@ const GamePage: React.FC = () => {
     // Event Trigger Timer
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) return;
-        
-        const majorTaskInProgress = activeTasks.some(t => t.type !== 'gather');
 
-        if (!currentEvent && !playerAction && !majorTaskInProgress) {
+        if (!currentEvent) {
             scheduleNextEvent();
         } else if (eventTimerRef.current) {
             clearTimeout(eventTimerRef.current);
@@ -517,11 +512,9 @@ const GamePage: React.FC = () => {
                 clearTimeout(eventTimerRef.current);
             }
         };
-    }, [gameState, currentEvent, playerAction, activeTasks, scheduleNextEvent]);
+    }, [gameState, currentEvent, scheduleNextEvent]);
 
     const handleEventChoice = (choice: GameEventChoice) => {
-        addToLog(`Decision: "${choice.text}"`, 'event');
-
         // 1. Check and apply cost
         if (choice.cost) {
             const missingRes: string[] = [];
@@ -568,7 +561,19 @@ const GamePage: React.FC = () => {
         }
         
         // 5. Log and update UI
-        addToLog(effects.log, effects.resource !== 'none' ? effects.resource : 'system');
+        let logMessage = `Decision: "${choice.text}".`;
+
+        if (choice.successChance !== undefined) {
+            logMessage += ` The outcome was a ${isSuccess ? 'success' : 'failure'}.`;
+        }
+
+        logMessage += ` ${effects.log}`;
+
+        if (effects.resource !== 'none' && amount !== 0) {
+            logMessage += ` You ${amount > 0 ? 'gained' : 'lost'} ${Math.abs(amount)} ${effects.resource}.`;
+        }
+        
+        addToLog(logMessage, effects.resource !== 'none' ? effects.resource : 'system');
         setActivityStatus(effects.log);
         setCurrentEvent(null);
         scheduleNextEvent();

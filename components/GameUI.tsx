@@ -214,8 +214,9 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                         <h2 className="text-2xl font-serif text-center mb-1">Chronicles</h2>
                         <p className="text-center text-parchment-dark text-sm italic mb-3 h-5">{activityStatus}</p>
                         
-                        <div className="bg-parchment-dark text-stone-dark p-4 rounded-lg shadow-inner min-h-[150px] mb-4 flex flex-col justify-center">
-                            <p className="text-center text-stone-light">The air is calm. Your people await your command.</p>
+                        <div className="bg-black/30 p-4 rounded-lg shadow-inner min-h-[150px] mb-4 flex flex-col justify-center items-center relative overflow-hidden scanning-effect">
+                            <p className="text-center text-brand-blue z-10 font-serif">Awaiting new developments...</p>
+                            <p className="text-center text-parchment-dark/70 text-xs mt-1 z-10 italic">Analyzing historical data streams...</p>
                         </div>
 
                         <div className="flex-grow bg-black/30 p-3 rounded-lg overflow-y-auto h-48">

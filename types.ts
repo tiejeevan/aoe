@@ -10,6 +10,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -129,6 +130,19 @@ export interface GameLogEntry {
     icon: LogIconType;
 }
 
+export type UnitClassification = 'infantry' | 'cavalry' | 'archer' | 'siege' | 'ship' | 'support' | 'mythical';
+export type ArmorClassification = 'melee' | 'pierce' | 'siege';
+
+export interface ArmorValue {
+    type: ArmorClassification;
+    value: number;
+}
+
+export interface AttackBonus {
+    targetType: UnitClassification;
+    bonus: number;
+}
+
 export interface UnitConfig {
     id: MilitaryUnitType;
     name: string;
@@ -142,6 +156,26 @@ export interface UnitConfig {
     isActive: boolean;
     isPredefined: boolean;
     order: number;
+
+    // New Comprehensive Attributes
+    populationCost?: number;
+    attackRate?: number; // attacks per second
+    attackRange?: number; // in grid cells
+    movementSpeed?: number; // in grid cells per second
+    lineOfSight?: number; // in grid cells
+
+    unitType?: UnitClassification;
+    attackBonuses?: AttackBonus[];
+    armorValues?: ArmorValue[];
+    
+    // Upgrade System
+    treeId?: string;
+    upgradesTo?: string; // ID of the unit this upgrades to
+    isUpgradeOnly?: boolean;
+
+    // Future-Proofing
+    requiredResearchIds?: string[];
+    specialAbility?: string; // e.g., 'charge_attack', 'area_of_effect_heal'
 }
 
 export interface UINotification {

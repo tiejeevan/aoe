@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig } from '../../../types';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification } from '../../../types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig } from '../../../services/dbService';
 import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
@@ -190,7 +190,7 @@ const BuildingEditor: React.FC<{
                             </div>
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Label>Tree Upgrades</Label>
+                                    <Label>Upgrade Paths</Label>
                                     <Popover>
                                         <PopoverTrigger asChild>
                                             <Button variant="ghost" size="icon" className="h-5 w-5 text-brand-blue hover:text-brand-gold"><Info className="w-4 h-4"/></Button>
@@ -305,66 +305,166 @@ const UnitEditor: React.FC<{
     onSave: (unit: UnitConfig) => void;
     onCancel: () => void;
     allBuildings: BuildingConfig[];
-}> = ({ unit, onSave, onCancel, allBuildings }) => {
+    allUnits: UnitConfig[];
+}> = ({ unit, onSave, onCancel, allBuildings, allUnits }) => {
     const [editedUnit, setEditedUnit] = useState<UnitConfig>(unit);
 
     const trainingBuildings = allBuildings.filter(b => b.canTrainUnits && b.isActive);
+    const unitClassifications: UnitClassification[] = ['infantry', 'cavalry', 'archer', 'siege', 'support', 'mythical', 'ship'];
+    const armorClassifications: ArmorClassification[] = ['melee', 'pierce', 'siege'];
 
     const handleInputChange = (field: keyof UnitConfig, value: any) => {
         setEditedUnit(prev => ({ ...prev, [field]: value }));
+    };
+    const handleNumberChange = (field: keyof UnitConfig, value: string) => {
+        setEditedUnit(prev => ({ ...prev, [field]: value === '' ? undefined : Number(value) || 0 }));
     };
     const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedUnit(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
     };
+    
+    const handleAttackBonusChange = (index: number, field: keyof AttackBonus, value: any) => {
+        setEditedUnit(prev => {
+            const bonuses = [...(prev.attackBonuses || [])];
+            bonuses[index] = { ...bonuses[index], [field]: field === 'bonus' ? parseInt(value, 10) || 0 : value };
+            return { ...prev, attackBonuses: bonuses };
+        });
+    };
 
+    const handleAddAttackBonus = () => {
+        setEditedUnit(prev => ({ ...prev, attackBonuses: [...(prev.attackBonuses || []), { targetType: 'infantry', bonus: 0 }] }));
+    };
+
+    const handleRemoveAttackBonus = (index: number) => {
+        setEditedUnit(prev => ({ ...prev, attackBonuses: (prev.attackBonuses || []).filter((_, i) => i !== index) }));
+    };
+    
     return (
-        <div className="bg-stone-dark/40 p-4 rounded-lg border border-brand-gold my-2 space-y-4 animate-in fade-in-50">
-            <h3 className="text-lg font-bold text-brand-gold">Editing: {unit.name}</h3>
+        <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
+            <h3 className="text-xl font-bold text-brand-gold font-serif">Editing: {unit.name}</h3>
+
+            <Tabs defaultValue="general">
+                 <TabsList className="grid w-full grid-cols-4 bg-stone-dark/80 border border-stone-light/20">
+                    <TabsTrigger value="general"><Swords className="w-4 h-4 mr-2"/>General & Combat</TabsTrigger>
+                    <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Cost & Training</TabsTrigger>
+                    <TabsTrigger value="bonuses"><TestTube className="w-4 h-4 mr-2"/>Bonuses & Armor</TabsTrigger>
+                    <TabsTrigger value="upgrades"><ChevronsUp className="w-4 h-4 mr-2"/>Upgrades & Tech</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="general" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Core Attributes</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><Label>Name</Label><Input type="text" value={editedUnit.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Unit Name" className="sci-fi-input" /></div>
+                                <div><Label>Icon</Label><Select value={editedUnit.iconId} onValueChange={(val) => handleInputChange('iconId', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(unitIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent></Select></div>
+                            </div>
+                            <div><Label>Description</Label><Textarea value={editedUnit.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Description" className="sci-fi-input" /></div>
+                            
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
+                                <div><Label>HP</Label><Input type="number" value={editedUnit.hp || ''} onChange={(e) => handleNumberChange('hp', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Attack</Label><Input type="number" value={editedUnit.attack || ''} onChange={(e) => handleNumberChange('attack', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Attack Rate (/s)</Label><Input type="number" value={editedUnit.attackRate || ''} step="0.1" onChange={(e) => handleNumberChange('attackRate', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Attack Range</Label><Input type="number" value={editedUnit.attackRange || ''} onChange={(e) => handleNumberChange('attackRange', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Movement Speed</Label><Input type="number" value={editedUnit.movementSpeed || ''} step="0.1" onChange={(e) => handleNumberChange('movementSpeed', e.target.value)} className="sci-fi-input" /></div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                
+                <TabsContent value="economy" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Economic Attributes</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                             <div>
+                                <Label>Training Cost</Label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
+                                    {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost?.[res] || ''} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><Label>Train Time (s)</Label><Input type="number" value={editedUnit.trainTime || ''} onChange={(e) => handleNumberChange('trainTime', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Population Cost</Label><Input type="number" value={editedUnit.populationCost || ''} onChange={(e) => handleNumberChange('populationCost', e.target.value)} className="sci-fi-input" /></div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                
+                <TabsContent value="bonuses" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Combat Roles & Bonuses</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                             <div>
+                                <Label>Attack Bonuses</Label>
+                                <div className="space-y-2 mt-1 border border-stone-light/20 p-2 rounded-md bg-black/20">
+                                    {(editedUnit.attackBonuses || []).map((bonus, index) => (
+                                        <div key={index} className="flex items-center gap-2">
+                                            <Select value={bonus.targetType} onValueChange={(val) => handleAttackBonusChange(index, 'targetType', val)}>
+                                                <SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger>
+                                                <SelectContent>{unitClassifications.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                            <Input type="number" value={bonus.bonus} onChange={(e) => handleAttackBonusChange(index, 'bonus', e.target.value)} className="sci-fi-input w-24" placeholder="+DMG" />
+                                            <Button variant="ghost" size="icon" className="text-brand-red w-8 h-8" onClick={() => handleRemoveAttackBonus(index)}><Trash2 className="w-4 h-4"/></Button>
+                                        </div>
+                                    ))}
+                                    <Button onClick={handleAddAttackBonus} variant="outline" className="w-full sci-fi-button !text-xs !py-1">Add Attack Bonus</Button>
+                                </div>
+                             </div>
+                              <div>
+                                <Label>Armor Values</Label>
+                                <div className="space-y-2 mt-1 border border-stone-light/20 p-2 rounded-md bg-black/20">
+                                   {/* Simplified for now, can be expanded like attack bonuses */}
+                                   <p className="text-xs text-parchment-dark text-center py-4">Armor editor coming soon.</p>
+                                </div>
+                             </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                
+                 <TabsContent value="upgrades" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Progression & Unlocks</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label>Required Building</Label>
+                                    <Select value={editedUnit.requiredBuilding} onValueChange={(val) => handleInputChange('requiredBuilding', val)}>
+                                        <SelectTrigger className="sci-fi-input" disabled={trainingBuildings.length === 0}><SelectValue /></SelectTrigger>
+                                        <SelectContent>{trainingBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div><Label>Unlocks Research IDs (comma-separated)</Label><Input type="text" value={(editedUnit.requiredResearchIds || []).join(',')} onChange={(e) => handleInputChange('requiredResearchIds', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_armor_1" className="sci-fi-input" /></div>
+                            </div>
+                            <div className="flex items-center gap-2 pt-2"><Switch id="edit-isUpgradeOnly" checked={!!editedUnit.isUpgradeOnly} onCheckedChange={(c) => handleInputChange('isUpgradeOnly', c)} /><Label htmlFor="edit-isUpgradeOnly">Upgrade Only (Cannot be trained directly)</Label></div>
+                            <hr className="border-stone-light/20"/>
+                            <div>
+                                <Label>Tree ID</Label>
+                                <div className="flex items-center gap-2">
+                                    <Input type="text" value={editedUnit.treeId || ''} onChange={(e) => handleInputChange('treeId', e.target.value)} className="sci-fi-input" />
+                                    <Button variant="outline" size="icon" onClick={() => navigator.clipboard.writeText(editedUnit.treeId || '')} title="Copy Tree ID"><Copy className="w-4 h-4"/></Button>
+                                    <Button variant="outline" size="icon" onClick={() => handleInputChange('treeId', `utree-${Date.now()}`)} title="Generate New Tree ID"><RefreshCw className="w-4 h-4"/></Button>
+                                </div>
+                            </div>
+                            <div>
+                                <Label>Upgrades To</Label>
+                                <Select value={editedUnit.upgradesTo || 'none'} onValueChange={(val) => handleInputChange('upgradesTo', val === 'none' ? undefined : val)}>
+                                    <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select target unit..."/></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None</SelectItem>
+                                        {allUnits.filter(u => u.treeId === editedUnit.treeId && u.id !== editedUnit.id).map(u => (
+                                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardContent>
+                    </Card>
+                 </TabsContent>
+
+            </Tabs>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input type="text" value={editedUnit.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Unit Name" className="sci-fi-input" />
-                <Textarea value={editedUnit.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Description" className="sci-fi-input" />
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <Input type="number" value={editedUnit.hp} onChange={(e) => handleInputChange('hp', parseInt(e.target.value, 10))} placeholder="HP" className="sci-fi-input" />
-                <Input type="number" value={editedUnit.attack} onChange={(e) => handleInputChange('attack', parseInt(e.target.value, 10))} placeholder="Attack" className="sci-fi-input" />
-                <Input type="number" value={editedUnit.trainTime} onChange={(e) => handleInputChange('trainTime', parseInt(e.target.value, 10))} placeholder="Train Time (s)" className="sci-fi-input" />
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(Object.keys(editedUnit.cost!) as (keyof Resources)[]).map(res => (
-                    <div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost![res] || 0} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>
-                ))}
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div>
-                    <Label>Required Building</Label>
-                    <Select value={editedUnit.requiredBuilding} onValueChange={(val) => handleInputChange('requiredBuilding', val)}>
-                        <SelectTrigger className="sci-fi-input" disabled={trainingBuildings.length === 0}>
-                            <SelectValue placeholder="Select training building..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {trainingBuildings.length > 0 ? (
-                                trainingBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)
-                            ) : (
-                                <SelectItem value="none" disabled>No training buildings available</SelectItem>
-                            )}
-                        </SelectContent>
-                    </Select>
-                 </div>
-                 <div>
-                    <Label>Icon</Label>
-                    <Select value={editedUnit.iconId} onValueChange={(val) => handleInputChange('iconId', val)}>
-                        <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Icon"/></SelectTrigger>
-                        <SelectContent>{Object.keys(unitIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent>
-                    </Select>
-                 </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-4">
                 <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
                 <Button onClick={() => onSave(editedUnit)} className="bg-brand-green hover:bg-brand-green/80" disabled={!editedUnit.requiredBuilding}><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
             </div>
@@ -408,8 +508,8 @@ const AdminPage: React.FC = () => {
                 isActive: existingItem?.isActive ?? true,
                 order: existingItem?.order ?? index,
             };
-
-            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+            
+            if (!existingItem) {
                 await saveAgeConfig(newItem);
                 needsUpdate = true;
             }
@@ -440,6 +540,10 @@ const AdminPage: React.FC = () => {
                 isActive: existingItem?.isActive ?? true,
                 order: existingItem?.order ?? index,
                 treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`,
+                populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity,
+                generatesResource: existingItem?.generatesResource ?? pItem.generatesResource,
+                generationRate: existingItem?.generationRate ?? pItem.generationRate,
+                maintenanceCost: existingItem?.maintenanceCost ?? pItem.maintenanceCost,
             };
 
             if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
@@ -459,16 +563,20 @@ const AdminPage: React.FC = () => {
         let allItems = await getAllUnitConfigs();
         const itemMap = new Map(allItems.map(i => [i.id, i]));
         let needsUpdate = false;
+        
+        const initialUnitsWithIds = INITIAL_UNITS.map(u => ({ ...u, id: u.name.toLowerCase().replace(/\s/g, '') }));
 
-        for (const [index, pItem] of INITIAL_UNITS.entries()) {
+        for (const [index, pItem] of initialUnitsWithIds.entries()) {
             const existingItem = itemMap.get(pItem.id);
             const newItem: UnitConfig = {
-                ...pItem,
-                ...(existingItem || {}),
+                 ...(pItem as any), // Base predefined values
+                ...(existingItem || {}), // Overwrite with saved values
                 id: pItem.id,
                 isPredefined: true,
                 isActive: existingItem?.isActive ?? true,
                 order: existingItem?.order ?? index,
+                treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`,
+                populationCost: existingItem?.populationCost ?? pItem.populationCost,
             };
 
             if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
@@ -603,6 +711,10 @@ const AdminPage: React.FC = () => {
             isPredefined: false,
             order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0,
             requiredBuilding: trainingBuildings[0].id,
+            populationCost: 1,
+            attackRate: 1,
+            movementSpeed: 1,
+            treeId: `utree-${Date.now()}`,
         };
         setEditingUnit(newUnit);
     };
@@ -749,6 +861,7 @@ const AdminPage: React.FC = () => {
                                                 onSave={handleSaveUnit} 
                                                 onCancel={() => setEditingUnit(null)}
                                                 allBuildings={buildings.filter(b => b.isActive)} 
+                                                allUnits={units}
                                             />
                                         )}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">

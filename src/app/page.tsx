@@ -98,10 +98,17 @@ const GamePage: React.FC = () => {
         return capacity;
     }, [buildings, masterBuildingList]);
     
-    const population = {
-        current: units.villagers.length + units.military.length,
-        capacity: populationCapacity,
-    };
+    const population = useMemo(() => {
+        const militaryPop = units.military.reduce((acc, unit) => {
+            const unitInfo = masterUnitList.find(u => u.id === unit.unitType);
+            return acc + (unitInfo?.populationCost || 1);
+        }, 0);
+        
+        return {
+            current: units.villagers.length + militaryPop,
+            capacity: populationCapacity,
+        };
+    }, [units, populationCapacity, masterUnitList]);
     
     const fetchSavesAndConfigs = useCallback(async () => {
         setIsAppLoading(true);
@@ -131,7 +138,7 @@ const GamePage: React.FC = () => {
             const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
             for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
                 const existingItem = buildingMap.get(pItem.id);
-                const newItem: BuildingConfig = { ...(existingItem || {}), ...pItem, id: pItem.id, isPredefined: true, unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge), isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+                const newItem: BuildingConfig = { ...(existingItem || {}), ...pItem, id: pItem.id, isPredefined: true, unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge), isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity };
                 if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
                     await saveBuildingConfig(newItem);
                     buildingsNeedUpdate = true;
@@ -142,11 +149,23 @@ const GamePage: React.FC = () => {
 
             // --- Smart Seeding/Updating for Units ---
             let allUnitConfigs = await getAllUnitConfigs();
-            let unitMap = new Map(allUnitConfigs.map(item => [item.id, item]));
+            const unitMap = new Map(allUnitConfigs.map(item => [item.id, item]));
             let unitsNeedUpdate = false;
-            for (const [index, pItem] of INITIAL_UNITS.entries()) {
+            const initialUnitsWithIds = INITIAL_UNITS.map(u => ({ ...u, id: u.name.toLowerCase().replace(/\s/g, '') }));
+
+            for (const [index, pItem] of initialUnitsWithIds.entries()) {
                 const existingItem = unitMap.get(pItem.id);
-                const newItem: UnitConfig = { ...(existingItem || {}), ...pItem, id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+                const newItem: UnitConfig = {
+                    ...(pItem as any), // Base predefined values
+                    ...(existingItem || {}), // Overwrite with saved values
+                    id: pItem.id,
+                    isPredefined: true,
+                    isActive: existingItem?.isActive ?? true,
+                    order: existingItem?.order ?? index,
+                    treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`,
+                    populationCost: existingItem?.populationCost ?? pItem.populationCost,
+                };
+
                 if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
                     await saveUnitConfig(newItem);
                     unitsNeedUpdate = true;
@@ -160,11 +179,11 @@ const GamePage: React.FC = () => {
             console.error("Error during initial config fetch:", error);
             const ages = INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
             const buildings = INITIAL_BUILDINGS.map((b, i) => ({...b, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age' } as BuildingConfig));
-            const units = INITIAL_UNITS.map((u, i) => ({...u, isActive: true, isPredefined: true, order: i}));
+            const units = INITIAL_UNITS.map((u, i) => ({...u, id: u.name.toLowerCase().replace(/\s/g, ''), isActive: true, isPredefined: true, order: i}));
             setMasterAgeList(ages);
             setMasterBuildingList(buildings);
-            setMasterUnitList(units);
-            return { allAgeConfigs: ages, allBuildingConfigs: buildings, allUnitConfigs: units };
+            setMasterUnitList(units as UnitConfig[]);
+            return { allAgeConfigs: ages, allBuildingConfigs: buildings, allUnitConfigs: units as UnitConfig[] };
         } finally {
             setIsAppLoading(false);
             setGameState(GameStatus.MENU);
@@ -632,22 +651,12 @@ const GamePage: React.FC = () => {
 
     const handleDemolishBuilding = (type: BuildingType | string, id: string) => {
         if (type === 'townCenter') { addNotification("The Town Center is the heart of your civilization and cannot be demolished."); return; }
-        
-        // Expanded check for active tasks related to this building
-        if (activeTasks.some(task => 
-            (task.payload?.buildingId === id) || 
-            (task.type === 'upgrade_building' && task.payload?.originalBuildingId === id)
-        )) { 
-            addNotification("Cannot demolish a building with an active task (e.g., training or upgrading)."); 
-            return; 
-        }
-
+        if (activeTasks.some(task => (task.payload?.buildingId === id) || (task.type === 'upgrade_building' && task.payload?.originalBuildingId === id))) { addNotification("Cannot demolish a building with an active task (e.g., training or upgrading)."); return; }
         const buildingInfo = buildingList.find(b => b.id === type);
         const buildingInstance = buildings[type as string].find(b => b.id === id);
         if (!buildingInfo || !buildingInstance) return;
         
-        const capacityWithoutThisBuilding = populationCapacity - (buildingInfo.populationCapacity || 0);
-        // Corrected population check
+        const capacityWithoutThisBuilding = population.capacity - (buildingInfo.populationCapacity || 0);
         if ((buildingInfo.populationCapacity || 0) > 0 && population.current > capacityWithoutThisBuilding) {
              addNotification("Cannot demolish this building, your people would be homeless."); return;
         }
@@ -705,7 +714,8 @@ const GamePage: React.FC = () => {
     const handleTrainUnits = (unitType: MilitaryUnitType, count: number) => {
         const unitInfo = unitList.find(u => u.id === unitType);
         if (!unitInfo || activeTasks.some(t => t.payload?.unitType === unitType) || count <= 0) return;
-        if (population.current + count > population.capacity) { addNotification(`Need space for ${count} more units.`); return; }
+        const totalPopulationCost = (unitInfo.populationCost || 1) * count;
+        if (population.current + totalPopulationCost > population.capacity) { addNotification(`Need space for ${totalPopulationCost} more population.`); return; }
         const trainingBuilding = buildings[unitInfo.requiredBuilding as BuildingType]?.[0];
         if (!trainingBuilding) { addNotification(`No ${buildingList.find(b => b.id === unitInfo.requiredBuilding)?.name} to train units.`); return; }
 

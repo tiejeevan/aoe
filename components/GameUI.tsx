@@ -159,6 +159,7 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                             onOpenAssignmentPanel={onOpenAssignmentPanel}
                             onOpenConstructionPanel={onOpenConstructionPanel}
                             gatherInfo={gatherInfo}
+                            resourceList={resourceList}
                         />
                          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-4">
                             {/* Villagers Button */}

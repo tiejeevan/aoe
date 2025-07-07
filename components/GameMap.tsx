@@ -3,12 +3,13 @@
 
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfig, PlayerActionState, ResourceNode, Units, Villager } from '../types';
+import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfig, PlayerActionState, ResourceNode, Units, Villager, ResourceConfig } from '../types';
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 import { VillagerIcon } from './icons/ResourceIcons';
-import { buildingIconMap } from './icons/iconRegistry';
+import { buildingIconMap, resourceIconMap } from './icons/iconRegistry';
 
 const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingConfig | undefined; builderCount: number }> = ({ task, buildingInfo, builderCount }) => {
     const [remainingTime, setRemainingTime] = useState(0);
@@ -70,9 +71,10 @@ interface GameMapProps {
     onOpenAssignmentPanel: (nodeId: string, rect: DOMRect) => void;
     onOpenConstructionPanel: (constructionId: string, rect: DOMRect) => void;
     gatherInfo: Record<string, { rate: number }>;
+    resourceList: ResourceConfig[];
 }
 
-const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, units, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo }) => {
+const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, buildingList, resourceNodes, units, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, resourceList }) => {
     const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number; } | null>(null);
 
     const constructionTasks = useMemo(() => activeTasks.filter(t => t.type === 'build'), [activeTasks]);
@@ -218,7 +220,11 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                         )}
                         {resourceNode && (
                             <div className="absolute inset-0 p-1.5 text-parchment-light/80 flex flex-col items-center justify-center group">
-                                {iconMap[resourceNode.type]}
+                                {(() => {
+                                    const resourceConfig = resourceList.find(r => r.id === resourceNode.type);
+                                    const IconComponent = resourceIconMap[resourceConfig?.iconId || 'default'] || resourceIconMap.default;
+                                    return <IconComponent />;
+                                })()}
                                 <ResourceNodeTooltip node={resourceNode} gatherInfo={gatherInfo} villagerCount={assignedVillagerCount} />
                                 {gatherTask && (
                                     <div className="absolute bottom-0.5 w-10/12 h-1.5">

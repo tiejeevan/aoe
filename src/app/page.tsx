@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
@@ -254,6 +254,30 @@ const GamePage: React.FC = () => {
                 setActivityStatus(`Construction of ${name} is complete.`);
                 break;
             }
+            case 'upgrade_building': {
+                const { originalBuildingId, originalBuildingType, targetBuildingType } = task.payload!;
+                const originalBuilding = buildings[originalBuildingType as string]?.find(b => b.id === originalBuildingId);
+                const targetBuildingInfo = buildingList.find(b => b.id === targetBuildingType);
+
+                if (originalBuilding && targetBuildingInfo) {
+                    const newBuilding: BuildingInstance = {
+                        id: originalBuilding.id,
+                        name: originalBuilding.name,
+                        position: originalBuilding.position,
+                        currentHp: targetBuildingInfo.hp,
+                    };
+
+                    setBuildings(p => {
+                        const newBuildings = { ...p };
+                        newBuildings[originalBuildingType as string] = (newBuildings[originalBuildingType as string] || []).filter(b => b.id !== originalBuildingId);
+                        newBuildings[targetBuildingType as string] = [...(newBuildings[targetBuildingType as string] || []), newBuilding];
+                        return newBuildings;
+                    });
+                     addToLog(`${originalBuilding.name} has been upgraded to a ${targetBuildingInfo.name}!`, targetBuildingInfo.iconId);
+                     setActivityStatus(`Upgrade to ${targetBuildingInfo.name} complete.`);
+                }
+                break;
+            }
             case 'gather': break;
             case 'train_villager': {
                 const { count } = task.payload!;
@@ -285,7 +309,7 @@ const GamePage: React.FC = () => {
                 break;
             }
         }
-    }, [currentAge, addToLog, buildingList, unitList, masterAgeList]);
+    }, [currentAge, addToLog, buildingList, unitList, masterAgeList, buildings]);
     
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) {
@@ -630,6 +654,30 @@ const GamePage: React.FC = () => {
         addNotification("Building renamed.");
     };
 
+    const handleUpgradeBuilding = (building: BuildingInstance, upgradePath: BuildingUpgradePath) => {
+        if (!unlimitedResources) {
+            const missing = (Object.keys(upgradePath.cost) as (keyof Resources)[]).filter(res => resources[res] < (upgradePath.cost[res] || 0));
+            if (missing.length > 0) { addNotification(`Need more ${missing.join(', ')}.`); return; }
+            updateResources(Object.entries(upgradePath.cost).reduce((acc, [k, v]) => ({ ...acc, [k]: -(v || 0) }), {}));
+        }
+        
+        const originalBuildingType = Object.keys(buildings).find(type => buildings[type as string].some(b => b.id === building.id));
+        const taskPayload = {
+            originalBuildingId: building.id,
+            originalBuildingType,
+            targetBuildingType: upgradePath.id,
+        };
+
+        if (unlimitedResources) {
+            handleTaskCompletion({ id: 'instant', type: 'upgrade_building', startTime: 0, duration: 0, payload: taskPayload });
+        } else {
+            setActiveTasks(prev => [...prev, { id: `${Date.now()}-upgrade-${building.id}`, type: 'upgrade_building', startTime: Date.now(), duration: upgradePath.time * 1000, payload: taskPayload }]);
+            addToLog(`Upgrading ${building.name} to a ${buildingList.find(b => b.id === upgradePath.id)?.name}.`, 'system');
+            setActivityStatus(`Upgrading ${building.name}...`);
+        }
+        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
+    };
+
     const handleTrainVillagers = (count: number) => {
         if (activeTasks.some(t => t.type === 'train_villager') || count <= 0) return;
         if (population.current + count > population.capacity) { addNotification(`Need space for ${count} more villagers.`); return; }
@@ -842,7 +890,7 @@ const GamePage: React.FC = () => {
     const currentAgeIndex = ageProgressionList.findIndex(a => a.name === currentAge);
     const availableBuildings = buildingList.filter(b => {
         const unlockAgeIndex = ageProgressionList.findIndex(a => a.name === b.unlockedInAge);
-        return b.isActive && unlockAgeIndex !== -1 && unlockAgeIndex <= currentAgeIndex;
+        return b.isActive && !b.isUpgradeOnly && unlockAgeIndex !== -1 && unlockAgeIndex <= currentAgeIndex;
     });
 
     const activeUnits = unitList.filter(u => u.isActive);
@@ -865,7 +913,7 @@ const GamePage: React.FC = () => {
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Element;
-            if (!target.closest('.sci-fi-panel-popup')) closeAllPanels();
+            if (!target.closest('.sci-fi-panel-popup, [data-radix-popper-content-wrapper]')) closeAllPanels();
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -900,7 +948,7 @@ const GamePage: React.FC = () => {
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />
-                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} resources={resources} population={population} unitList={activeUnits} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} />
+                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} onUpgradeBuilding={handleUpgradeBuilding} resources={resources} population={population} unitList={activeUnits} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} />
                         <ResourceAssignmentPanel isOpen={assignmentPanelState.isOpen} onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })} assignmentTarget={assignmentTarget || null} idleVillagerCount={idleVillagerCount} onAssignVillagers={handleAssignVillagers} onRecallVillagers={handleRecallVillagers} gatherInfo={GATHER_INFO} buildingList={buildingList} units={units} anchorRect={assignmentPanelState.anchorRect} />
                         <CivilizationPanel isOpen={civPanelState.isOpen} onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })} civilization={civilization} anchorRect={civPanelState.anchorRect} />
                         <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })} buildingList={buildingList} buildingCounts={buildingCounts} activeTasks={activeTasks} onOpenBuildingPanel={handleOpenBuildingPanel} anchorRect={allBuildingsPanel.anchorRect} />
@@ -925,5 +973,3 @@ const GamePage: React.FC = () => {
 };
 
 export default GamePage;
-
-    

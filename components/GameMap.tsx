@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfig, PlayerActionState, ResourceNode, ResourceNodeType, Units, Villager } from '../types';
 import { iconMap } from './GameUI';
@@ -73,6 +74,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
     const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number; } | null>(null);
 
     const constructionTasks = useMemo(() => activeTasks.filter(t => t.type === 'build'), [activeTasks]);
+    const upgradeTasks = useMemo(() => activeTasks.filter(t => t.type === 'upgrade_building'), [activeTasks]);
 
     const occupiedCells = useMemo(() => {
         const cellSet = new Set<string>();
@@ -143,6 +145,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                 const constructionTask = getConstructionAt(x, y);
                 const resourceNode = getResourceNodeAt(x, y);
                 const isOccupied = !!building || !!constructionTask || !!resourceNode;
+                const upgradeTask = building ? upgradeTasks.find(t => t.payload?.originalBuildingId === building.id) : undefined;
                 
                 const gatherTask = resourceNode ? activeTasks.find(t => t.id === `gather-${resourceNode.id}`) : undefined;
                 const assignedVillagerCount = resourceNode ? units.villagers.filter(v => v.currentTask === `gather-${resourceNode.id}`).length : 0;
@@ -189,7 +192,13 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                                 {React.createElement(buildingIconMap[buildingList.find(b => b.id === (Object.keys(buildings).find(key => buildings[key as string].some(b => b.id === building.id))))?.iconId || 'default'] || buildingIconMap.default)}
                                 <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
                                     {building.name}
+                                    {upgradeTask && ' (Upgrading...)'}
                                 </div>
+                                {upgradeTask && (
+                                    <div className="absolute bottom-1 w-10/12 left-1/2 -translate-x-1/2 h-1.5">
+                                        <ProgressBar startTime={upgradeTask.startTime} duration={upgradeTask.duration} />
+                                    </div>
+                                )}
                              </div>
                         )}
                         {constructionTask && buildingInfo && (

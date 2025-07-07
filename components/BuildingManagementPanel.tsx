@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask } from '../types';
+import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask, BuildingUpgradePath } from '../types';
 import { FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
 import { unitIconMap } from './icons/iconRegistry';
-import { Trash2, Wrench } from 'lucide-react';
+import { Trash2, Wrench, ChevronsUp, X } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Button } from './ui/button';
 
 interface BuildingManagementPanelProps {
     isOpen: boolean;
@@ -18,6 +20,7 @@ interface BuildingManagementPanelProps {
     onDemolishBuilding: (type: BuildingType | string, id: string) => void;
     onTrainUnits: (unitType: MilitaryUnitType, count: number) => void;
     onTrainVillagers: (count: number) => void;
+    onUpgradeBuilding: (building: BuildingInstance, upgradePath: BuildingUpgradePath) => void;
     resources: Resources;
     population: { current: number; capacity: number };
     unitList: UnitConfig[];
@@ -26,17 +29,89 @@ interface BuildingManagementPanelProps {
     anchorRect: DOMRect | null;
 }
 
+const CostDisplay: React.FC<{ cost: { [key in keyof Resources]?: number }, resources: Resources, isUpgradeCost?: boolean }> = ({ cost, resources, isUpgradeCost }) => (
+    <div className={`flex flex-wrap ${isUpgradeCost ? 'gap-x-2' : 'gap-x-3 gap-y-1'} text-xs`}>
+        {(Object.entries(cost) as [keyof Resources, number][]).map(([resource, amount]) => {
+            if (!amount) return null;
+            const hasEnough = resources[resource] >= amount;
+            const Icon = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[resource];
+            return (
+                <span key={resource} className={`flex items-center ${hasEnough ? '' : 'text-brand-red'}`}>
+                    <div className="w-4 h-4"><Icon /></div>
+                    <span className="ml-1 font-mono">{amount}</span>
+                </span>
+            );
+        })}
+    </div>
+);
+
+const UpgradePopoverContent: React.FC<{
+    building: BuildingInstance;
+    buildingInfo: BuildingConfig;
+    buildingList: BuildingConfig[];
+    resources: Resources;
+    onUpgrade: (building: BuildingInstance, path: BuildingUpgradePath) => void;
+    onClose: () => void;
+}> = ({ building, buildingInfo, buildingList, resources, onUpgrade, onClose }) => {
+    
+    const activeUpgradePaths = (buildingInfo.upgradesTo || []).filter(path => {
+        const targetBuilding = buildingList.find(b => b.id === path.id);
+        return targetBuilding?.isActive;
+    });
+
+    return (
+        <div className="sci-fi-panel-popup !p-3 !border-brand-gold/80 w-80">
+             <div className="flex justify-between items-center mb-2">
+                <h4 className="font-serif text-brand-gold">Upgrade Paths</h4>
+                <button onClick={onClose} className="text-xl font-bold sci-fi-close-button">&times;</button>
+            </div>
+            {activeUpgradePaths.length > 0 ? (
+                <div className="space-y-2">
+                    {activeUpgradePaths.map(path => {
+                        const targetBuilding = buildingList.find(b => b.id === path.id);
+                        if (!targetBuilding) return null;
+                        
+                        const canAfford = Object.entries(path.cost).every(([res, cost]) => resources[res as keyof Resources] >= (cost || 0));
+
+                        return (
+                            <div key={path.id} className="sci-fi-unit-row !p-2 flex items-center justify-between gap-2">
+                                <div className="flex-grow">
+                                    <p className="font-bold">{targetBuilding.name}</p>
+                                    <CostDisplay cost={path.cost} resources={resources} isUpgradeCost />
+                                    <p className="text-xs text-parchment-dark mt-1">Time: {path.time}s</p>
+                                </div>
+                                <Button size="sm" onClick={() => onUpgrade(building, path)} disabled={!canAfford}>
+                                    Upgrade
+                                </Button>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                <p className="text-center text-parchment-dark text-sm py-4">No available upgrades for this building.</p>
+            )}
+        </div>
+    );
+};
+
 
 const BuildingRow: React.FC<{
     building: BuildingInstance;
     buildingInfo: BuildingConfig;
+    buildingList: BuildingConfig[];
     type: BuildingType | string;
     onUpdate: (type: BuildingType | string, id: string, name: string) => void;
     onDemolish: (type: BuildingType | string, id: string) => void;
-}> = ({ building, buildingInfo, type, onUpdate, onDemolish }) => {
+    onUpgrade: (building: BuildingInstance, path: BuildingUpgradePath) => void;
+    resources: Resources;
+    activeTasks: GameTask[];
+}> = ({ building, buildingInfo, buildingList, type, onUpdate, onDemolish, onUpgrade, resources, activeTasks }) => {
     const [isEditing, setIsEditing] = useState(false);
+    const [isUpgradePopoverOpen, setIsUpgradePopoverOpen] = useState(false);
     const [name, setName] = useState(building.name);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const isUpgrading = activeTasks.some(t => t.type === 'upgrade_building' && t.payload?.originalBuildingId === building.id);
 
     useEffect(() => {
         if (isEditing) {
@@ -53,63 +128,52 @@ const BuildingRow: React.FC<{
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            handleSave();
-        } else if (e.key === 'Escape') {
-            setName(building.name);
-            setIsEditing(false);
-        }
+        if (e.key === 'Enter') handleSave();
+        else if (e.key === 'Escape') { setName(building.name); setIsEditing(false); }
     };
+
+    if (isUpgrading) {
+        const upgradeTask = activeTasks.find(t => t.type === 'upgrade_building' && t.payload?.originalBuildingId === building.id)!;
+        const targetBuildingInfo = buildingList.find(b => b.id === upgradeTask.payload?.targetBuildingType)!;
+        return (
+            <div className="sci-fi-unit-row flex flex-col items-center gap-2 p-2 justify-between opacity-70">
+                <p className="text-base font-bold text-center">Upgrading "{building.name}" to {targetBuildingInfo.name}...</p>
+                <ProgressBar startTime={upgradeTask.startTime} duration={upgradeTask.duration} className="w-full h-2" />
+            </div>
+        )
+    }
 
     return (
         <div className="sci-fi-unit-row flex items-center gap-2 p-2 justify-between">
             {isEditing ? (
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onBlur={handleSave}
-                    onKeyDown={handleKeyDown}
-                    className="sci-fi-input w-full !text-base"
-                />
+                <input ref={inputRef} type="text" value={name} onChange={(e) => setName(e.target.value)} onBlur={handleSave} onKeyDown={handleKeyDown} className="sci-fi-input w-full !text-base" />
             ) : (
                 <>
-                    <div 
-                        className="flex-grow cursor-pointer"
-                        onDoubleClick={() => setIsEditing(true)}
-                        title="Double-click to rename"
-                    >
+                    <div className="flex-grow cursor-pointer" onDoubleClick={() => setIsEditing(true)} title="Double-click to rename">
                         <p className="text-base font-bold">{building.name}</p>
-                        <p className="text-xs text-parchment-dark font-mono">
-                           HP: {building.currentHp} / {buildingInfo.hp}
-                        </p>
+                        <p className="text-xs text-parchment-dark font-mono">HP: {building.currentHp} / {buildingInfo.hp}</p>
                     </div>
                     <div className="flex items-center gap-1">
-                        <div className="relative group flex-shrink-0">
-                            <button
-                                disabled={building.currentHp >= buildingInfo.hp}
-                                className="p-1.5 text-parchment-dark/60 hover:text-brand-green rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-green/50 disabled:text-parchment-dark/30 disabled:cursor-not-allowed"
-                                aria-label="Repair"
-                            >
-                                <Wrench className="w-4 h-4" />
-                            </button>
-                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                {building.currentHp >= buildingInfo.hp ? 'At full health' : 'Repair (coming soon)'}
-                            </div>
+                        {(buildingInfo.upgradesTo || []).length > 0 && (
+                             <Popover open={isUpgradePopoverOpen} onOpenChange={setIsUpgradePopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <div className="relative group flex-shrink-0">
+                                        <button className="p-1.5 text-parchment-dark/60 hover:text-brand-gold rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-gold/50"><ChevronsUp className="w-4 h-4" /></button>
+                                        <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">Upgrade Building</div>
+                                    </div>
+                                </PopoverTrigger>
+                                <PopoverContent side="right" align="start" className="p-0 border-none bg-transparent shadow-none w-auto">
+                                   <UpgradePopoverContent building={building} buildingInfo={buildingInfo} buildingList={buildingList} resources={resources} onUpgrade={onUpgrade} onClose={() => setIsUpgradePopoverOpen(false)} />
+                                </PopoverContent>
+                            </Popover>
+                        )}
+                         <div className="relative group flex-shrink-0">
+                            <button disabled={building.currentHp >= buildingInfo.hp} className="p-1.5 text-parchment-dark/60 hover:text-brand-green rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-green/50 disabled:text-parchment-dark/30 disabled:cursor-not-allowed" aria-label="Repair"><Wrench className="w-4 h-4" /></button>
+                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{building.currentHp >= buildingInfo.hp ? 'At full health' : 'Repair (coming soon)'}</div>
                         </div>
                         <div className="relative group flex-shrink-0">
-                            <button
-                                onClick={() => onDemolish(type, building.id)}
-                                disabled={type === 'townCenter'}
-                                className="p-1.5 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-red/50 disabled:text-parchment-dark/30 disabled:cursor-not-allowed"
-                                aria-label="Demolish"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                {type === 'townCenter' ? 'Cannot demolish Town Center' : 'Demolish'}
-                            </div>
+                            <button onClick={() => onDemolish(type, building.id)} disabled={type === 'townCenter'} className="p-1.5 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-brand-red/50 disabled:text-parchment-dark/30 disabled:cursor-not-allowed" aria-label="Demolish"><Trash2 className="w-4 h-4" /></button>
+                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-1 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{type === 'townCenter' ? 'Cannot demolish Town Center' : 'Demolish'}</div>
                         </div>
                     </div>
                 </>
@@ -118,26 +182,8 @@ const BuildingRow: React.FC<{
     );
 };
 
-
-const CostDisplay: React.FC<{ cost: { [key in keyof Resources]?: number }, resources: Resources }> = ({ cost, resources }) => (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-        {(Object.entries(cost) as [keyof Resources, number][]).map(([resource, amount]) => {
-            if (!amount) return null;
-            const hasEnough = resources[resource] >= amount;
-            const Icon = { food: FoodIcon, wood: WoodIcon, gold: GoldIcon, stone: StoneIcon }[resource];
-            return (
-                <span key={resource} className={`flex items-center ${hasEnough ? '' : 'text-brand-red'}`}>
-                    <div className="w-4 h-4"><Icon /></div>
-                    <span className="ml-1 font-mono">{amount}</span>
-                </span>
-            );
-        })}
-    </div>
-);
-
-
 const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) => {
-    const { isOpen, onClose, panelState, buildings, buildingList, onUpdateBuilding, onDemolishBuilding, onTrainUnits, onTrainVillagers, resources, population, unitList, onAdvanceAge, activeTasks, anchorRect } = props;
+    const { isOpen, onClose, panelState, buildings, buildingList, onUpdateBuilding, onDemolishBuilding, onTrainUnits, onTrainVillagers, onUpgradeBuilding, resources, population, unitList, onAdvanceAge, activeTasks, anchorRect } = props;
     
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ panelState, buildings, anchorRect });
@@ -151,19 +197,13 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
 
         allTrainableUnits.forEach(unit => {
             const currentCount = trainCounts[unit.id] || 1;
-             if (currentCount > popSpace) {
-                newTrainCounts[unit.id] = Math.max(0, popSpace);
-            } else if (currentCount === 0 && popSpace > 0) {
-                newTrainCounts[unit.id] = 1;
-            } else if (popSpace === 0) {
-                 newTrainCounts[unit.id] = 0;
-            } else {
-                 newTrainCounts[unit.id] = currentCount;
-            }
+             if (currentCount > popSpace) { newTrainCounts[unit.id] = Math.max(0, popSpace); }
+             else if (currentCount === 0 && popSpace > 0) { newTrainCounts[unit.id] = 1; }
+             else if (popSpace === 0) { newTrainCounts[unit.id] = 0; }
+             else { newTrainCounts[unit.id] = currentCount; }
         });
         setTrainCounts(newTrainCounts);
-
-    }, [isOpen, panelState.type, population.capacity, population.current]);
+    }, [isOpen, panelState.type, population.capacity, population.current, unitList]);
 
     useEffect(() => {
         if (isOpen || isClosing) setCurrentData({ panelState, buildings, anchorRect });
@@ -182,7 +222,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     if (!buildingInfo) return null;
 
     const buildingInstances = currentBuildings[type] || [];
-    const unitsToTrain = buildingInfo.canTrainUnits ? unitList.filter(u => u.requiredBuilding === buildingInfo.id) : [];
+    const unitsToTrain = buildingInfo.canTrainUnits ? unitList.filter(u => u.requiredBuilding === buildingInfo.id && u.isActive) : [];
     
     const activeVillagerTask = activeTasks.find(t => t.type === 'train_villager');
     const activeAgeTask = activeTasks.find(t => t.type === 'advance_age');
@@ -218,7 +258,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                 <div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-serif">{buildingInfo?.name}{!buildingInfo?.isUnique ? 's' : ''}</h2><button onClick={handleClose} className="text-3xl font-bold sci-fi-close-button">&times;</button></div>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                     {buildingInstances.length > 0 ? (
-                        buildingInstances.map(instance => (<BuildingRow key={instance.id} building={instance} buildingInfo={buildingInfo} type={type} onUpdate={onUpdateBuilding} onDemolish={onDemolishBuilding} />))
+                        buildingInstances.map(instance => (<BuildingRow key={instance.id} building={instance} buildingInfo={buildingInfo} buildingList={buildingList} type={type} onUpdate={onUpdateBuilding} onDemolish={onDemolishBuilding} onUpgrade={onUpgradeBuilding} resources={resources} activeTasks={activeTasks} />))
                     ) : ( <p className="text-center text-parchment-dark py-4">You have no {buildingInfo?.name?.toLowerCase()}s.</p> )}
                 </div>
 

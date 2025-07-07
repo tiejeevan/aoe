@@ -8,6 +8,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -156,7 +157,7 @@ export interface ResourceNode {
   amount: number;
 }
 
-export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' | 'advance_age';
+export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' | 'advance_age' | 'upgrade_building';
 
 export type PlayerActionState = {
     mode: 'build';
@@ -185,6 +186,11 @@ export interface GameTask {
         
         // Gather task
         resourceNodeId?: string;
+
+        // Upgrade Task
+        originalBuildingId?: string;
+        originalBuildingType?: string;
+        targetBuildingType?: string;
     };
 }
 

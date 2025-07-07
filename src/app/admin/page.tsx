@@ -26,7 +26,7 @@ import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
 import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../../components/icons/iconRegistry';
 import { INITIAL_AGES } from '../../../data/ageInfo';
 import { INITIAL_RESEARCH } from '../../../data/researchInfo';
-import { generateResourcesAction } from '../actions';
+import { generateResourcesAction, generateAgesAction } from '../actions';
 
 const BuildingEditor: React.FC<{
     building: BuildingConfig;
@@ -750,6 +750,7 @@ const AdminPage: React.FC = () => {
     
     // DGE State
     const [dgeResourceCount, setDgeResourceCount] = useState<number>(3);
+    const [dgeAgeCount, setDgeAgeCount] = useState<number>(4);
     const [isGenerating, setIsGenerating] = useState<boolean>(false);
     const [dgeError, setDgeError] = useState<string | null>(null);
 
@@ -990,6 +991,37 @@ const AdminPage: React.FC = () => {
             setIsGenerating(false);
         }
     };
+    
+    const handleGenerateAges = async () => {
+        setIsGenerating(true);
+        setDgeError(null);
+        try {
+            const existingAgeNames = ages.map(a => a.name);
+            const response = await generateAgesAction({ count: dgeAgeCount, existingAgeNames });
+
+            if (response.error) throw new Error(response.error);
+            if (!response.data) throw new Error("No age data returned from AI.");
+
+            const highestOrder = ages.length > 0 ? Math.max(...ages.map(a => a.order)) : 0;
+            
+            for (const [index, genAge] of response.data.ages.entries()) {
+                const newAge: AgeConfig = {
+                    id: `custom-age-${genAge.name.toLowerCase().replace(/\s+/g, '_')}-${Date.now()}`,
+                    name: genAge.name,
+                    description: genAge.description,
+                    isActive: true,
+                    isPredefined: false,
+                    order: highestOrder + index + 1,
+                };
+                await saveAgeConfig(newAge);
+            }
+            await fetchAges();
+        } catch (error) {
+            setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during age generation.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
 
 
     return (
@@ -1178,7 +1210,7 @@ const AdminPage: React.FC = () => {
                                 <CardTitle className="text-brand-gold flex items-center gap-2"><WandSparkles /> Data Generator Engine (DGE)</CardTitle>
                                 <CardDescription className="text-parchment-dark">Use AI to procedurally generate new content for your game.</CardDescription>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Card className="bg-stone-dark/20 border-stone-light/20">
                                     <CardHeader>
                                         <CardTitle className="text-base font-serif">Resource Generator</CardTitle>
@@ -1186,7 +1218,7 @@ const AdminPage: React.FC = () => {
                                     </CardHeader>
                                     <CardContent className="flex items-end gap-4">
                                         <div className="flex-grow">
-                                            <Label htmlFor="dge-resource-count">Number of Resources to Generate</Label>
+                                            <Label htmlFor="dge-resource-count">Number to Generate</Label>
                                             <Input 
                                                 id="dge-resource-count" 
                                                 type="number" 
@@ -1203,16 +1235,42 @@ const AdminPage: React.FC = () => {
                                             {isGenerating ? 'Generating...' : 'Generate'}
                                         </Button>
                                     </CardContent>
-                                     {dgeError && (
-                                        <CardContent>
-                                            <Alert variant="destructive">
-                                                <AlertTitle>Generation Failed</AlertTitle>
-                                                <AlertDescription>{dgeError}</AlertDescription>
-                                            </Alert>
-                                        </CardContent>
-                                    )}
                                 </Card>
-                                 <p className="text-center text-parchment-dark mt-8">More generators for Ages, Buildings, and Research are coming soon!</p>
+                                <Card className="bg-stone-dark/20 border-stone-light/20">
+                                    <CardHeader>
+                                        <CardTitle className="text-base font-serif">Age Generator</CardTitle>
+                                        <CardDescription className="text-parchment-dark">Generate a sequence of thematic ages for your game.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="flex items-end gap-4">
+                                        <div className="flex-grow">
+                                            <Label htmlFor="dge-age-count">Number to Generate</Label>
+                                            <Input 
+                                                id="dge-age-count" 
+                                                type="number" 
+                                                value={dgeAgeCount} 
+                                                onChange={(e) => setDgeAgeCount(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))} 
+                                                min="1" 
+                                                max="10" 
+                                                className="sci-fi-input" 
+                                                disabled={isGenerating}
+                                            />
+                                        </div>
+                                        <Button onClick={handleGenerateAges} disabled={isGenerating}>
+                                            {isGenerating ? <LoaderCircle className="mr-2 animate-spin"/> : <WandSparkles className="mr-2" />}
+                                            {isGenerating ? 'Generating...' : 'Generate'}
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                                
+                                {dgeError && (
+                                    <div className="md:col-span-2">
+                                        <Alert variant="destructive">
+                                            <AlertTitle>Generation Failed</AlertTitle>
+                                            <AlertDescription>{dgeError}</AlertDescription>
+                                        </Alert>
+                                    </div>
+                                )}
+                                 <p className="text-center text-parchment-dark md:col-span-2 mt-4">More generators for Buildings and Research are coming soon!</p>
                             </CardContent>
                         </Card>
                     </TabsContent>

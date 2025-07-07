@@ -2,6 +2,7 @@
 
 import { suggestPalette, type SuggestPaletteInput } from '@/src/ai/flows/suggest-palette';
 import { generateResources, type GenerateResourcesInput, type GenerateResourcesOutput } from '@/src/ai/flows/generate-resources';
+import { generateAges, type GenerateAgesInput, type GenerateAgesOutput } from '@/src/ai/flows/generate-ages';
 
 export async function suggestPaletteAction(input: SuggestPaletteInput) {
   try {
@@ -22,5 +23,16 @@ export async function generateResourcesAction(input: GenerateResourcesInput): Pr
     console.error("Error in generateResourcesAction:", error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown AI error occurred.';
     return { data: null, error: `Failed to generate resources. ${errorMessage}` };
+  }
+}
+
+export async function generateAgesAction(input: GenerateAgesInput): Promise<{ data: GenerateAgesOutput | null; error: string | null; }> {
+  try {
+    const result = await generateAges(input);
+    return { data: result, error: null };
+  } catch (error) {
+    console.error("Error in generateAgesAction:", error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown AI error occurred.';
+    return { data: null, error: `Failed to generate ages. ${errorMessage}` };
   }
 }

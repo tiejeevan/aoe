@@ -108,7 +108,7 @@ export interface GameEvent {
     choices: GameEventChoice[];
 }
 
-export type LogIconType = keyof Resources | 'villager' | MilitaryUnitType | 'age' | 'event' | 'system' | BuildingType;
+export type LogIconType = keyof Resources | 'villager' | MilitaryUnitType | 'age' | 'event' | 'system' | BuildingType | 'item';
 
 export interface GameLogEntry {
     id: string;
@@ -180,6 +180,17 @@ export interface GameTask {
     };
 }
 
+export interface ActiveBuffs {
+    buildTimeReduction?: { percentage: number; uses: number };
+    trainTimeReduction?: { percentage: number; uses: number };
+    resourceBoost?: {
+        resource: keyof Resources;
+        multiplier: number;
+        endTime: number;
+    }[];
+    permanentTrainTimeReduction?: number; // percentage
+}
+
 export interface FullGameState {
     civilization: Civilization;
     resources: Resources;
@@ -190,4 +201,5 @@ export interface FullGameState {
     activeTasks: GameTask[];
     resourceNodes: ResourceNode[];
     inventory: GameItem[];
+    activeBuffs: ActiveBuffs;
 }

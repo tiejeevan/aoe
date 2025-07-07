@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
@@ -17,6 +17,7 @@ import BuildingManagementPanel from '@/components/BuildingManagementPanel';
 import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
 import CivilizationPanel from '@/components/CivilizationPanel';
 import AllBuildingsPanel from '@/components/AllBuildingsPanel';
+import InventoryPanel from '@/components/InventoryPanel';
 
 const BUILDINGS_INFO: BuildingInfo[] = [
     { id: 'houses', name: 'House', description: 'Increases population capacity by 5.', cost: { wood: 50 }, isUnique: false, buildTime: 15 },
@@ -68,6 +69,7 @@ const GamePage: React.FC = () => {
     const [activeTasks, setActiveTasks] = useState<GameTask[]>([]);
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
     const [inventory, setInventory] = useState<GameItem[]>([]);
+    const [activeBuffs, setActiveBuffs] = useState<ActiveBuffs>({ resourceBoost: [] });
     
     // Panel States
     const [buildPanelState, setBuildPanelState] = useState<{ isOpen: boolean; villagerId: string | null; anchorRect: DOMRect | null }>({ isOpen: false, villagerId: null, anchorRect: null });
@@ -76,6 +78,7 @@ const GamePage: React.FC = () => {
     const [allBuildingsPanel, setAllBuildingsPanel] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
     const [assignmentPanelState, setAssignmentPanelState] = useState<{ isOpen: boolean; targetId: string | null; targetType: 'resource' | 'construction' | null; anchorRect: DOMRect | null; }>({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     const [civPanelState, setCivPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
+    const [inventoryPanelState, setInventoryPanelState] = useState<{ isOpen: boolean; anchorRect: DOMRect | null; }>({ isOpen: false, anchorRect: null });
 
     const deltaTimeoutRef = useRef<{ [key in keyof Resources]?: number }>({});
     const eventTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -108,10 +111,11 @@ const GamePage: React.FC = () => {
                 activeTasks,
                 resourceNodes,
                 inventory,
+                activeBuffs,
             };
             saveGameState(currentSaveName, fullState);
         }
-    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes, inventory]);
+    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes, inventory, activeBuffs]);
 
     const addNotification = useCallback((message: string) => {
         const id = `${Date.now()}-${Math.random()}`;
@@ -227,6 +231,15 @@ const GamePage: React.FC = () => {
 
             let completedTasks: GameTask[] = [];
             let resourceDeltasThisTick: ResourceDeltas = {};
+            
+            // Clean up expired buffs
+            setActiveBuffs(prev => {
+                const newResourceBoosts = prev.resourceBoost?.filter(b => b.endTime > now);
+                if (newResourceBoosts?.length !== prev.resourceBoost?.length) {
+                    addToLog("A resource gathering bonus has expired.", 'system');
+                }
+                return { ...prev, resourceBoost: newResourceBoosts };
+            });
 
             const tasksInProgress = activeTasks.map(task => {
                 if (now >= task.startTime + task.duration) {
@@ -245,19 +258,22 @@ const GamePage: React.FC = () => {
                     }
 
                     const baseRatePerSecond = GATHER_INFO[node.type].rate;
-                    let bonusMultiplier = 1;
+                    let civBonusMultiplier = 1;
                     if (civilization) {
                         const bonusString = civilization.bonus.toLowerCase();
                         const resourceString = node.type.toLowerCase();
                         if (bonusString.includes(resourceString)) {
                             const match = bonusString.match(/(\d+)%/);
                             if (match && match[1]) {
-                                bonusMultiplier = 1 + (parseInt(match[1], 10) / 100);
+                                civBonusMultiplier = 1 + (parseInt(match[1], 10) / 100);
                             }
                         }
                     }
                     
-                    const finalRatePerSecond = baseRatePerSecond * bonusMultiplier;
+                    const itemBoost = activeBuffs.resourceBoost?.find(b => b.resource === node.type);
+                    const itemBoostMultiplier = itemBoost ? itemBoost.multiplier : 1;
+
+                    const finalRatePerSecond = baseRatePerSecond * civBonusMultiplier * itemBoostMultiplier;
                     const amountGatheredThisTick = (finalRatePerSecond / 1000) * deltaTime * villagerCount;
                     
                     resourceDeltasThisTick[node.type] = (resourceDeltasThisTick[node.type] || 0) + amountGatheredThisTick;
@@ -310,7 +326,7 @@ const GamePage: React.FC = () => {
         return () => {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         };
-    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog, updateResources, units.villagers, civilization]);
+    }, [gameState, activeTasks, resourceNodes, handleTaskCompletion, addToLog, updateResources, units.villagers, civilization, activeBuffs]);
 
 
     const handleNewEvent = useCallback(() => {
@@ -325,7 +341,6 @@ const GamePage: React.FC = () => {
         if (eventTimerRef.current) {
             clearTimeout(eventTimerRef.current);
         }
-        // Events should trigger every 10 to 25 seconds
         const nextEventTime = (10 + Math.random() * 15) * 1000;
         eventTimerRef.current = setTimeout(() => handleNewEvent(), nextEventTime);
     }, [handleNewEvent]);
@@ -378,6 +393,7 @@ const GamePage: React.FC = () => {
         setUnlimitedResources(false);
         setActiveTasks([]);
         setInventory([]);
+        setActiveBuffs({ resourceBoost: [] });
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
@@ -398,8 +414,6 @@ const GamePage: React.FC = () => {
         
         const task = activeTasks.find(t => t.id === villager.currentTask);
         if (!task) {
-            // This case can happen briefly if a task completes but state hasn't fully updated.
-            // Or it can indicate a bug if it persists.
             return 'Idle (Finalizing Task)';
         }
 
@@ -423,13 +437,11 @@ const GamePage: React.FC = () => {
             setCivilization(savedState.civilization);
             setResources(savedState.resources);
             
-            // Migrate units data structure if necessary
             let savedUnits = savedState.units || { villagers: [], military: [] };
             if ((savedState.units as any)?.soldiers) {
                  const migratedMilitary: MilitaryUnit[] = (savedState.units as any).soldiers.map((s: any) => ({ ...s, unitType: 'swordsman' }));
                  savedUnits = { villagers: savedUnits.villagers || [], military: migratedMilitary };
             }
-            // Migrate villagers to include currentTask
             const migratedVillagers = savedUnits.villagers.map(v => ({...v, currentTask: v.currentTask !== undefined ? v.currentTask : null}));
             const migratedTasks = (savedState.activeTasks || []).map(t => {
                 if (t.type === 'build' && !t.payload?.villagerIds) {
@@ -492,6 +504,7 @@ const GamePage: React.FC = () => {
             setGameLog(savedState.gameLog);
             setActiveTasks(migratedTasks);
             setInventory(savedState.inventory || []);
+            setActiveBuffs(savedState.activeBuffs || { resourceBoost: [] });
             
             setCurrentEvent(null);
             setActivityStatus('Welcome back to your saga.');
@@ -505,11 +518,9 @@ const GamePage: React.FC = () => {
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) return;
 
-        // This timer is now independent of other tasks.
         if (!currentEvent) {
             scheduleNextEvent();
         } else if (eventTimerRef.current) {
-            // If an event is showing, we stop the timer until it's resolved.
             clearTimeout(eventTimerRef.current);
         }
 
@@ -521,7 +532,6 @@ const GamePage: React.FC = () => {
     }, [gameState, currentEvent, scheduleNextEvent]);
 
     const handleEventChoice = (choice: GameEventChoice) => {
-        // 1. Check and apply cost
         if (choice.cost) {
             const missingRes: string[] = [];
             for (const key in choice.cost) {
@@ -542,24 +552,17 @@ const GamePage: React.FC = () => {
             updateResources(negativeCost);
         }
         
-        // 2. Determine success
         const isSuccess = choice.successChance === undefined || Math.random() < choice.successChance;
         const effects = isSuccess ? choice.successEffects : choice.failureEffects;
 
-        if (!effects) { // Handle cases with no failure effect defined
+        if (!effects) {
             setCurrentEvent(null);
             scheduleNextEvent();
             return;
         }
 
-        // 3. Construct detailed log message
-        let logMessage = `Decision: "${choice.text}".`;
-        if (choice.successChance !== undefined) {
-            logMessage += ` The outcome was a ${isSuccess ? 'success' : 'failure'}.`;
-        }
-        logMessage += ` ${effects.log}`;
+        let logMessage = `Decision: "${choice.text}". Outcome: ${isSuccess ? 'Success' : 'Failure'}. ${effects.log}`;
 
-        // 4. Apply rewards and update log
         effects.rewards.forEach((reward: Reward) => {
             if (reward.type === 'resource') {
                 let amount = 0;
@@ -579,7 +582,6 @@ const GamePage: React.FC = () => {
                 if (itemInfo) {
                     const newItems: GameItem[] = [];
                     for(let i = 0; i < reward.amount; i++) {
-                        // Create a unique ID for each item instance
                         newItems.push({ ...itemInfo, id: `${reward.itemId}-${Date.now()}-${i}` });
                     }
                     setInventory(prev => [...prev, ...newItems]);
@@ -588,7 +590,6 @@ const GamePage: React.FC = () => {
             }
         });
         
-        // 5. Log and update UI
         addToLog(logMessage, 'event');
         setActivityStatus(effects.log);
         setCurrentEvent(null);
@@ -650,7 +651,18 @@ const GamePage: React.FC = () => {
             updateResources(negativeCost);
         }
         
-        const buildTime = buildingInfo.buildTime * 1000;
+        let buildTime = buildingInfo.buildTime * 1000;
+        if(activeBuffs.buildTimeReduction) {
+            buildTime *= (1 - activeBuffs.buildTimeReduction.percentage);
+            addToLog(`A Builder's Charm reduced construction time by ${activeBuffs.buildTimeReduction.percentage * 100}%!`, 'item');
+            setActiveBuffs(prev => {
+                const newUses = prev.buildTimeReduction!.uses - 1;
+                return newUses > 0 
+                    ? { ...prev, buildTimeReduction: { ...prev.buildTimeReduction!, uses: newUses } }
+                    : { ...prev, buildTimeReduction: undefined };
+            });
+        }
+        
         const taskId = `${Date.now()}-build-${buildingType}`;
         const taskPayload = { buildingType, villagerIds: [villagerId], position };
 
@@ -724,7 +736,7 @@ const GamePage: React.FC = () => {
             if (resources.food < totalCost) { addNotification(`Need ${totalCost - resources.food} more Food.`); return; }
             updateResources({ food: -totalCost });
         }
-        const trainTime = 10000 * count; // 10s per villager
+        const trainTime = 10000 * count;
         if(unlimitedResources) {
             handleTaskCompletion({ id: 'instant', type: 'train_villager', startTime: 0, duration: 0, payload: { count } });
         } else {
@@ -756,7 +768,28 @@ const GamePage: React.FC = () => {
             if (missing.length > 0) { addNotification(`Need ${missing.join(' and ')}.`); return; }
             updateResources(totalCost);
         }
-        const trainTime = unitInfo.trainTime * 1000 * count;
+        
+        let trainTime = unitInfo.trainTime * 1000 * count;
+        const permanentBonus = activeBuffs.permanentTrainTimeReduction || 0;
+        let tempBonus = 0;
+        if (activeBuffs.trainTimeReduction) {
+            const applicableUses = Math.min(count, activeBuffs.trainTimeReduction.uses);
+            const remainingUses = activeBuffs.trainTimeReduction.uses - applicableUses;
+            tempBonus = activeBuffs.trainTimeReduction.percentage;
+
+            const timeForBuffedUnits = (unitInfo.trainTime * 1000 * applicableUses) * (1 - tempBonus);
+            const timeForNormalUnits = (unitInfo.trainTime * 1000 * (count - applicableUses));
+            trainTime = timeForBuffedUnits + timeForNormalUnits;
+
+            if (remainingUses > 0) {
+                setActiveBuffs(prev => ({...prev, trainTimeReduction: {...prev.trainTimeReduction!, uses: remainingUses}}));
+            } else {
+                setActiveBuffs(prev => ({...prev, trainTimeReduction: undefined}));
+                addToLog("The Drillmaster's Whistle buff has been fully used.", 'item');
+            }
+        }
+        trainTime *= (1 - permanentBonus);
+        
         if(unlimitedResources) {
             handleTaskCompletion({ id: 'instant', type: 'train_military', startTime: 0, duration: 0, payload: { unitType, count } });
         } else {
@@ -985,17 +1018,14 @@ const GamePage: React.FC = () => {
         setUnlimitedResources(newMode);
 
         if (newMode) {
-            // Test mode is being turned ON
             setResources({ food: 99999, wood: 99999, gold: 99999, stone: 99999 });
             addNotification("Test Mode: ON - All active tasks completed.");
 
             const depletedNodeIds = new Set<string>();
             const tasksToComplete = [...activeTasks];
             
-            // Clear the task queue immediately
             setActiveTasks([]);
 
-            // Process and complete all previously active tasks
             tasksToComplete.forEach(task => {
                 if (task.type === 'gather') {
                     if (task.payload?.resourceNodeId) {
@@ -1006,21 +1036,99 @@ const GamePage: React.FC = () => {
                         }
                     }
                 }
-                // Complete all tasks, which also handles freeing villagers
                 handleTaskCompletion(task);
             });
 
-            // Remove depleted resource nodes
             if (depletedNodeIds.size > 0) {
                 setResourceNodes(prev => prev.filter(n => !depletedNodeIds.has(n.id)));
             }
 
         } else {
-            // Test mode is being turned OFF
             addNotification("Test Mode: OFF");
         }
     };
+    
+    const handleUseItem = (itemId: string) => {
+        const item = inventory.find(i => i.id === itemId);
+        if (!item) return;
 
+        const baseItemId = item.id.split('-')[0];
+
+        switch(baseItemId) {
+            case 'scroll_of_haste':
+            case 'blueprint_of_the_master': {
+                const constructionTasks = activeTasks.filter(t => t.type === 'build');
+                if (constructionTasks.length > 0) {
+                    const taskToBoost = constructionTasks.sort((a,b) => (b.startTime + b.duration) - (a.startTime + a.duration))[0];
+                    const timeReduction = baseItemId === 'scroll_of_haste' ? 15000 : 60000;
+                    
+                    setActiveTasks(prev => prev.map(t => 
+                        t.id === taskToBoost.id ? { ...t, duration: Math.max(0, t.duration - timeReduction) } : t
+                    ));
+                    addToLog(`Used ${item.name} to speed up construction of the ${BUILDINGS_INFO.find(b => b.id === taskToBoost.payload?.buildingType)?.name}.`, 'item');
+                }
+                break;
+            }
+            case 'hearty_meal': {
+                updateResources({ food: 75 });
+                addToLog(`Used ${item.name} to gain 75 food.`, 'item');
+                break;
+            }
+             case 'builders_charm': {
+                setActiveBuffs(prev => ({...prev, buildTimeReduction: { percentage: 0.1, uses: 1 }}));
+                addToLog(`Used ${item.name}. The next building will be constructed 10% faster.`, 'item');
+                break;
+            }
+             case 'drillmasters_whistle': {
+                setActiveBuffs(prev => ({...prev, trainTimeReduction: { percentage: 0.25, uses: 5 }}));
+                addToLog(`Used ${item.name}. The next 5 military units will train 25% faster.`, 'item');
+                break;
+            }
+             case 'golden_harvest': {
+                setActiveBuffs(prev => ({...prev, resourceBoost: [...(prev.resourceBoost || []), { resource: 'food', multiplier: 1.5, endTime: Date.now() + 60000 }]}));
+                addToLog(`Used ${item.name}. Food gathering is boosted by 50% for 60 seconds.`, 'item');
+                break;
+            }
+            case 'shard_of_the_ancients': {
+                 const constructionTasks = activeTasks.filter(t => t.type === 'build');
+                if (constructionTasks.length > 0) {
+                    const taskToComplete = constructionTasks.sort((a,b) => (b.startTime + b.duration) - (a.startTime + a.duration))[0];
+                    setActiveTasks(prev => prev.filter(t => t.id !== taskToComplete.id));
+                    handleTaskCompletion(taskToComplete);
+                    addToLog(`Used ${item.name} to instantly complete the ${BUILDINGS_INFO.find(b => b.id === taskToComplete.payload?.buildingType)?.name}.`, 'item');
+                }
+                break;
+            }
+            case 'heart_of_the_mountain': {
+                const now = Date.now();
+                setActiveBuffs(prev => ({...prev, resourceBoost: [
+                    ...(prev.resourceBoost || []), 
+                    { resource: 'gold', multiplier: 2, endTime: now + 120000 },
+                    { resource: 'stone', multiplier: 2, endTime: now + 120000 }
+                ]}));
+                addToLog(`Used ${item.name}. Gold and Stone gathering are doubled for 2 minutes.`, 'item');
+                break;
+            }
+            case 'banner_of_command': {
+                // Since there is no combat, we'll make this a permanent training speed boost
+                const currentBonus = activeBuffs.permanentTrainTimeReduction || 0;
+                setActiveBuffs(prev => ({...prev, permanentTrainTimeReduction: currentBonus + 0.05}));
+                addToLog(`Used ${item.name}. All military units will now train 5% faster, permanently.`, 'item');
+                break;
+            }
+            case 'whisper_of_the_creator': {
+                const tasksToComplete = [...activeTasks];
+                setActiveTasks([]);
+                tasksToComplete.forEach(handleTaskCompletion);
+                addToLog(`A divine whisper echoes through your civilization, and all work is instantly finished.`, 'item');
+                break;
+            }
+        }
+
+        setInventory(prev => prev.filter(i => i.id !== itemId));
+        setInventoryPanelState({isOpen: false, anchorRect: null});
+    };
+    
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
         const buildingType = key as BuildingType;
         acc[buildingType] = buildings[buildingType].length;
@@ -1040,6 +1148,7 @@ const GamePage: React.FC = () => {
         setAssignmentPanelState(p => p.isOpen ? { isOpen: false, targetId: null, targetType: null, anchorRect: null } : p);
         setCivPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
         setAllBuildingsPanel(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
+        setInventoryPanelState(p => p.isOpen ? { isOpen: false, anchorRect: null } : p);
     }, []);
 
     const handleOpenBuildingPanel = useCallback((type: BuildingType, instanceId: string, rect: DOMRect) => {
@@ -1049,14 +1158,15 @@ const GamePage: React.FC = () => {
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (currentEvent) return; // Don't close panels if event modal is open
+            if (currentEvent) return;
             
             const isAnyPanelOpen = unitManagementPanel.isOpen || 
                                    buildingManagementPanel.isOpen || 
                                    buildPanelState.isOpen || 
                                    assignmentPanelState.isOpen || 
                                    civPanelState.isOpen ||
-                                   allBuildingsPanel.isOpen;
+                                   allBuildingsPanel.isOpen ||
+                                   inventoryPanelState.isOpen;
 
             if (!isAnyPanelOpen) {
                 return;
@@ -1082,6 +1192,7 @@ const GamePage: React.FC = () => {
         assignmentPanelState.isOpen,
         civPanelState.isOpen,
         allBuildingsPanel.isOpen,
+        inventoryPanelState.isOpen,
         closeAllPanels,
         currentEvent,
     ]);
@@ -1129,6 +1240,8 @@ const GamePage: React.FC = () => {
                             gatherInfo={GATHER_INFO}
                             currentEvent={currentEvent}
                             onEventChoice={handleEventChoice}
+                            inventory={inventory}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
                         />
                         <BuildPanel 
                             isOpen={buildPanelState.isOpen}
@@ -1193,6 +1306,15 @@ const GamePage: React.FC = () => {
                             activeTasks={activeTasks}
                             onOpenBuildingPanel={handleOpenBuildingPanel}
                             anchorRect={allBuildingsPanel.anchorRect}
+                        />
+                        <InventoryPanel
+                            isOpen={inventoryPanelState.isOpen}
+                            onClose={() => setInventoryPanelState({ isOpen: false, anchorRect: null })}
+                            inventory={inventory}
+                            onUseItem={handleUseItem}
+                            activeTasks={activeTasks}
+                            activeBuffs={activeBuffs}
+                            anchorRect={inventoryPanelState.anchorRect}
                         />
                     </>
                 );

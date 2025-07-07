@@ -1,9 +1,9 @@
 
 import React from 'react';
-import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice } from '../types';
+import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingInfo, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice, GameItem } from '../types';
 import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
-import { ScrollText } from 'lucide-react';
+import { ScrollText, Package as PackageIcon } from 'lucide-react';
 
 interface GameUIProps {
     civilization: Civilization;
@@ -34,6 +34,8 @@ interface GameUIProps {
     gatherInfo: Record<ResourceNodeType, { rate: number }>;
     currentEvent: GameEvent | null;
     onEventChoice: (choice: GameEventChoice) => void;
+    inventory: GameItem[];
+    onOpenInventoryPanel: (rect: DOMRect) => void;
 }
 
 const ResourceChange: React.FC<{ change: number }> = ({ change }) => {
@@ -69,6 +71,7 @@ export const iconMap: Record<LogIconType, React.ReactNode> = {
     siegeWorkshop: <SiegeWorkshopIcon />, blacksmith: <BlacksmithIcon />,
     watchTower: <WatchTowerIcon/>, townCenter: <TownCenterIcon />,
     age: <AgeIcon />, event: <EventIcon />, system: <SystemIcon />,
+    item: <PackageIcon />,
 };
 
 const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
@@ -79,7 +82,7 @@ const LogIcon: React.FC<{icon: LogIconType}> = ({icon}) => {
 
 const GameUI: React.FC<GameUIProps> = (props) => {
     const {
-        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice
+        civilization, resources, units, buildings, population, currentAge, gameLog, resourceDeltas, activityStatus, unitList, buildingList, onOpenUnitPanel, onOpenBuildingPanel, onOpenAllBuildingsPanel, playerAction, onConfirmPlacement, onCancelPlayerAction, onBuildingClick, mapDimensions, activeTasks, onExitGame, onOpenCivPanel, resourceNodes, onOpenAssignmentPanel, onOpenConstructionPanel, gatherInfo, currentEvent, onEventChoice, inventory, onOpenInventoryPanel
     } = props;
     
     const buildingCounts = Object.keys(buildings).reduce((acc, key) => {
@@ -207,6 +210,21 @@ const GameUI: React.FC<GameUIProps> = (props) => {
                                 </button>
                                 <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                                     View All Structures
+                                </div>
+                            </div>
+
+                             {/* Inventory Button */}
+                            <div className="relative group">
+                                <button
+                                    onClick={(e) => onOpenInventoryPanel(e.currentTarget.getBoundingClientRect())}
+                                    className="sci-fi-button flex items-center gap-3 px-4 py-2 !rounded-lg"
+                                    aria-label={`View Inventory (${inventory.length})`}
+                                >
+                                    <div className="w-7 h-7 text-brand-gold"><PackageIcon /></div>
+                                    <span className="text-xl font-bold">{inventory.length}</span>
+                                </button>
+                                <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                    View Inventory
                                 </div>
                             </div>
                         </div>

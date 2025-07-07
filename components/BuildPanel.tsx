@@ -64,8 +64,11 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
     if (!currentAnchor) return null;
 
     const isAffordable = selectedBuilding ? Object.entries(selectedBuilding.cost).every(([res, cost]) => resources[res as keyof Resources] >= (cost || 0)) : false;
-    const isBuilt = selectedBuilding ? selectedBuilding.isUnique && (buildingCounts[selectedBuilding.id] || 0) > 0 : false;
-    const canBuild = isAffordable && !isBuilt;
+
+    const buildLimit = selectedBuilding ? (selectedBuilding.isUnique ? 1 : selectedBuilding.buildLimit || 0) : 0;
+    const isAtLimit = selectedBuilding ? buildLimit > 0 && (buildingCounts[selectedBuilding.id] || 0) >= buildLimit : false;
+    
+    const canBuild = isAffordable && !isAtLimit;
 
     const panelWidth = 500;
     const panelHeightEstimate = 300;
@@ -93,7 +96,7 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
     }
     panelStyle.left = `${leftPos}px`;
     
-    const constructButtonTooltip = isBuilt ? 'Already Built' : !isAffordable ? 'Insufficient Resources' : `Construct ${selectedBuilding?.name}`;
+    const constructButtonTooltip = isAtLimit ? 'Build limit reached' : !isAffordable ? 'Insufficient Resources' : `Construct ${selectedBuilding?.name}`;
 
     return (
         <div 
@@ -152,9 +155,9 @@ const BuildPanel: React.FC<BuildPanelProps> = ({ isOpen, onClose, onStartPlaceme
                                         <div className="w-4 h-4 text-parchment-dark"><ClockIcon /></div>
                                         <span>Build Time: {selectedBuilding.buildTime}s</span>
                                     </div>
-                                     {selectedBuilding.isUnique && (
-                                        <p className="text-xs text-brand-blue mt-2">
-                                            Unique Building ({buildingCounts[selectedBuilding.id] || 0} / 1 built)
+                                     {buildLimit > 0 && (
+                                        <p className={`text-xs mt-2 ${isAtLimit ? 'text-brand-red' : 'text-brand-blue'}`}>
+                                            Limit: {buildingCounts[selectedBuilding.id] || 0} / {buildLimit} built
                                         </p>
                                      )}
                                 </div>

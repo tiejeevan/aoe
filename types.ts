@@ -209,6 +209,7 @@ export interface BuildingConfig {
     description: string;
     cost: BuildingCosts;
     isUnique: boolean;
+    buildLimit?: number;
     buildTime: number; // in seconds
     hp: number;
     unlockedInAge: string; // name of the age

@@ -117,7 +117,7 @@ const BuildingEditor: React.FC<{
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2">
                     <Switch
                         id="edit-canTrainUnits"
                         checked={editedBuilding.canTrainUnits}
@@ -148,15 +148,33 @@ const BuildingEditor: React.FC<{
             </div>
 
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2">
                     <Switch 
                         id="edit-isUnique" 
                         checked={editedBuilding.isUnique} 
-                        onCheckedChange={(c) => handleInputChange('isUnique', c)}
+                        onCheckedChange={(c) => {
+                            handleInputChange('isUnique', c);
+                            handleInputChange('buildLimit', c ? 1 : 0);
+                        }}
                         className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red"
                      />
                     <Label htmlFor="edit-isUnique">Unique Building</Label>
                 </div>
+                
+                {!editedBuilding.isUnique && (
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="edit-buildLimit">Build Limit (0 for unlimited)</Label>
+                        <Input 
+                            id="edit-buildLimit" 
+                            type="number" 
+                            value={editedBuilding.buildLimit || 0} 
+                            onChange={(e) => handleInputChange('buildLimit', Math.max(0, parseInt(e.target.value, 10) || 0))} 
+                            className="sci-fi-input w-24"
+                            min="0"
+                        />
+                    </div>
+                )}
+
                 <div className="flex gap-2">
                     <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
                     <Button onClick={() => onSave(editedBuilding)} className="bg-brand-green hover:bg-brand-green/80"><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
@@ -283,6 +301,7 @@ const AdminPage: React.FC = () => {
             for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
                 const newPredefinedBuilding: BuildingConfig = {
                     ...pb,
+                    buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
                     isActive: true,
                     isPredefined: true,
                     order: index,
@@ -370,6 +389,7 @@ const AdminPage: React.FC = () => {
             description: 'A new custom building.',
             cost: { wood: 50, food: 0, gold: 0, stone: 0 },
             isUnique: false,
+            buildLimit: 0,
             buildTime: 30,
             hp: 1000,
             unlockedInAge: ages[0]?.name || 'Nomadic Age',

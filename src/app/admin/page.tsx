@@ -14,6 +14,9 @@ import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Checkbox } from '../../components/ui/checkbox';
+import { ScrollArea } from '../../components/ui/scroll-area';
+
 
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
 import { INITIAL_UNITS } from '../../../data/unitInfo';
@@ -33,8 +36,14 @@ const BuildingEditor: React.FC<{
     onSave: (building: BuildingConfig) => void;
     onCancel: () => void;
     allAges: AgeConfig[];
-}> = ({ building, onSave, onCancel, allAges }) => {
-    const [editedBuilding, setEditedBuilding] = useState<BuildingConfig>(building);
+    allUnits: UnitConfig[];
+    allBuildings: BuildingConfig[];
+}> = ({ building, onSave, onCancel, allAges, allUnits, allBuildings }) => {
+    const [editedBuilding, setEditedBuilding] = useState<BuildingConfig>({
+        ...building,
+        trainsUnits: building.trainsUnits || [],
+        upgradesTo: building.upgradesTo || [],
+    });
 
     const handleInputChange = (field: keyof BuildingConfig, value: any) => {
         setEditedBuilding(prev => ({ ...prev, [field]: value }));
@@ -42,6 +51,28 @@ const BuildingEditor: React.FC<{
     const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedBuilding(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
+    };
+
+    const handleTrainsUnitsChange = (unitId: string, checked: boolean) => {
+        setEditedBuilding(prev => {
+            const currentUnits = prev.trainsUnits || [];
+            if (checked) {
+                return { ...prev, trainsUnits: [...currentUnits, unitId] };
+            } else {
+                return { ...prev, trainsUnits: currentUnits.filter(id => id !== unitId) };
+            }
+        });
+    };
+
+    const handleUpgradesToChange = (buildingId: string, checked: boolean) => {
+        setEditedBuilding(prev => {
+            const currentBuildings = prev.upgradesTo || [];
+            if (checked) {
+                return { ...prev, upgradesTo: [...currentBuildings, buildingId] };
+            } else {
+                return { ...prev, upgradesTo: currentBuildings.filter(id => id !== buildingId) };
+            }
+        });
     };
 
     return (
@@ -72,7 +103,7 @@ const BuildingEditor: React.FC<{
                 {(Object.keys(editedBuilding.cost!) as (keyof Resources)[]).map(res => (
                     <div key={res}>
                         <Label className="capitalize text-xs">{res}</Label>
-                        <Input type="number" value={editedBuilding.cost![res]} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input" />
+                        <Input type="number" value={editedBuilding.cost![res] || 0} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input" />
                     </div>
                 ))}
             </div>
@@ -98,6 +129,47 @@ const BuildingEditor: React.FC<{
                 </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                    <Label>Trains Units</Label>
+                    <ScrollArea className="h-32 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
+                        <div className="space-y-1">
+                            {allUnits.map(unit => (
+                                <div key={unit.id} className="flex items-center gap-2">
+                                    <Checkbox
+                                        id={`trains-${unit.id}`}
+                                        checked={editedBuilding.trainsUnits?.includes(unit.id)}
+                                        onCheckedChange={(checked) => handleTrainsUnitsChange(unit.id, !!checked)}
+                                    />
+                                    <label htmlFor={`trains-${unit.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                        {unit.name}
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                </div>
+                <div>
+                    <Label>Upgrades To</Label>
+                    <ScrollArea className="h-32 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
+                        <div className="space-y-1">
+                            {allBuildings.filter(b => b.id !== building.id).map(b => (
+                                <div key={b.id} className="flex items-center gap-2">
+                                    <Checkbox
+                                        id={`upgrades-${b.id}`}
+                                        checked={editedBuilding.upgradesTo?.includes(b.id)}
+                                        onCheckedChange={(checked) => handleUpgradesToChange(b.id, !!checked)}
+                                    />
+                                    <label htmlFor={`upgrades-${b.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                        {b.name}
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                </div>
+            </div>
+
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Switch id="edit-isUnique" checked={editedBuilding.isUnique} onCheckedChange={(c) => handleInputChange('isUnique', c)} />
@@ -116,8 +188,7 @@ const UnitEditor: React.FC<{
     unit: UnitConfig;
     onSave: (unit: UnitConfig) => void;
     onCancel: () => void;
-    allBuildings: BuildingConfig[];
-}> = ({ unit, onSave, onCancel, allBuildings }) => {
+}> = ({ unit, onSave, onCancel }) => {
     const [editedUnit, setEditedUnit] = useState<UnitConfig>(unit);
 
     const handleInputChange = (field: keyof UnitConfig, value: any) => {
@@ -145,15 +216,11 @@ const UnitEditor: React.FC<{
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {(Object.keys(editedUnit.cost!) as (keyof Resources)[]).map(res => (
-                    <div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost![res]} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>
+                    <div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost![res] || 0} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>
                 ))}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Select value={editedUnit.requiredBuilding} onValueChange={(val) => handleInputChange('requiredBuilding', val)}>
-                    <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Required Building"/></SelectTrigger>
-                    <SelectContent>{allBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                </Select>
                  <Select value={editedUnit.iconId} onValueChange={(val) => handleInputChange('iconId', val)}>
                     <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Icon"/></SelectTrigger>
                     <SelectContent>{Object.keys(unitIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent>
@@ -307,6 +374,8 @@ const AdminPage: React.FC = () => {
             isActive: true,
             isPredefined: false,
             order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0,
+            trainsUnits: [],
+            upgradesTo: [],
         };
         setEditingBuilding(newBuilding);
     };
@@ -335,7 +404,6 @@ const AdminPage: React.FC = () => {
             name: 'New Unit',
             description: 'A new custom unit.',
             cost: { food: 50, gold: 10, wood: 0, stone: 0 },
-            requiredBuilding: buildings.find(b => b.id === 'barracks')?.id || buildings[0].id,
             trainTime: 20,
             hp: 50,
             attack: 5,
@@ -439,7 +507,14 @@ const AdminPage: React.FC = () => {
                                 {isBuildingsLoading ? <p>Loading buildings...</p> : (
                                     <>
                                         {editingBuilding && (
-                                            <BuildingEditor building={editingBuilding} onSave={handleSaveBuilding} onCancel={() => setEditingBuilding(null)} allAges={ages} />
+                                            <BuildingEditor 
+                                                building={editingBuilding} 
+                                                onSave={handleSaveBuilding} 
+                                                onCancel={() => setEditingBuilding(null)} 
+                                                allAges={ages} 
+                                                allUnits={units}
+                                                allBuildings={buildings}
+                                            />
                                         )}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
                                             {buildings.map((b) => (
@@ -478,7 +553,7 @@ const AdminPage: React.FC = () => {
                                 {isUnitsLoading ? <p>Loading units...</p> : (
                                     <>
                                         {editingUnit && (
-                                            <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} allBuildings={buildings} />
+                                            <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} />
                                         )}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
                                             {units.map((u) => (
@@ -487,7 +562,7 @@ const AdminPage: React.FC = () => {
                                                         <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(unitIconMap[u.iconId] || unitIconMap.default)}</div>
                                                         <div className="flex-grow">
                                                             <h3 className="font-bold flex items-center gap-2">{u.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{u.name}</h3>
-                                                            <p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack} | Requires: {buildings.find(b=>b.id===u.requiredBuilding)?.name || 'N/A'}</p>
+                                                            <p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-3">

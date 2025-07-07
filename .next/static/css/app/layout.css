@@ -832,6 +832,9 @@ video {
 .h-svh {
   height: 100svh;
 }
+.h-32 {
+  height: 8rem;
+}
 .max-h-48 {
   max-height: 12rem;
 }
@@ -1139,6 +1142,9 @@ video {
 }
 .grid-cols-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.flex-row {
+  flex-direction: row;
 }
 .flex-col {
   flex-direction: column;

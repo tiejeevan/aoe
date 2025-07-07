@@ -2,6 +2,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -125,7 +126,6 @@ export interface UnitConfig {
     name: string;
     description: string;
     cost: BuildingCosts;
-    requiredBuilding: BuildingType | string;
     trainTime: number; // in seconds
     hp: number;
     attack: number;
@@ -214,6 +214,8 @@ export interface BuildingConfig {
     isActive: boolean;
     isPredefined: boolean;
     order: number;
+    trainsUnits?: string[];
+    upgradesTo?: string[];
 }
 
 

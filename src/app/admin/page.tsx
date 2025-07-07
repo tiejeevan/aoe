@@ -149,7 +149,12 @@ const BuildingEditor: React.FC<{
 
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Switch id="edit-isUnique" checked={editedBuilding.isUnique} onCheckedChange={(c) => handleInputChange('isUnique', c)} />
+                    <Switch 
+                        id="edit-isUnique" 
+                        checked={editedBuilding.isUnique} 
+                        onCheckedChange={(c) => handleInputChange('isUnique', c)}
+                        className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red"
+                     />
                     <Label htmlFor="edit-isUnique">Unique Building</Label>
                 </div>
                 <div className="flex gap-2">

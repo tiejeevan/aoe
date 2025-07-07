@@ -8,7 +8,7 @@
  */
 
 import { ai } from '@/src/ai/genkit';
-import { z } from 'zod';
+import { z } from 'genkit';
 import { resourceIconMap } from '../../../components/icons/iconRegistry';
 
 const GenerateResourcesInputSchema = z.object({

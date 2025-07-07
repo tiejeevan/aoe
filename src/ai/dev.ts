@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/suggest-palette.ts';
-import '@/ai/flows/generate-resources.ts';
+import '@/src/ai/flows/suggest-palette.ts';
+import '@/src/ai/flows/generate-resources.ts';

@@ -9,7 +9,8 @@ export const INITIAL_UNITS: Omit<UnitConfig, 'isActive' | 'isPredefined' | 'orde
         trainTime: 22,
         hp: 45,
         attack: 4,
-        iconId: 'swordsman'
+        iconId: 'swordsman',
+        requiredBuilding: 'barracks'
     },
     { 
         id: 'archer', 
@@ -19,7 +20,8 @@ export const INITIAL_UNITS: Omit<UnitConfig, 'isActive' | 'isPredefined' | 'orde
         trainTime: 25,
         hp: 30,
         attack: 5,
-        iconId: 'archer'
+        iconId: 'archer',
+        requiredBuilding: 'archeryRange'
     },
     { 
         id: 'knight', 
@@ -29,7 +31,8 @@ export const INITIAL_UNITS: Omit<UnitConfig, 'isActive' | 'isPredefined' | 'orde
         trainTime: 30,
         hp: 100,
         attack: 10,
-        iconId: 'knight'
+        iconId: 'knight',
+        requiredBuilding: 'stable'
     },
     { 
         id: 'catapult', 
@@ -39,6 +42,7 @@ export const INITIAL_UNITS: Omit<UnitConfig, 'isActive' | 'isPredefined' | 'orde
         trainTime: 45,
         hp: 50,
         attack: 75,
-        iconId: 'catapult'
+        iconId: 'catapult',
+        requiredBuilding: 'siegeWorkshop'
     },
 ];

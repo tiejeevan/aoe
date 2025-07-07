@@ -3,6 +3,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -130,6 +131,7 @@ export interface UnitConfig {
     hp: number;
     attack: number;
     iconId: string;
+    requiredBuilding: string;
     isActive: boolean;
     isPredefined: boolean;
     order: number;
@@ -214,7 +216,7 @@ export interface BuildingConfig {
     isActive: boolean;
     isPredefined: boolean;
     order: number;
-    trainsUnits?: string[];
+    canTrainUnits: boolean;
     upgradesTo?: string[];
 }
 

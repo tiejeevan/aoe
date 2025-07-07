@@ -182,7 +182,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     if (!buildingInfo) return null;
 
     const buildingInstances = currentBuildings[type] || [];
-    const unitsToTrain = buildingInfo.trainsUnits ? unitList.filter(u => buildingInfo.trainsUnits!.includes(u.id)) : [];
+    const unitsToTrain = buildingInfo.canTrainUnits ? unitList.filter(u => u.requiredBuilding === buildingInfo.id) : [];
     
     const activeVillagerTask = activeTasks.find(t => t.type === 'train_villager');
     const activeAgeTask = activeTasks.find(t => t.type === 'advance_age');

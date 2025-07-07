@@ -36,12 +36,10 @@ const BuildingEditor: React.FC<{
     onSave: (building: BuildingConfig) => void;
     onCancel: () => void;
     allAges: AgeConfig[];
-    allUnits: UnitConfig[];
     allBuildings: BuildingConfig[];
-}> = ({ building, onSave, onCancel, allAges, allUnits, allBuildings }) => {
+}> = ({ building, onSave, onCancel, allAges, allBuildings }) => {
     const [editedBuilding, setEditedBuilding] = useState<BuildingConfig>({
         ...building,
-        trainsUnits: building.trainsUnits || [],
         upgradesTo: building.upgradesTo || [],
     });
 
@@ -51,17 +49,6 @@ const BuildingEditor: React.FC<{
     const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedBuilding(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
-    };
-
-    const handleTrainsUnitsChange = (unitId: string, checked: boolean) => {
-        setEditedBuilding(prev => {
-            const currentUnits = prev.trainsUnits || [];
-            if (checked) {
-                return { ...prev, trainsUnits: [...currentUnits, unitId] };
-            } else {
-                return { ...prev, trainsUnits: currentUnits.filter(id => id !== unitId) };
-            }
-        });
     };
 
     const handleUpgradesToChange = (buildingId: string, checked: boolean) => {
@@ -130,24 +117,9 @@ const BuildingEditor: React.FC<{
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div>
-                    <Label>Trains Units</Label>
-                    <ScrollArea className="h-32 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
-                        <div className="space-y-1">
-                            {allUnits.map(unit => (
-                                <div key={unit.id} className="flex items-center gap-2">
-                                    <Checkbox
-                                        id={`trains-${unit.id}`}
-                                        checked={editedBuilding.trainsUnits?.includes(unit.id)}
-                                        onCheckedChange={(checked) => handleTrainsUnitsChange(unit.id, !!checked)}
-                                    />
-                                    <label htmlFor={`trains-${unit.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                        {unit.name}
-                                    </label>
-                                </div>
-                            ))}
-                        </div>
-                    </ScrollArea>
+                <div className="flex items-center gap-2">
+                    <Switch id="edit-canTrainUnits" checked={editedBuilding.canTrainUnits} onCheckedChange={(c) => handleInputChange('canTrainUnits', c)} />
+                    <Label htmlFor="edit-canTrainUnits">Can Train Units?</Label>
                 </div>
                 <div>
                     <Label>Upgrades To</Label>
@@ -188,8 +160,11 @@ const UnitEditor: React.FC<{
     unit: UnitConfig;
     onSave: (unit: UnitConfig) => void;
     onCancel: () => void;
-}> = ({ unit, onSave, onCancel }) => {
+    allBuildings: BuildingConfig[];
+}> = ({ unit, onSave, onCancel, allBuildings }) => {
     const [editedUnit, setEditedUnit] = useState<UnitConfig>(unit);
+
+    const trainingBuildings = allBuildings.filter(b => b.canTrainUnits);
 
     const handleInputChange = (field: keyof UnitConfig, value: any) => {
         setEditedUnit(prev => ({ ...prev, [field]: value }));
@@ -221,15 +196,33 @@ const UnitEditor: React.FC<{
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <Select value={editedUnit.iconId} onValueChange={(val) => handleInputChange('iconId', val)}>
-                    <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Icon"/></SelectTrigger>
-                    <SelectContent>{Object.keys(unitIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent>
-                </Select>
+                 <div>
+                    <Label>Required Building</Label>
+                    <Select value={editedUnit.requiredBuilding} onValueChange={(val) => handleInputChange('requiredBuilding', val)}>
+                        <SelectTrigger className="sci-fi-input" disabled={trainingBuildings.length === 0}>
+                            <SelectValue placeholder="Select training building..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {trainingBuildings.length > 0 ? (
+                                trainingBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)
+                            ) : (
+                                <SelectItem value="none" disabled>No training buildings available</SelectItem>
+                            )}
+                        </SelectContent>
+                    </Select>
+                 </div>
+                 <div>
+                    <Label>Icon</Label>
+                    <Select value={editedUnit.iconId} onValueChange={(val) => handleInputChange('iconId', val)}>
+                        <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Icon"/></SelectTrigger>
+                        <SelectContent>{Object.keys(unitIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent>
+                    </Select>
+                 </div>
             </div>
 
             <div className="flex items-center justify-end gap-2">
                 <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
-                <Button onClick={() => onSave(editedUnit)} className="bg-brand-green hover:bg-brand-green/80"><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
+                <Button onClick={() => onSave(editedUnit)} className="bg-brand-green hover:bg-brand-green/80" disabled={!editedUnit.requiredBuilding}><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
             </div>
         </div>
     );
@@ -374,7 +367,7 @@ const AdminPage: React.FC = () => {
             isActive: true,
             isPredefined: false,
             order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0,
-            trainsUnits: [],
+            canTrainUnits: false,
             upgradesTo: [],
         };
         setEditingBuilding(newBuilding);
@@ -395,8 +388,9 @@ const AdminPage: React.FC = () => {
 
     // --- Units Handlers ---
      const handleShowAddUnit = () => {
-        if (buildings.length === 0) {
-            alert("Please create a building first before adding a unit.");
+        const trainingBuildings = buildings.filter(b => b.canTrainUnits);
+        if (trainingBuildings.length === 0) {
+            alert("Please create a building with 'Can Train Units' enabled before adding a unit.");
             return;
         }
         const newUnit: UnitConfig = {
@@ -411,6 +405,7 @@ const AdminPage: React.FC = () => {
             isActive: true,
             isPredefined: false,
             order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0,
+            requiredBuilding: trainingBuildings[0].id,
         };
         setEditingUnit(newUnit);
     };
@@ -512,7 +507,6 @@ const AdminPage: React.FC = () => {
                                                 onSave={handleSaveBuilding} 
                                                 onCancel={() => setEditingBuilding(null)} 
                                                 allAges={ages} 
-                                                allUnits={units}
                                                 allBuildings={buildings}
                                             />
                                         )}
@@ -553,7 +547,12 @@ const AdminPage: React.FC = () => {
                                 {isUnitsLoading ? <p>Loading units...</p> : (
                                     <>
                                         {editingUnit && (
-                                            <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} />
+                                            <UnitEditor 
+                                                unit={editingUnit} 
+                                                onSave={handleSaveUnit} 
+                                                onCancel={() => setEditingUnit(null)}
+                                                allBuildings={buildings} 
+                                            />
                                         )}
                                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
                                             {units.map((u) => (

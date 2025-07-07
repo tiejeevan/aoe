@@ -1,6 +1,6 @@
 import type { BuildingConfig } from '../types';
 
-export const INITIAL_BUILDINGS: Omit<BuildingConfig, 'isActive' | 'isPredefined' | 'order' | 'unlockedInAge'>[] = [
+export const INITIAL_BUILDINGS: Omit<BuildingConfig, 'isActive' | 'isPredefined' | 'order' | 'unlockedInAge' | 'treeId'>[] = [
     { 
         id: 'townCenter', 
         name: 'Town Center', 
@@ -90,7 +90,7 @@ export const INITIAL_BUILDINGS: Omit<BuildingConfig, 'isActive' | 'isPredefined'
         name: 'Blacksmith', 
         description: 'Researches infantry and cavalry upgrades.', 
         cost: { wood: 150 }, 
-        isUnique: true, 
+        isUnique: false, 
         buildTime: 45, 
         hp: 2100, 
         canTrainUnits: false, 

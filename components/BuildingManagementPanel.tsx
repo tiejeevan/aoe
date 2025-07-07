@@ -266,6 +266,8 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     if (leftPos < panelGap) leftPos = panelGap;
     panelStyle.left = `${leftPos}px`;
 
+    const canShowActions = buildingInfo.canTrainUnits || buildingInfo.canResearch || type === 'townCenter';
+
     return (
         <div style={panelStyle} className={`fixed z-40 w-96 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
             <div className="sci-fi-panel-popup sci-fi-grid p-4">
@@ -276,7 +278,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                     ) : ( <p className="text-center text-parchment-dark py-4">You have no {buildingInfo?.name?.toLowerCase()}s.</p> )}
                 </div>
 
-                {(type === 'townCenter' || unitsToTrain.length > 0 || availableResearch.length > 0) && <hr className="border-stone-light/20 my-3" />}
+                {canShowActions && <hr className="border-stone-light/20 my-3" />}
                 
                 <div className="space-y-3">
                     {type === 'townCenter' && (
@@ -303,7 +305,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                             )}
                         </>
                     )}
-                    {unitsToTrain.map(unitToTrain => {
+                    {buildingInfo.canTrainUnits && unitsToTrain.map(unitToTrain => {
                         const UnitIcon = unitIconMap[unitToTrain.iconId] || unitIconMap.default;
                         const trainCount = trainCounts[unitToTrain.id] || 1;
                         const activeTrainTask = activeTasks.find(t => t.type === 'train_military' && t.payload?.unitType === unitToTrain?.id);
@@ -329,7 +331,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                             </React.Fragment>
                         )
                     })}
-                     {availableResearch.map(tech => {
+                     {buildingInfo.canResearch && availableResearch.map(tech => {
                         const TechIcon = researchIconMap[tech.iconId] || researchIconMap.default;
                         const activeResearchTask = activeTasks.find(t => t.type === 'research' && t.payload?.researchId === tech.id);
                         const canAffordTech = Object.entries(tech.cost).every(([res, cost]) => (resources[res as keyof Resources] || 0) >= (cost as number));

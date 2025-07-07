@@ -5,6 +5,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -221,6 +222,18 @@ export interface BuildingConfig {
     order: number;
     canTrainUnits: boolean;
     upgradesTo?: string[];
+    
+    // New Comprehensive Attributes
+    populationCapacity?: number;
+    garrisonCapacity?: number;
+    generatesResource?: keyof Resources | 'none';
+    generationRate?: number;
+    attack?: number;
+    attackRate?: number;
+    attackRange?: number;
+    healRate?: number; // For garrisoned units
+    visionRange?: number;
+    requiredBuildingId?: string; // Prerequisite building
 }
 
 

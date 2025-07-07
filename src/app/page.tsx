@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig } from '@/services/dbService';
@@ -87,9 +87,20 @@ const GamePage: React.FC = () => {
     const buildingList = masterBuildingList; // Keep all for lookups, filter on use
     const unitList = masterUnitList; // Keep all for lookups, filter on use
 
+    const populationCapacity = useMemo(() => {
+        let capacity = 0;
+        for (const buildingType in buildings) {
+            const buildingInfo = masterBuildingList.find(b => b.id === buildingType);
+            if (buildingInfo && buildingInfo.populationCapacity) {
+                capacity += buildings[buildingType].length * buildingInfo.populationCapacity;
+            }
+        }
+        return capacity;
+    }, [buildings, masterBuildingList]);
+    
     const population = {
         current: units.villagers.length + units.military.length,
-        capacity: (buildings.townCenter?.length > 0 ? 20 : 0) + (buildings.houses?.length || 0) * 5,
+        capacity: populationCapacity,
     };
     
     const fetchSavesAndConfigs = useCallback(async () => {
@@ -100,66 +111,52 @@ const GamePage: React.FC = () => {
             
             // --- Smart Seeding for Ages ---
             let allAgeConfigs = await getAllAgeConfigs();
-            const existingAgeIds = new Set(allAgeConfigs.map(a => a.id));
-            let hasSeededAges = false;
-            for (const [index, pa] of INITIAL_AGES.entries()) {
-                 if (!existingAgeIds.has(pa.name)) {
-                     const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
-                     await saveAgeConfig(newPredefinedAge);
-                     hasSeededAges = true;
-                 }
+            if (allAgeConfigs.length === 0) {
+                 for (const [index, pa] of INITIAL_AGES.entries()) {
+                    const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
+                    await saveAgeConfig(newPredefinedAge);
+                }
+                allAgeConfigs = await getAllAgeConfigs();
             }
-            if (hasSeededAges) allAgeConfigs = await getAllAgeConfigs(); // Refetch if seeded
             setMasterAgeList(allAgeConfigs);
 
             // --- Smart Seeding for Buildings ---
             let allBuildingConfigs = await getAllBuildingConfigs();
-            const existingBuildingIds = new Set(allBuildingConfigs.map(b => b.id));
-            let hasSeededBuildings = false;
-            for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
-                if (!existingBuildingIds.has(pb.id)) {
+             if (allBuildingConfigs.length === 0) {
+                 for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
                     const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
                     const newPredefinedBuilding: BuildingConfig = {
                         ...pb,
-                        buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
                         isActive: true,
                         isPredefined: true,
                         order: index,
-                        unlockedInAge: defaultAge, 
-                        iconId: pb.id,
-                        canTrainUnits: pb.canTrainUnits,
-                        upgradesTo: pb.upgradesTo || []
+                        unlockedInAge: pb.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge,
                     };
                     await saveBuildingConfig(newPredefinedBuilding);
-                    hasSeededBuildings = true;
                 }
+                allBuildingConfigs = await getAllBuildingConfigs();
             }
-            if (hasSeededBuildings) allBuildingConfigs = await getAllBuildingConfigs(); // Refetch if seeded
             setMasterBuildingList(allBuildingConfigs);
 
             // --- Smart Seeding for Units ---
             let allUnitConfigs = await getAllUnitConfigs();
-            const existingUnitIds = new Set(allUnitConfigs.map(u => u.id));
-            let hasSeededUnits = false;
-            for (const [index, pu] of INITIAL_UNITS.entries()) {
-                 if (!existingUnitIds.has(pu.id)) {
-                     const newPredefinedUnit: UnitConfig = {
+            if (allUnitConfigs.length === 0) {
+                for (const [index, pu] of INITIAL_UNITS.entries()) {
+                    const newPredefinedUnit: UnitConfig = {
                         ...pu,
                         isActive: true,
                         isPredefined: true,
                         order: index,
                     };
                     await saveUnitConfig(newPredefinedUnit);
-                    hasSeededUnits = true;
-                 }
+                }
+                allUnitConfigs = await getAllUnitConfigs();
             }
-            if(hasSeededUnits) allUnitConfigs = await getAllUnitConfigs(); // Refetch if seeded
             setMasterUnitList(allUnitConfigs);
             
             return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
         } catch (error) {
             console.error("Error during initial config fetch:", error);
-            // Fallback to static data if IndexedDB fails catastrophically
             const ages = INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
             const buildings = INITIAL_BUILDINGS.map((b, i) => ({...b, buildLimit: b.isUnique ? 1 : 0, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age', iconId: b.id, canTrainUnits: b.canTrainUnits, upgradesTo: b.upgradesTo || []}));
             const units = INITIAL_UNITS.map((u, i) => ({...u, isActive: true, isPredefined: true, order: i}));
@@ -594,7 +591,12 @@ const GamePage: React.FC = () => {
         const buildingInfo = buildingList.find(b => b.id === type);
         const buildingInstance = buildings[type as string].find(b => b.id === id);
         if (!buildingInfo || !buildingInstance) return;
-        if (type === 'houses' && population.current > (buildings.townCenter?.length > 0 ? 20 : 0) + (buildings.houses.length - 1) * 5) { addNotification("Cannot demolish this house, your people would be homeless."); return; }
+        
+        const capacityWithoutThisBuilding = populationCapacity - (buildingInfo.populationCapacity || 0);
+        if ((buildingInfo.populationCapacity || 0) > 0 && population.current > capacityWithoutThisBuilding) {
+             addNotification("Cannot demolish this building, your people would be homeless."); return;
+        }
+
         const refund = Object.entries(buildingInfo.cost).reduce((acc, [res, cost]) => { const amount = Math.floor((cost || 0) * 0.5); if (amount > 0) acc[res as keyof Resources] = amount; return acc; }, {} as ResourceDeltas);
         if (Object.keys(refund).length > 0) { updateResources(refund); addNotification(`Salvaged ${Object.entries(refund).map(([r,a]) => `${a} ${r}`).join(', ')}.`); }
         setBuildings(prev => ({ ...prev, [type as string]: prev[type as string].filter(b => b.id !== id) }));
@@ -873,7 +875,7 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />

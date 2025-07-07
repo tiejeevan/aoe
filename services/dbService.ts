@@ -137,7 +137,9 @@ export const getAllAgeConfigs = async (): Promise<AgeConfig[]> => {
         
         return new Promise((resolve, reject) => {
             request.onsuccess = () => {
-                resolve(request.result as AgeConfig[]);
+                const ages = request.result as AgeConfig[];
+                ages.sort((a, b) => a.order - b.order);
+                resolve(ages);
             };
             request.onerror = () => {
                 console.error("Failed to load age configs:", request.error);

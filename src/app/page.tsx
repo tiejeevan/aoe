@@ -8,7 +8,6 @@ import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/ge
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
-import { PREDEFINED_AGES } from '@/data/predefinedContent';
 import GameUI from '@/components/GameUI';
 import StartScreen from '@/components/StartScreen';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -52,6 +51,14 @@ const initialBuildingsState: Buildings = {
 
 const MAP_DIMENSIONS = { width: 25, height: 18 };
 
+const FALLBACK_AGES = [
+    { name: 'Nomadic Age', description: 'A scattered tribe, learning to survive.' },
+    { name: 'Feudal Age', description: 'Society organizes under lords and vassals.' },
+    { name: 'Castle Age', description: 'Powerful fortifications and siege weaponry appear.' },
+    { name: 'Imperial Age', description: 'Your civilization becomes a true empire.' },
+];
+
+
 const GamePage: React.FC = () => {
     const [gameState, setGameState] = useState<GameStatus>(GameStatus.MENU);
     const [civilization, setCivilization] = useState<Civilization | null>(null);
@@ -72,7 +79,7 @@ const GamePage: React.FC = () => {
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
     const [inventory, setInventory] = useState<GameItem[]>([]);
     const [activeBuffs, setActiveBuffs] = useState<ActiveBuffs>({ resourceBoost: [] });
-    const [ageProgressionList, setAgeProgressionList] = useState<{name: string, description: string}[]>(PREDEFINED_AGES);
+    const [ageProgressionList, setAgeProgressionList] = useState<{name: string, description: string}[]>([]);
     
     // Panel States
     const [buildPanelState, setBuildPanelState] = useState<{ isOpen: boolean; villagerId: string | null; anchorRect: DOMRect | null }>({ isOpen: false, villagerId: null, anchorRect: null });
@@ -99,23 +106,12 @@ const GamePage: React.FC = () => {
         
         const allAgeConfigs = await getAllAgeConfigs();
         const activeAges = allAgeConfigs.filter(age => age.isActive);
-
-        // Sort to maintain predefined order, then append custom ages alphabetically
-        const predefinedOrder = PREDEFINED_AGES.map(a => a.name);
-        activeAges.sort((a, b) => {
-            const indexA = predefinedOrder.indexOf(a.name);
-            const indexB = predefinedOrder.indexOf(b.name);
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB; // Both are predefined
-            if (indexA !== -1) return -1; // a is predefined, b is not
-            if (indexB !== -1) return 1;  // b is predefined, a is not
-            return a.name.localeCompare(b.name); // both are custom
-        });
-
+        
         if (activeAges.length > 0) {
             setAgeProgressionList(activeAges.map(a => ({ name: a.name, description: a.description })));
         } else {
-            // Fallback to default if all ages are disabled
-            setAgeProgressionList(PREDEFINED_AGES);
+            setAgeProgressionList(FALLBACK_AGES);
+            console.warn("No active ages found in DB, using fallback list.");
         }
 
     }, []);
@@ -416,7 +412,7 @@ const GamePage: React.FC = () => {
         const initialTC: BuildingInstance = { id: `${Date.now()}-tc`, name: initialTCName, position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
-        setCurrentAge('Nomadic Age');
+        setCurrentAge(ageProgressionList[0]?.name || FALLBACK_AGES[0].name);
         setGameLog([]);
         setCurrentEvent(null);
         setUnlimitedResources(false);
@@ -1234,11 +1230,11 @@ const GamePage: React.FC = () => {
             }
 
             const target = event.target as Element;
-
+            
             if (target.closest('.sci-fi-panel-popup')) {
                 return;
             }
-
+            
             closeAllPanels();
         };
 

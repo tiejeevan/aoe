@@ -1703,34 +1703,3 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
         ]
     }
 ];
-
-
-export const PREDEFINED_AGES_MAP: { [key: string]: { nextAgeName: string; description: string } } = {
-    'Nomadic Age': {
-        nextAgeName: 'Feudal Age',
-        description: 'Society organizes under lords and vassals, unlocking new military and economic structures.'
-    },
-    'Feudal Age': {
-        nextAgeName: 'Castle Age',
-        description: 'Powerful fortifications and advanced siege weaponry mark this new era of warfare and defense.'
-    },
-    'Castle Age': {
-        nextAgeName: 'Imperial Age',
-        description: 'Your civilization becomes a true empire, with unparalleled economic and military might.'
-    },
-    'Imperial Age': {
-        nextAgeName: 'Post-Imperial Age',
-        description: 'The pinnacle of technology and culture. All paths are now open to you.'
-    },
-    'default': {
-        nextAgeName: 'Age of Legends',
-        description: 'Your civilization transcends history and becomes a legend.'
-    }
-};
-
-export const PREDEFINED_AGES: { name: string; description: string }[] = [
-    { name: 'Nomadic Age', description: 'A scattered tribe, learning to survive.' },
-    { name: 'Feudal Age', description: 'Society organizes under lords and vassals, unlocking new military and economic structures.' },
-    { name: 'Castle Age', description: 'Powerful fortifications and advanced siege weaponry mark this new era of warfare and defense.' },
-    { name: 'Imperial Age', description: 'Your civilization becomes a true empire, with unparalleled economic and military might.' },
-];

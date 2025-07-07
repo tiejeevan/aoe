@@ -200,6 +200,7 @@ export interface AgeConfig {
     description: string;
     isActive: boolean;
     isPredefined: boolean;
+    order: number;
 }
 
 export interface FullGameState {

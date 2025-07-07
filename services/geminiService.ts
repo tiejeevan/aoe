@@ -1,5 +1,5 @@
 
-import { PREDEFINED_CIVILIZATIONS, PREDEFINED_BANNER_URLS, PREDEFINED_EVENTS, PREDEFINED_AGES_MAP } from '../data/predefinedContent';
+import { PREDEFINED_CIVILIZATIONS, PREDEFINED_BANNER_URLS, PREDEFINED_EVENTS } from '../data/predefinedContent';
 import type { Civilization, GameEvent } from '../types';
 
 let civIndex = 0;
@@ -25,13 +25,4 @@ export function getPredefinedCivilization(): Civilization {
 export function getPredefinedGameEvent(): GameEvent {
     const randomIndex = Math.floor(Math.random() * PREDEFINED_EVENTS.length);
     return PREDEFINED_EVENTS[randomIndex];
-}
-
-/**
- * Gets the next age based on the current age from a predefined progression.
- * @param currentAge - The player's current age.
- * @returns An object with the next age's name and description.
- */
-export function getPredefinedAge(currentAge: string): { nextAgeName: string; description: string } {
-    return PREDEFINED_AGES_MAP[currentAge] || PREDEFINED_AGES_MAP['default'];
 }

@@ -4,10 +4,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { AgeConfig } from '../../../types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig } from '../../../services/dbService';
-import { PREDEFINED_AGES } from '../../../data/predefinedContent';
-import { Trash2, Lock } from 'lucide-react';
+import { Trash2, Lock, ArrowUp, ArrowDown } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
+
+const INITIAL_AGES = [
+    { name: 'Nomadic Age', description: 'A scattered tribe, learning to survive.' },
+    { name: 'Feudal Age', description: 'Society organizes under lords and vassals, unlocking new military and economic structures.' },
+    { name: 'Castle Age', description: 'Powerful fortifications and advanced siege weaponry mark this new era of warfare and defense.' },
+    { name: 'Imperial Age', description: 'Your civilization becomes a true empire, with unparalleled economic and military might.' },
+];
 
 const AdminPage: React.FC = () => {
     const [ages, setAges] = useState<AgeConfig[]>([]);
@@ -19,35 +25,20 @@ const AdminPage: React.FC = () => {
         setIsLoading(true);
         let allAges = await getAllAgeConfigs();
 
-        // Check if predefined ages are seeded in the DB. If not, add them.
-        const needsSeeding = PREDEFINED_AGES.some(pa => !allAges.find(a => a.id === pa.name));
-
-        if (needsSeeding) {
-            for (const pa of PREDEFINED_AGES) {
-                if (!allAges.find(a => a.id === pa.name)) {
-                    const newPredefinedAge: AgeConfig = {
-                        id: pa.name,
-                        name: pa.name,
-                        description: pa.description,
-                        isActive: true,
-                        isPredefined: true,
-                    };
-                    await saveAgeConfig(newPredefinedAge);
-                }
+        if (allAges.length === 0) {
+            for (const [index, pa] of INITIAL_AGES.entries()) {
+                const newPredefinedAge: AgeConfig = {
+                    id: pa.name,
+                    name: pa.name,
+                    description: pa.description,
+                    isActive: true,
+                    isPredefined: true,
+                    order: index,
+                };
+                await saveAgeConfig(newPredefinedAge);
             }
             allAges = await getAllAgeConfigs();
         }
-
-        // Sort so predefined ages are always first and in order
-        const predefinedOrder = PREDEFINED_AGES.map(a => a.name);
-        allAges.sort((a, b) => {
-            const indexA = predefinedOrder.indexOf(a.name);
-            const indexB = predefinedOrder.indexOf(b.name);
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-            if (indexA !== -1) return -1;
-            if (indexB !== -1) return 1;
-            return a.name.localeCompare(b.name);
-        });
 
         setAges(allAges);
         setIsLoading(false);
@@ -69,6 +60,7 @@ const AdminPage: React.FC = () => {
             description: newDescription,
             isActive: true,
             isPredefined: false,
+            order: ages.length > 0 ? Math.max(...ages.map(a => a.order)) + 1 : 0,
         };
         await saveAgeConfig(newAge);
         setNewName('');
@@ -86,6 +78,22 @@ const AdminPage: React.FC = () => {
     const handleToggleActive = async (age: AgeConfig) => {
         const updatedAge = { ...age, isActive: !age.isActive };
         await saveAgeConfig(updatedAge);
+        await fetchAges();
+    };
+    
+    const handleMoveAge = async (index: number, direction: 'up' | 'down') => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= ages.length) return;
+
+        const updatedAges = [...ages];
+        const age1 = updatedAges[index];
+        const age2 = updatedAges[newIndex];
+
+        [age1.order, age2.order] = [age2.order, age1.order];
+
+        await saveAgeConfig(age1);
+        await saveAgeConfig(age2);
+
         await fetchAges();
     };
 
@@ -107,21 +115,26 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* All Ages List */}
                     <div className="sci-fi-panel-popup p-6">
                         <h2 className="text-2xl font-serif text-brand-gold mb-4">Manage Ages</h2>
                         {isLoading ? (
                             <p className="text-parchment-dark">Loading ages...</p>
                         ) : ages.length > 0 ? (
                             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                                {ages.map(age => (
-                                    <div key={age.id} className="sci-fi-unit-row flex items-start justify-between gap-4">
-                                        <div className="flex-grow">
-                                            <h3 className="font-bold text-parchment-light flex items-center gap-2">
-                                                {age.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}
-                                                {age.name}
-                                            </h3>
-                                            <p className="text-sm text-parchment-dark">{age.description}</p>
+                                {ages.map((age, index) => (
+                                    <div key={age.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex flex-col">
+                                                <button onClick={() => handleMoveAge(index, 'up')} disabled={index === 0} className="disabled:opacity-20 hover:text-brand-gold"><ArrowUp className="w-4 h-4" /></button>
+                                                <button onClick={() => handleMoveAge(index, 'down')} disabled={index === ages.length - 1} className="disabled:opacity-20 hover:text-brand-gold"><ArrowDown className="w-4 h-4" /></button>
+                                            </div>
+                                            <div className="flex-grow">
+                                                <h3 className="font-bold text-parchment-light flex items-center gap-2">
+                                                    {age.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}
+                                                    {age.name}
+                                                </h3>
+                                                <p className="text-sm text-parchment-dark">{age.description}</p>
+                                            </div>
                                         </div>
                                         <div className="flex flex-col items-center gap-2">
                                             <div className="flex items-center space-x-2">
@@ -135,7 +148,7 @@ const AdminPage: React.FC = () => {
                                             <button 
                                                 onClick={() => handleDeleteAge(age.id)}
                                                 disabled={age.isPredefined}
-                                                className="p-2 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors flex-shrink-0 disabled:text-parchment-dark/20 disabled:cursor-not-allowed"
+                                                className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full transition-colors flex-shrink-0 disabled:text-parchment-dark/20 disabled:cursor-not-allowed"
                                                 aria-label={`Delete ${age.name}`}
                                             >
                                                 <Trash2 className="w-5 h-5" />
@@ -149,7 +162,6 @@ const AdminPage: React.FC = () => {
                         )}
                     </div>
                     
-                    {/* Add New Age Form */}
                     <div className="sci-fi-panel-popup p-6">
                         <h2 className="text-2xl font-serif text-brand-gold mb-4">Add Custom Age</h2>
                         <div className="space-y-4">

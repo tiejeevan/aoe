@@ -1,12 +1,13 @@
 
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification } from '../../../types';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath } from '../../../types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig } from '../../../services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw } from 'lucide-react';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -311,7 +312,10 @@ const UnitEditor: React.FC<{
 
     const trainingBuildings = allBuildings.filter(b => b.canTrainUnits && b.isActive);
     const unitClassifications: UnitClassification[] = ['infantry', 'cavalry', 'archer', 'siege', 'support', 'mythical', 'ship'];
-    const armorClassifications: ArmorClassification[] = ['melee', 'pierce', 'siege'];
+    const armorClassifications: ArmorClassification[] = ['melee', 'pierce', 'siege', 'magic', 'elemental'];
+    const damageTypeOptions: string[] = ['slash', 'pierce', 'blunt', 'magic', 'fire', 'ice'];
+    const terrainTypeOptions: string[] = ['plains', 'forest', 'desert', 'mountain', 'water'];
+
 
     const handleInputChange = (field: keyof UnitConfig, value: any) => {
         setEditedUnit(prev => ({ ...prev, [field]: value }));
@@ -319,34 +323,38 @@ const UnitEditor: React.FC<{
     const handleNumberChange = (field: keyof UnitConfig, value: string) => {
         setEditedUnit(prev => ({ ...prev, [field]: value === '' ? undefined : Number(value) || 0 }));
     };
+     const handleFloatChange = (field: keyof UnitConfig, value: string) => {
+        setEditedUnit(prev => ({ ...prev, [field]: value === '' ? undefined : parseFloat(value) || 0 }));
+    };
     const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
         const amount = parseInt(value, 10) || 0;
         setEditedUnit(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
     };
-    
-    const handleAttackBonusChange = (index: number, field: keyof AttackBonus, value: any) => {
+
+    const handleArrayFieldChange = <T,>(field: keyof UnitConfig, index: number, itemField: keyof T, value: any) => {
         setEditedUnit(prev => {
-            const bonuses = [...(prev.attackBonuses || [])];
-            bonuses[index] = { ...bonuses[index], [field]: field === 'bonus' ? parseInt(value, 10) || 0 : value };
-            return { ...prev, attackBonuses: bonuses };
+            const items = [...((prev[field] as T[] | undefined) || [])];
+            items[index] = { ...items[index], [itemField]: value };
+            return { ...prev, [field]: items };
         });
     };
 
-    const handleAddAttackBonus = () => {
-        setEditedUnit(prev => ({ ...prev, attackBonuses: [...(prev.attackBonuses || []), { targetType: 'infantry', bonus: 0 }] }));
-    };
-
-    const handleRemoveAttackBonus = (index: number) => {
-        setEditedUnit(prev => ({ ...prev, attackBonuses: (prev.attackBonuses || []).filter((_, i) => i !== index) }));
+    const addToArrayField = <T,>(field: keyof UnitConfig, newItem: T) => {
+        setEditedUnit(prev => ({ ...prev, [field]: [...((prev[field] as T[] | undefined) || []), newItem] }));
     };
     
+    const removeFromArrayField = (field: keyof UnitConfig, index: number) => {
+        setEditedUnit(prev => ({ ...prev, [field]: ((prev[field] as any[] | undefined) || []).filter((_, i) => i !== index) }));
+    };
+
     return (
         <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
             <h3 className="text-xl font-bold text-brand-gold font-serif">Editing: {unit.name}</h3>
 
             <Tabs defaultValue="general">
-                 <TabsList className="grid w-full grid-cols-4 bg-stone-dark/80 border border-stone-light/20">
+                 <TabsList className="grid w-full grid-cols-5 bg-stone-dark/80 border border-stone-light/20">
                     <TabsTrigger value="general"><Swords className="w-4 h-4 mr-2"/>General & Combat</TabsTrigger>
+                    <TabsTrigger value="mobility"><Footprints className="w-4 h-4 mr-2"/>Mobility</TabsTrigger>
                     <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Cost & Training</TabsTrigger>
                     <TabsTrigger value="bonuses"><TestTube className="w-4 h-4 mr-2"/>Bonuses & Armor</TabsTrigger>
                     <TabsTrigger value="upgrades"><ChevronsUp className="w-4 h-4 mr-2"/>Upgrades & Tech</TabsTrigger>
@@ -364,26 +372,66 @@ const UnitEditor: React.FC<{
                             
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
                                 <div><Label>HP</Label><Input type="number" value={editedUnit.hp || ''} onChange={(e) => handleNumberChange('hp', e.target.value)} className="sci-fi-input" /></div>
-                                <div><Label>Attack</Label><Input type="number" value={editedUnit.attack || ''} onChange={(e) => handleNumberChange('attack', e.target.value)} className="sci-fi-input" /></div>
-                                <div><Label>Attack Rate (/s)</Label><Input type="number" value={editedUnit.attackRate || ''} step="0.1" onChange={(e) => handleNumberChange('attackRate', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Base Attack</Label><Input type="number" value={editedUnit.attack || ''} onChange={(e) => handleNumberChange('attack', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Attack Rate (/s)</Label><Input type="number" value={editedUnit.attackRate || ''} step="0.1" onChange={(e) => handleFloatChange('attackRate', e.target.value)} className="sci-fi-input" /></div>
                                 <div><Label>Attack Range</Label><Input type="number" value={editedUnit.attackRange || ''} onChange={(e) => handleNumberChange('attackRange', e.target.value)} className="sci-fi-input" /></div>
-                                <div><Label>Movement Speed</Label><Input type="number" value={editedUnit.movementSpeed || ''} step="0.1" onChange={(e) => handleNumberChange('movementSpeed', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Armor Penetration (%)</Label><Input type="number" value={editedUnit.armorPenetration || ''} onChange={(e) => handleNumberChange('armorPenetration', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Crit Chance (%)</Label><Input type="number" value={editedUnit.criticalChance || ''} onChange={(e) => handleNumberChange('criticalChance', e.target.value)} className="sci-fi-input" /></div>
+                                <div><Label>Unit Type</Label><Select value={editedUnit.unitType} onValueChange={(v) => handleInputChange('unitType', v)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{unitClassifications.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
                             </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
                 
+                 <TabsContent value="mobility" className="pt-4">
+                     <Card className="bg-stone-dark/20 border-stone-light/20">
+                        <CardHeader><CardTitle className="text-base font-serif">Movement & Terrain</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                             <div>
+                                <div className="grid grid-cols-2 gap-4">
+                                     <div><Label>Movement Speed</Label><Input type="number" value={editedUnit.movementSpeed || ''} step="0.1" onChange={(e) => handleFloatChange('movementSpeed', e.target.value)} className="sci-fi-input" /></div>
+                                     <div><Label>Stamina</Label><Input type="number" value={editedUnit.stamina || ''} onChange={(e) => handleNumberChange('stamina', e.target.value)} className="sci-fi-input" /></div>
+                                </div>
+                             </div>
+                             <div>
+                                <Label>Terrain Modifiers</Label>
+                                <div className="space-y-2 mt-1 border border-stone-light/20 p-2 rounded-md bg-black/20">
+                                    {(editedUnit.terrainModifiers || []).map((mod, index) => (
+                                         <div key={index} className="flex items-center gap-2">
+                                             <Select value={mod.terrainType} onValueChange={(val) => handleArrayFieldChange<TerrainModifier>('terrainModifiers', index, 'terrainType', val)}>
+                                                <SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger>
+                                                <SelectContent>{terrainTypeOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                            <Input type="number" value={mod.speedBonus} onChange={(e) => handleArrayFieldChange<TerrainModifier>('terrainModifiers', index, 'speedBonus', parseInt(e.target.value, 10))} className="sci-fi-input w-28" placeholder="Speed %" />
+                                            <Button variant="ghost" size="icon" className="text-brand-red w-8 h-8" onClick={() => removeFromArrayField('terrainModifiers', index)}><Trash2 className="w-4 h-4"/></Button>
+                                         </div>
+                                    ))}
+                                    <Button onClick={() => addToArrayField<TerrainModifier>('terrainModifiers', { terrainType: 'forest', speedBonus: -10})} variant="outline" className="w-full sci-fi-button !text-xs !py-1">Add Terrain Modifier</Button>
+                                </div>
+                             </div>
+                        </CardContent>
+                     </Card>
+                 </TabsContent>
+
                 <TabsContent value="economy" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
                         <CardHeader><CardTitle className="text-base font-serif">Economic Attributes</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
-                             <div>
-                                <Label>Training Cost</Label>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
-                                    {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost?.[res] || ''} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div>
+                                    <Label>Training Cost</Label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
+                                        {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost?.[res] || ''} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>Maintenance Cost (per min)</Label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1">
+                                        {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (<div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.maintenanceCost?.[res] || ''} onChange={(e) => setEditedUnit(p => ({...p, maintenanceCost: {...p.maintenanceCost, [res]: parseInt(e.target.value, 10) || 0}}))} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                                    </div>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                                 <div><Label>Train Time (s)</Label><Input type="number" value={editedUnit.trainTime || ''} onChange={(e) => handleNumberChange('trainTime', e.target.value)} className="sci-fi-input" /></div>
                                 <div><Label>Population Cost</Label><Input type="number" value={editedUnit.populationCost || ''} onChange={(e) => handleNumberChange('populationCost', e.target.value)} className="sci-fi-input" /></div>
                             </div>
@@ -396,26 +444,35 @@ const UnitEditor: React.FC<{
                         <CardHeader><CardTitle className="text-base font-serif">Combat Roles & Bonuses</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
                              <div>
-                                <Label>Attack Bonuses</Label>
+                                <Label>Attack Bonuses (vs Unit Types)</Label>
                                 <div className="space-y-2 mt-1 border border-stone-light/20 p-2 rounded-md bg-black/20">
                                     {(editedUnit.attackBonuses || []).map((bonus, index) => (
                                         <div key={index} className="flex items-center gap-2">
-                                            <Select value={bonus.targetType} onValueChange={(val) => handleAttackBonusChange(index, 'targetType', val)}>
+                                            <Select value={bonus.targetType} onValueChange={(val) => handleArrayFieldChange<AttackBonus>('attackBonuses', index, 'targetType', val)}>
                                                 <SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger>
                                                 <SelectContent>{unitClassifications.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                                             </Select>
-                                            <Input type="number" value={bonus.bonus} onChange={(e) => handleAttackBonusChange(index, 'bonus', e.target.value)} className="sci-fi-input w-24" placeholder="+DMG" />
-                                            <Button variant="ghost" size="icon" className="text-brand-red w-8 h-8" onClick={() => handleRemoveAttackBonus(index)}><Trash2 className="w-4 h-4"/></Button>
+                                            <Input type="number" value={bonus.bonus} onChange={(e) => handleArrayFieldChange<AttackBonus>('attackBonuses', index, 'bonus', parseInt(e.target.value))} className="sci-fi-input w-28" placeholder="+DMG" />
+                                            <Button variant="ghost" size="icon" className="text-brand-red w-8 h-8" onClick={() => removeFromArrayField('attackBonuses', index)}><Trash2 className="w-4 h-4"/></Button>
                                         </div>
                                     ))}
-                                    <Button onClick={handleAddAttackBonus} variant="outline" className="w-full sci-fi-button !text-xs !py-1">Add Attack Bonus</Button>
+                                    <Button onClick={() => addToArrayField<AttackBonus>('attackBonuses', { targetType: 'infantry', bonus: 0 })} variant="outline" className="w-full sci-fi-button !text-xs !py-1">Add Attack Bonus</Button>
                                 </div>
                              </div>
                               <div>
                                 <Label>Armor Values</Label>
                                 <div className="space-y-2 mt-1 border border-stone-light/20 p-2 rounded-md bg-black/20">
-                                   {/* Simplified for now, can be expanded like attack bonuses */}
-                                   <p className="text-xs text-parchment-dark text-center py-4">Armor editor coming soon.</p>
+                                   {(editedUnit.armorValues || []).map((armor, index) => (
+                                        <div key={index} className="flex items-center gap-2">
+                                            <Select value={armor.type} onValueChange={(val) => handleArrayFieldChange<ArmorValue>('armorValues', index, 'type', val)}>
+                                                <SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger>
+                                                <SelectContent>{armorClassifications.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                            <Input type="number" value={armor.value} onChange={(e) => handleArrayFieldChange<ArmorValue>('armorValues', index, 'value', parseInt(e.target.value))} className="sci-fi-input w-28" placeholder="Value" />
+                                            <Button variant="ghost" size="icon" className="text-brand-red w-8 h-8" onClick={() => removeFromArrayField('armorValues', index)}><Trash2 className="w-4 h-4"/></Button>
+                                        </div>
+                                    ))}
+                                    <Button onClick={() => addToArrayField<ArmorValue>('armorValues', { type: 'melee', value: 0 })} variant="outline" className="w-full sci-fi-button !text-xs !py-1">Add Armor Value</Button>
                                 </div>
                              </div>
                         </CardContent>
@@ -428,15 +485,20 @@ const UnitEditor: React.FC<{
                         <CardContent className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <Label>Required Building</Label>
+                                    <Label>Required Training Building</Label>
                                     <Select value={editedUnit.requiredBuilding} onValueChange={(val) => handleInputChange('requiredBuilding', val)}>
                                         <SelectTrigger className="sci-fi-input" disabled={trainingBuildings.length === 0}><SelectValue /></SelectTrigger>
                                         <SelectContent>{trainingBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
-                                <div><Label>Unlocks Research IDs (comma-separated)</Label><Input type="text" value={(editedUnit.requiredResearchIds || []).join(',')} onChange={(e) => handleInputChange('requiredResearchIds', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_armor_1" className="sci-fi-input" /></div>
+                                <div>
+                                    <Label>Additional Required Buildings (Prerequisites)</Label>
+                                    {/* A multi-select component would be ideal here. Using comma-separated for now. */}
+                                    <Input type="text" value={(editedUnit.requiredBuildingIds || []).join(',')} onChange={(e) => handleInputChange('requiredBuildingIds', e.target.value.split(',').map(s=>s.trim()).filter(Boolean))} className="sci-fi-input" placeholder="barracks,blacksmith" />
+                                </div>
+                                <div><Label>Required Research IDs (Prerequisites)</Label><Input type="text" value={(editedUnit.requiredResearchIds || []).join(',')} onChange={(e) => handleInputChange('requiredResearchIds', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_armor_1" className="sci-fi-input" /></div>
                             </div>
-                            <div className="flex items-center gap-2 pt-2"><Switch id="edit-isUpgradeOnly" checked={!!editedUnit.isUpgradeOnly} onCheckedChange={(c) => handleInputChange('isUpgradeOnly', c)} /><Label htmlFor="edit-isUpgradeOnly">Upgrade Only (Cannot be trained directly)</Label></div>
+                            <div className="flex items-center gap-2 pt-2"><Switch id="edit-unit-isUpgradeOnly" checked={!!editedUnit.isUpgradeOnly} onCheckedChange={(c) => handleInputChange('isUpgradeOnly', c)} /><Label htmlFor="edit-unit-isUpgradeOnly">Upgrade Only (Cannot be trained directly)</Label></div>
                             <hr className="border-stone-light/20"/>
                             <div>
                                 <Label>Tree ID</Label>
@@ -447,21 +509,48 @@ const UnitEditor: React.FC<{
                                 </div>
                             </div>
                             <div>
-                                <Label>Upgrades To</Label>
-                                <Select value={editedUnit.upgradesTo || 'none'} onValueChange={(val) => handleInputChange('upgradesTo', val === 'none' ? undefined : val)}>
-                                    <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select target unit..."/></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">None</SelectItem>
-                                        {allUnits.filter(u => u.treeId === editedUnit.treeId && u.id !== editedUnit.id).map(u => (
-                                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <Label>Upgrade Paths</Label>
+                                <div className="space-y-2 mt-1 border border-stone-light/20 p-2 rounded-md bg-black/20">
+                                   {(editedUnit.upgradesTo || []).map((path, index) => (
+                                        <div key={index} className="p-2 border border-stone-light/10 rounded-md">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-sm font-bold text-brand-gold">Path #{index+1}</Label>
+                                                <Button variant="ghost" size="icon" className="text-brand-red w-8 h-8" onClick={() => removeFromArrayField('upgradesTo', index)}><Trash2 className="w-4 h-4"/></Button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <Label>Target Unit</Label>
+                                                    <Select value={path.targetUnitId} onValueChange={(val) => handleArrayFieldChange<UnitUpgradePath>('upgradesTo', index, 'targetUnitId', val)}>
+                                                        <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select unit..."/></SelectTrigger>
+                                                        <SelectContent>
+                                                            {allUnits.filter(u => u.treeId === editedUnit.treeId && u.id !== editedUnit.id).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                 <div>
+                                                     <Label>Upgrade Time (s)</Label>
+                                                     <Input type="number" value={path.time} onChange={(e) => handleArrayFieldChange<UnitUpgradePath>('upgradesTo', index, 'time', parseInt(e.target.value))} className="sci-fi-input" />
+                                                 </div>
+                                            </div>
+                                            <div>
+                                                <Label className="text-xs">Upgrade Cost</Label>
+                                                 <div className="grid grid-cols-4 gap-2 mt-1">
+                                                    {(['food', 'wood', 'gold', 'stone'] as (keyof Resources)[]).map(res => (
+                                                        <Input key={res} type="number" value={path.cost?.[res] || ''} onChange={(e) => {
+                                                            const newCost = {...path.cost, [res]: parseInt(e.target.value) || 0};
+                                                            handleArrayFieldChange<UnitUpgradePath>('upgradesTo', index, 'cost', newCost);
+                                                        }} placeholder={res} className="sci-fi-input" />
+                                                    ))}
+                                                 </div>
+                                            </div>
+                                        </div>
+                                   ))}
+                                    <Button onClick={() => addToArrayField<UnitUpgradePath>('upgradesTo', { targetUnitId: '', cost: {}, time: 30 })} variant="outline" className="w-full sci-fi-button !text-xs !py-1">Add Upgrade Path</Button>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
                  </TabsContent>
-
             </Tabs>
             
             <div className="flex justify-end gap-2 pt-4">
@@ -577,6 +666,7 @@ const AdminPage: React.FC = () => {
                 order: existingItem?.order ?? index,
                 treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`,
                 populationCost: existingItem?.populationCost ?? pItem.populationCost,
+                attack: existingItem?.attack ?? pItem.attack,
             };
 
             if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
@@ -672,7 +762,7 @@ const AdminPage: React.FC = () => {
             alert(`Cannot delete "${buildingToDelete.name}". It is targeted by another building's upgrade path.`);
             return;
         }
-        const isRequiredForUnit = units.some(u => u.requiredBuilding === buildingToDelete.id);
+        const isRequiredForUnit = units.some(u => u.requiredBuilding === buildingToDelete.id || u.requiredBuildingIds?.includes(buildingToDelete.id));
         if (isRequiredForUnit) {
             alert(`Cannot delete "${buildingToDelete.name}". One or more units require this building for training.`);
             return;
@@ -700,6 +790,7 @@ const AdminPage: React.FC = () => {
         }
         const newUnit: UnitConfig = {
             id: `custom-unit-${Date.now()}`,
+            treeId: `utree-${Date.now()}`,
             name: 'New Unit',
             description: 'A new custom unit.',
             cost: { food: 50, gold: 10 },
@@ -714,7 +805,14 @@ const AdminPage: React.FC = () => {
             populationCost: 1,
             attackRate: 1,
             movementSpeed: 1,
-            treeId: `utree-${Date.now()}`,
+            unitType: 'infantry',
+            upgradesTo: [],
+            armorValues: [],
+            attackBonuses: [],
+            damageTypes: [],
+            terrainModifiers: [],
+            requiredBuildingIds: [],
+            requiredResearchIds: []
         };
         setEditingUnit(newUnit);
     };
@@ -724,6 +822,11 @@ const AdminPage: React.FC = () => {
         await fetchUnits();
     };
     const handleDeleteUnit = async (id: string) => {
+        const isUpgradeTarget = units.some(u => u.upgradesTo?.some(path => path.targetUnitId === id));
+         if (isUpgradeTarget) {
+            alert(`Cannot delete this unit. It is targeted by another unit's upgrade path.`);
+            return;
+        }
         if (window.confirm('Are you sure you want to delete this custom unit?')) {
             await deleteUnitConfig(id); await fetchUnits();
         }

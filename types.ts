@@ -11,6 +11,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -131,7 +132,7 @@ export interface GameLogEntry {
 }
 
 export type UnitClassification = 'infantry' | 'cavalry' | 'archer' | 'siege' | 'ship' | 'support' | 'mythical';
-export type ArmorClassification = 'melee' | 'pierce' | 'siege';
+export type ArmorClassification = 'melee' | 'pierce' | 'siege' | 'magic' | 'elemental';
 
 export interface ArmorValue {
     type: ArmorClassification;
@@ -143,6 +144,22 @@ export interface AttackBonus {
     bonus: number;
 }
 
+export interface DamageType {
+    type: string; // e.g., 'slash', 'pierce', 'fire', 'magic'
+    value: number;
+}
+export interface TerrainModifier {
+    terrainType: string; // e.g., 'forest', 'desert', 'plains'
+    speedBonus: number; // percentage, can be negative
+}
+
+export interface UnitUpgradePath {
+    targetUnitId: string;
+    cost: BuildingCosts;
+    time: number;
+    researchRequired?: string;
+}
+
 export interface UnitConfig {
     id: MilitaryUnitType;
     name: string;
@@ -150,33 +167,44 @@ export interface UnitConfig {
     cost: BuildingCosts;
     trainTime: number; // in seconds
     hp: number;
-    attack: number;
     iconId: string;
     requiredBuilding: string;
     isActive: boolean;
     isPredefined: boolean;
     order: number;
 
-    // New Comprehensive Attributes
-    populationCost?: number;
+    // --- Core Combat ---
+    attack?: number; // Main attack value, can be overridden by damageTypes
     attackRate?: number; // attacks per second
     attackRange?: number; // in grid cells
+    damageTypes?: DamageType[];
+    armorValues?: ArmorValue[];
+    armorPenetration?: number; // percentage
+    criticalChance?: number; // percentage
+    
+    // --- Mobility ---
     movementSpeed?: number; // in grid cells per second
-    lineOfSight?: number; // in grid cells
-
+    terrainModifiers?: TerrainModifier[];
+    stamina?: number;
+    
+    // --- Unit Classification & Counters ---
     unitType?: UnitClassification;
     attackBonuses?: AttackBonus[];
-    armorValues?: ArmorValue[];
     
-    // Upgrade System
-    treeId?: string;
-    upgradesTo?: string; // ID of the unit this upgrades to
-    isUpgradeOnly?: boolean;
+    // --- Economy & Meta ---
+    populationCost?: number;
+    maintenanceCost?: BuildingCosts;
+    seasonalAvailability?: string[]; // e.g., ['Summer', 'Winter'] or event names
+    modTags?: string[];
 
-    // Future-Proofing
+    // --- Upgrades & Tech Tree ---
+    treeId?: string;
+    upgradesTo?: UnitUpgradePath[];
+    isUpgradeOnly?: boolean;
+    requiredBuildingIds?: string[]; // Additional buildings that must exist to enable training
     requiredResearchIds?: string[];
-    specialAbility?: string; // e.g., 'charge_attack', 'area_of_effect_heal'
 }
+
 
 export interface UINotification {
     id: string;

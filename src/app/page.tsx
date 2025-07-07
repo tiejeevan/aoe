@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
@@ -716,8 +717,19 @@ const GamePage: React.FC = () => {
         if (!unitInfo || activeTasks.some(t => t.payload?.unitType === unitType) || count <= 0) return;
         const totalPopulationCost = (unitInfo.populationCost || 1) * count;
         if (population.current + totalPopulationCost > population.capacity) { addNotification(`Need space for ${totalPopulationCost} more population.`); return; }
+        
+        // Check for required buildings
         const trainingBuilding = buildings[unitInfo.requiredBuilding as BuildingType]?.[0];
         if (!trainingBuilding) { addNotification(`No ${buildingList.find(b => b.id === unitInfo.requiredBuilding)?.name} to train units.`); return; }
+
+        if (unitInfo.requiredBuildingIds && unitInfo.requiredBuildingIds.length > 0) {
+            const missingBuildings = unitInfo.requiredBuildingIds.filter(reqId => !buildings[reqId]?.length);
+            if (missingBuildings.length > 0) {
+                const missingNames = missingBuildings.map(id => buildingList.find(b => b.id === id)?.name || id).join(', ');
+                addNotification(`Training this unit requires: ${missingNames}.`);
+                return;
+            }
+        }
 
         if (!unlimitedResources) {
             const missing = (Object.keys(unitInfo.cost) as (keyof Resources)[]).filter(res => resources[res] < (unitInfo.cost[res] || 0) * count);

@@ -7,8 +7,8 @@
  * - SuggestPaletteOutput - The return type for the suggestPalette function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {ai} from '@/src/ai/genkit';
+import {z} from 'zod';
 
 const SuggestPaletteInputSchema = z.object({
   whiteShade: z

@@ -7,8 +7,8 @@
  * - GenerateResourcesOutput - The return type for the generateResources function.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { ai } from '@/src/ai/genkit';
+import { z } from 'zod';
 import { resourceIconMap } from '../../../components/icons/iconRegistry';
 
 const GenerateResourcesInputSchema = z.object({

@@ -1487,6 +1487,10 @@ video {
 .bg-transparent {
   background-color: transparent;
 }
+.bg-parchment-light {
+  --tw-bg-opacity: 1;
+  background-color: rgb(253 246 227 / var(--tw-bg-opacity, 1));
+}
 .bg-opacity-60 {
   --tw-bg-opacity: 0.6;
 }

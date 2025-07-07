@@ -1,10 +1,11 @@
 
 
 import React from 'react';
-import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitInfo, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice, GameItem } from '../types';
-import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, BarracksIcon, HouseIcon, VillagerIcon, SwordIcon, BowIcon, KnightIcon, CatapultIcon, EventIcon, SystemIcon, AgeIcon, ArcheryRangeIcon, StableIcon, SiegeWorkshopIcon, BlacksmithIcon, WatchTowerIcon, ExitIcon, TownCenterIcon } from './icons/ResourceIcons';
+import type { Civilization, Resources, Units, Buildings, GameLogEntry, LogIconType, ResourceDeltas, BuildingType, BuildingConfig, UnitConfig, MilitaryUnitType, BuildingInstance, GameTask, PlayerActionState, ResourceNode, ResourceNodeType, GameEvent, GameEventChoice, GameItem } from '../types';
+import { FoodIcon, WoodIcon, GoldIcon, StoneIcon, PopulationIcon, VillagerIcon, SwordIcon, AgeIcon, EventIcon, SystemIcon, WatchTowerIcon, ExitIcon } from './icons/ResourceIcons';
 import GameMap from './GameMap';
 import { ScrollText, Package as PackageIcon } from 'lucide-react';
+import { unitIconMap } from './icons/iconRegistry';
 
 interface GameUIProps {
     civilization: Civilization;
@@ -16,7 +17,7 @@ interface GameUIProps {
     gameLog: GameLogEntry[];
     resourceDeltas: ResourceDeltas;
     activityStatus: string;
-    unitList: UnitInfo[];
+    unitList: UnitConfig[];
     buildingList: BuildingConfig[];
     onOpenUnitPanel: (type: 'villagers' | 'military', rect: DOMRect) => void;
     onOpenBuildingPanel: (type: BuildingType | string, instanceId: string, rect: DOMRect) => void;
@@ -60,17 +61,10 @@ const HeaderStat: React.FC<{ icon: React.ReactNode; value: string | number; delt
     </div>
 );
 
-export const iconMap: Record<LogIconType, React.ReactNode> = {
+export const iconMap: Record<string, React.ReactNode> = {
+    ...unitIconMap,
     food: <FoodIcon />, wood: <WoodIcon />, gold: <GoldIcon />, stone: <StoneIcon />,
     villager: <VillagerIcon />, 
-    swordsman: <SwordIcon />,
-    archer: <BowIcon />,
-    knight: <KnightIcon />,
-    catapult: <CatapultIcon />,
-    houses: <HouseIcon />, barracks: <BarracksIcon />, 
-    archeryRange: <ArcheryRangeIcon />, stable: <StableIcon />,
-    siegeWorkshop: <SiegeWorkshopIcon />, blacksmith: <BlacksmithIcon />,
-    watchTower: <WatchTowerIcon/>, townCenter: <TownCenterIcon />,
     age: <AgeIcon />, event: <EventIcon />, system: <SystemIcon />,
     item: <PackageIcon />,
     default: <PackageIcon />,

@@ -3,9 +3,9 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs } from '@/services/dbService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
 import GameUI from '@/components/GameUI';
@@ -19,14 +19,6 @@ import ResourceAssignmentPanel from '@/components/ResourceAssignmentPanel';
 import CivilizationPanel from '@/components/CivilizationPanel';
 import AllBuildingsPanel from '@/components/AllBuildingsPanel';
 import InventoryPanel from '@/components/InventoryPanel';
-import { buildingIconMap } from '@/components/icons/iconRegistry';
-
-const UNIT_INFO: UnitInfo[] = [
-    { id: 'swordsman', name: 'Swordsman', description: 'Basic melee infantry.', cost: { food: 60, gold: 20 }, requiredBuilding: 'barracks', trainTime: 22 },
-    { id: 'archer', name: 'Archer', description: 'Ranged unit effective against infantry.', cost: { food: 30, wood: 40 }, requiredBuilding: 'archeryRange', trainTime: 25 },
-    { id: 'knight', name: 'Knight', description: 'Fast and powerful cavalry.', cost: { food: 60, gold: 75 }, requiredBuilding: 'stable', trainTime: 30 },
-    { id: 'catapult', name: 'Catapult', description: 'Siege engine devastating to buildings.', cost: { wood: 150, gold: 150 }, requiredBuilding: 'siegeWorkshop', trainTime: 45 },
-];
 
 const GATHER_INFO: Record<ResourceNodeType, { rate: number }> = {
     food: { rate: 10 },
@@ -73,6 +65,7 @@ const GamePage: React.FC = () => {
     // Dynamic Configs from DB
     const [ageProgressionList, setAgeProgressionList] = useState<{name: string, description: string}[]>([]);
     const [buildingList, setBuildingList] = useState<BuildingConfig[]>([]);
+    const [unitList, setUnitList] = useState<UnitConfig[]>([]);
 
     
     // Panel States
@@ -108,6 +101,9 @@ const GamePage: React.FC = () => {
 
         const allBuildingConfigs = await getAllBuildingConfigs();
         setBuildingList(allBuildingConfigs.filter(b => b.isActive));
+
+        const allUnitConfigs = await getAllUnitConfigs();
+        setUnitList(allUnitConfigs.filter(u => u.isActive));
 
     }, []);
     
@@ -208,7 +204,7 @@ const GamePage: React.FC = () => {
             }
             case 'train_military': {
                  const { unitType, count } = task.payload!;
-                 const unitInfo = UNIT_INFO.find(u => u.id === unitType)!;
+                 const unitInfo = unitList.find(u => u.id === unitType)!;
                  const newUnitNames = getRandomNames('soldier', count!);
                  const newUnits: MilitaryUnit[] = newUnitNames.map(name => ({ id: `${Date.now()}-${unitType}-${name}`, name, title: '', unitType: unitType! }));
                  setUnits(p => ({ ...p, military: [...p.military, ...newUnits] }));
@@ -226,7 +222,7 @@ const GamePage: React.FC = () => {
                 break;
             }
         }
-    }, [currentAge, addToLog, ageProgressionList, buildingList]);
+    }, [currentAge, addToLog, ageProgressionList, buildingList, unitList]);
     
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) {
@@ -525,10 +521,10 @@ const GamePage: React.FC = () => {
     };
     
     const handleTrainUnits = (unitType: MilitaryUnitType, count: number) => {
-        const unitInfo = UNIT_INFO.find(u => u.id === unitType);
+        const unitInfo = unitList.find(u => u.id === unitType);
         if (!unitInfo || activeTasks.some(t => t.payload?.unitType === unitType) || count <= 0) return;
         if (population.current + count > population.capacity) { addNotification(`Need space for ${count} more units.`); return; }
-        const trainingBuilding = buildings[unitInfo.requiredBuilding]?.[0];
+        const trainingBuilding = buildings[unitInfo.requiredBuilding as BuildingType]?.[0];
         if (!trainingBuilding) { addNotification(`No ${buildingList.find(b => b.id === unitInfo.requiredBuilding)?.name} to train units.`); return; }
 
         if (!unlimitedResources) {
@@ -602,7 +598,7 @@ const GamePage: React.FC = () => {
         if (unlimitedResources) {
             updateResources({ [targetNode.type]: targetNode.amount });
             addToLog(`${cappedCount} villager(s) instantly gathered ${Math.floor(targetNode.amount)} ${targetNode.type}.`, targetNode.type);
-            setResourceNodes(prev => prev.filter(n => n.id !== nodeId));
+            setResourceNodes(prev => prev.filter(n => n.id !== targetId));
         } else {
             if (existingTask) setActiveTasks(prev => prev.map(t => t.id === taskId ? { ...t, payload: { ...t.payload, villagerIds: [...new Set([...t.payload!.villagerIds!, ...villagersToAssign])] } } : t));
             else setActiveTasks(prev => [...prev, { id: taskId, type: 'gather', startTime: Date.now(), duration: 999999999, payload: { resourceNodeId: targetId, villagerIds: villagersToAssign } }]);
@@ -757,7 +753,7 @@ const GamePage: React.FC = () => {
                 return (
                     <>
                         <GameUI
-                            civilization={civilization} resources={resources} units={units} buildings={buildings} population={population} currentAge={currentAge} gameLog={gameLog} resourceDeltas={resourceDeltas} activityStatus={activityStatus} unitList={UNIT_INFO} buildingList={buildingList}
+                            civilization={civilization} resources={resources} units={units} buildings={buildings} population={population} currentAge={currentAge} gameLog={gameLog} resourceDeltas={resourceDeltas} activityStatus={activityStatus} unitList={unitList} buildingList={buildingList}
                             onOpenUnitPanel={(type, rect) => { closeAllPanels(); setUnitManagementPanel({ isOpen: true, type, anchorRect: rect }); }}
                             onOpenBuildingPanel={handleOpenBuildingPanel}
                             onOpenAllBuildingsPanel={(rect) => { closeAllPanels(); setAllBuildingsPanel({ isOpen: true, anchorRect: rect }); }}
@@ -769,11 +765,11 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />
-                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} resources={resources} population={population} unitList={UNIT_INFO} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} />
+                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} resources={resources} population={population} unitList={unitList} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} />
                         <ResourceAssignmentPanel isOpen={assignmentPanelState.isOpen} onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })} assignmentTarget={assignmentTarget || null} idleVillagerCount={idleVillagerCount} onAssignVillagers={handleAssignVillagers} onRecallVillagers={handleRecallVillagers} gatherInfo={GATHER_INFO} buildingList={buildingList} units={units} anchorRect={assignmentPanelState.anchorRect} />
                         <CivilizationPanel isOpen={civPanelState.isOpen} onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })} civilization={civilization} anchorRect={civPanelState.anchorRect} />
                         <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })} buildingList={buildingList} buildingCounts={buildingCounts} activeTasks={activeTasks} onOpenBuildingPanel={handleOpenBuildingPanel} anchorRect={allBuildingsPanel.anchorRect} />

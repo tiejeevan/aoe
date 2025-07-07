@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources } from '../../../types';
-import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig } from '../../../services/dbService';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig } from '../../../types';
+import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig } from '../../../services/dbService';
 import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
@@ -15,7 +15,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
-import { buildingIconMap } from '../../../components/icons/iconRegistry';
+import { INITIAL_UNITS } from '../../../data/unitInfo';
+import { buildingIconMap, unitIconMap } from '../../../components/icons/iconRegistry';
 
 // This is the fallback if DB fails or is empty on first load.
 const INITIAL_AGES = [
@@ -110,6 +111,62 @@ const BuildingEditor: React.FC<{
     );
 };
 
+const UnitEditor: React.FC<{
+    unit: UnitConfig;
+    onSave: (unit: UnitConfig) => void;
+    onCancel: () => void;
+    allBuildings: BuildingConfig[];
+}> = ({ unit, onSave, onCancel, allBuildings }) => {
+    const [editedUnit, setEditedUnit] = useState<UnitConfig>(unit);
+
+    const handleInputChange = (field: keyof UnitConfig, value: any) => {
+        setEditedUnit(prev => ({ ...prev, [field]: value }));
+    };
+    const handleCostChange = (resource: keyof BuildingCosts, value: string) => {
+        const amount = parseInt(value, 10) || 0;
+        setEditedUnit(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
+    };
+
+    return (
+        <div className="bg-stone-dark/40 p-4 rounded-lg border border-brand-gold my-2 space-y-4 animate-in fade-in-50">
+            <h3 className="text-lg font-bold text-brand-gold">Editing: {unit.name}</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input type="text" value={editedUnit.name} onChange={(e) => handleInputChange('name', e.target.value)} placeholder="Unit Name" className="sci-fi-input" />
+                <Textarea value={editedUnit.description} onChange={(e) => handleInputChange('description', e.target.value)} placeholder="Description" className="sci-fi-input" />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Input type="number" value={editedUnit.hp} onChange={(e) => handleInputChange('hp', parseInt(e.target.value, 10))} placeholder="HP" className="sci-fi-input" />
+                <Input type="number" value={editedUnit.attack} onChange={(e) => handleInputChange('attack', parseInt(e.target.value, 10))} placeholder="Attack" className="sci-fi-input" />
+                <Input type="number" value={editedUnit.trainTime} onChange={(e) => handleInputChange('trainTime', parseInt(e.target.value, 10))} placeholder="Train Time (s)" className="sci-fi-input" />
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(Object.keys(editedUnit.cost!) as (keyof Resources)[]).map(res => (
+                    <div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={editedUnit.cost![res]} onChange={(e) => handleCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>
+                ))}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Select value={editedUnit.requiredBuilding} onValueChange={(val) => handleInputChange('requiredBuilding', val)}>
+                    <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Required Building"/></SelectTrigger>
+                    <SelectContent>{allBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                </Select>
+                 <Select value={editedUnit.iconId} onValueChange={(val) => handleInputChange('iconId', val)}>
+                    <SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Icon"/></SelectTrigger>
+                    <SelectContent>{Object.keys(unitIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+                <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
+                <Button onClick={() => onSave(editedUnit)} className="bg-brand-green hover:bg-brand-green/80"><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
+            </div>
+        </div>
+    );
+};
+
 
 const AdminPage: React.FC = () => {
     // Ages State
@@ -121,11 +178,12 @@ const AdminPage: React.FC = () => {
     // Buildings State
     const [buildings, setBuildings] = useState<BuildingConfig[]>([]);
     const [isBuildingsLoading, setIsBuildingsLoading] = useState(true);
-    const [newBuilding, setNewBuilding] = useState<Partial<BuildingConfig>>({
-        name: '', description: '', hp: 1000, buildTime: 30, isUnique: false,
-        cost: { food: 50, wood: 50, gold: 0, stone: 0 }, unlockedInAge: '', iconId: 'default',
-    });
     const [editingBuilding, setEditingBuilding] = useState<BuildingConfig | null>(null);
+
+    // Units State
+    const [units, setUnits] = useState<UnitConfig[]>([]);
+    const [isUnitsLoading, setIsUnitsLoading] = useState(true);
+    const [editingUnit, setEditingUnit] = useState<UnitConfig | null>(null);
 
 
     // --- Data Fetching and Seeding ---
@@ -142,23 +200,22 @@ const AdminPage: React.FC = () => {
         }
         setAges(allAges);
         setIsAgesLoading(false);
-        if (allAges.length > 0 && !newBuilding.unlockedInAge) {
-            setNewBuilding(prev => ({ ...prev, unlockedInAge: allAges[0].name }));
-        }
-    }, [newBuilding.unlockedInAge]);
+    }, []);
     
     const fetchBuildings = useCallback(async () => {
         setIsBuildingsLoading(true);
         let allBuildings = await getAllBuildingConfigs();
         if (allBuildings.length === 0) {
             allBuildings = [];
+            const initialAges = await getAllAgeConfigs();
+            const defaultAge = initialAges.find(a => a.order === 0)?.name || 'Nomadic Age';
             for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
                 const newPredefinedBuilding: BuildingConfig = {
                     ...pb,
                     isActive: true,
                     isPredefined: true,
                     order: index,
-                    unlockedInAge: 'Nomadic Age', // Default for predefined
+                    unlockedInAge: defaultAge, 
                     iconId: pb.id,
                 };
                 await saveBuildingConfig(newPredefinedBuilding);
@@ -169,10 +226,32 @@ const AdminPage: React.FC = () => {
         setIsBuildingsLoading(false);
     }, []);
 
+    const fetchUnits = useCallback(async () => {
+        setIsUnitsLoading(true);
+        let allUnits = await getAllUnitConfigs();
+        if (allUnits.length === 0) {
+            allUnits = [];
+            for (const [index, pu] of INITIAL_UNITS.entries()) {
+                 const newPredefinedUnit: UnitConfig = {
+                    ...pu,
+                    isActive: true,
+                    isPredefined: true,
+                    order: index,
+                };
+                await saveUnitConfig(newPredefinedUnit);
+                allUnits.push(newPredefinedUnit);
+            }
+        }
+        setUnits(allUnits);
+        setIsUnitsLoading(false);
+    }, []);
+
+
     useEffect(() => {
         fetchAges();
         fetchBuildings();
-    }, [fetchAges, fetchBuildings]);
+        fetchUnits();
+    }, [fetchAges, fetchBuildings, fetchUnits]);
 
     // --- Ages Handlers ---
     const handleAddAge = async () => {
@@ -213,33 +292,6 @@ const AdminPage: React.FC = () => {
     };
 
     // --- Buildings Handlers ---
-    const handleBuildingInputChange = (field: keyof BuildingConfig, value: any) => {
-        setNewBuilding(prev => ({ ...prev, [field]: value }));
-    };
-    const handleBuildingCostChange = (resource: keyof BuildingCosts, value: string) => {
-        const amount = parseInt(value, 10) || 0;
-        setNewBuilding(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
-    };
-    const handleAddBuilding = async () => {
-        if (!newBuilding.name?.trim() || !newBuilding.description?.trim()) return alert('Building name and description cannot be empty.');
-        const buildingId = `custom-${newBuilding.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-        const newBuildingConfig: BuildingConfig = {
-            id: buildingId,
-            name: newBuilding.name,
-            description: newBuilding.description,
-            hp: newBuilding.hp!,
-            buildTime: newBuilding.buildTime!,
-            cost: newBuilding.cost!,
-            isUnique: newBuilding.isUnique!,
-            unlockedInAge: newBuilding.unlockedInAge!,
-            iconId: newBuilding.iconId!,
-            isActive: true,
-            isPredefined: false,
-            order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0,
-        };
-        await saveBuildingConfig(newBuildingConfig);
-        await fetchBuildings();
-    };
     const handleDeleteBuilding = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this custom building?')) {
             await deleteBuildingConfig(id); await fetchBuildings();
@@ -249,9 +301,24 @@ const AdminPage: React.FC = () => {
         await saveBuildingConfig({ ...building, isActive: !building.isActive }); await fetchBuildings();
     };
     const handleSaveBuilding = async (buildingToSave: BuildingConfig) => {
-        await saveAgeConfig(buildingToSave);
+        await saveBuildingConfig(buildingToSave);
         setEditingBuilding(null);
         await fetchBuildings();
+    };
+
+    // --- Units Handlers ---
+     const handleSaveUnit = async (unitToSave: UnitConfig) => {
+        await saveUnitConfig(unitToSave);
+        setEditingUnit(null);
+        await fetchUnits();
+    };
+    const handleDeleteUnit = async (id: string) => {
+        if (window.confirm('Are you sure you want to delete this custom unit?')) {
+            await deleteUnitConfig(id); await fetchUnits();
+        }
+    };
+     const handleToggleUnitActive = async (unit: UnitConfig) => {
+        await saveUnitConfig({ ...unit, isActive: !unit.isActive }); await fetchUnits();
     };
 
 
@@ -264,9 +331,10 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <Tabs defaultValue="ages" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 bg-stone-dark/80 border border-stone-light/20">
+                    <TabsList className="grid w-full grid-cols-3 bg-stone-dark/80 border border-stone-light/20">
                         <TabsTrigger value="ages">Ages</TabsTrigger>
                         <TabsTrigger value="buildings">Buildings</TabsTrigger>
+                        <TabsTrigger value="units">Units</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="ages" className="mt-6">
@@ -354,30 +422,41 @@ const AdminPage: React.FC = () => {
                                 )}
                             </CardContent>
                         </Card>
-                         <Card className="bg-stone-dark/30 border-stone-light/30 mt-8">
-                            <CardHeader><CardTitle className="text-brand-gold">Add Custom Building</CardTitle></CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input type="text" value={newBuilding.name} onChange={(e) => handleBuildingInputChange('name', e.target.value)} placeholder="Building Name" className="sci-fi-input w-full" />
-                                    <Textarea value={newBuilding.description} onChange={(e) => handleBuildingInputChange('description', e.target.value)} placeholder="Description" className="sci-fi-input w-full" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Input type="number" value={newBuilding.hp} onChange={(e) => handleBuildingInputChange('hp', parseInt(e.target.value, 10))} placeholder="HP" className="sci-fi-input w-full" />
-                                    <Input type="number" value={newBuilding.buildTime} onChange={(e) => handleBuildingInputChange('buildTime', parseInt(e.target.value, 10))} placeholder="Build Time (s)" className="sci-fi-input w-full" />
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                    {(Object.keys(newBuilding.cost!) as (keyof Resources)[]).map(res => (
-                                        <div key={res}><Label className="capitalize text-xs">{res}</Label><Input type="number" value={newBuilding.cost![res]} onChange={(e) => handleBuildingCostChange(res, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>
-                                    ))}
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Select value={newBuilding.unlockedInAge} onValueChange={(val) => handleBuildingInputChange('unlockedInAge', val)}><SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Age"/></SelectTrigger><SelectContent>{ages.map(a => <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>)}</SelectContent></Select>
-                                    <Select value={newBuilding.iconId} onValueChange={(val) => handleBuildingInputChange('iconId', val)}><SelectTrigger className="sci-fi-input"><SelectValue placeholder="Select Icon"/></SelectTrigger><SelectContent>{Object.keys(buildingIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent></Select>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2"><Switch id="isUnique" checked={newBuilding.isUnique} onCheckedChange={(c) => handleBuildingInputChange('isUnique', c)} /><Label htmlFor="isUnique">Unique Building (limit 1)</Label></div>
-                                    <Button onClick={handleAddBuilding} className="sci-fi-button"><PlusCircle className="mr-2"/>Add Building</Button>
-                                </div>
+                    </TabsContent>
+
+                    <TabsContent value="units" className="mt-6">
+                         <Card className="bg-stone-dark/30 border-stone-light/30">
+                            <CardHeader>
+                                <CardTitle className="text-brand-gold">Manage Units</CardTitle>
+                                <CardDescription className="text-parchment-dark">Create, edit, and manage all military units in the game.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isUnitsLoading ? <p>Loading units...</p> : (
+                                     <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                                        {units.map((u) => (
+                                            <div key={u.id}>
+                                                {editingUnit?.id === u.id ? (
+                                                    <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} allBuildings={buildings} />
+                                                ) : (
+                                                    <div className="sci-fi-unit-row flex items-center justify-between gap-4">
+                                                        <div className="flex items-center gap-3 flex-grow">
+                                                            <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(unitIconMap[u.iconId] || unitIconMap.default)}</div>
+                                                            <div className="flex-grow">
+                                                                <h3 className="font-bold flex items-center gap-2">{u.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{u.name}</h3>
+                                                                <p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack} | Requires: {buildings.find(b=>b.id===u.requiredBuilding)?.name || 'N/A'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex items-center space-x-2"><Label htmlFor={`active-unit-${u.id}`} className="text-xs">Active</Label><Switch id={`active-unit-${u.id}`} checked={u.isActive} onCheckedChange={() => handleToggleUnitActive(u)} /></div>
+                                                            <Button variant="ghost" size="icon" onClick={() => setEditingUnit(u)} className="text-parchment-dark/70 hover:text-brand-blue"><Edit className="w-4 h-4"/></Button>
+                                                            {!u.isPredefined && <button onClick={() => handleDeleteUnit(u.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>

@@ -1,6 +1,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -34,7 +35,7 @@ export interface Villager {
     currentTask: string | null; // null if idle, otherwise the ID of the GameTask
 }
 
-export type MilitaryUnitType = 'swordsman' | 'archer' | 'knight' | 'catapult';
+export type MilitaryUnitType = 'swordsman' | 'archer' | 'knight' | 'catapult' | string;
 
 export interface MilitaryUnit {
     id: string;
@@ -119,23 +120,19 @@ export interface GameLogEntry {
     icon: LogIconType;
 }
 
-export interface BuildingInfo {
-    id: BuildingType;
-    name: string;
-    description: string;
-    cost: BuildingCosts;
-    isUnique: boolean;
-    buildTime: number; // in seconds
-    hp: number;
-}
-
-export interface UnitInfo {
+export interface UnitConfig {
     id: MilitaryUnitType;
     name: string;
     description: string;
     cost: BuildingCosts;
-    requiredBuilding: BuildingType;
-    trainTime: number; // in seconds per unit
+    requiredBuilding: BuildingType | string;
+    trainTime: number; // in seconds
+    hp: number;
+    attack: number;
+    iconId: string;
+    isActive: boolean;
+    isPredefined: boolean;
+    order: number;
 }
 
 export interface UINotification {

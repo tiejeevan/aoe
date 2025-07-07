@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitInfo, MilitaryUnitType, GameTask } from '../types';
+import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask } from '../types';
 import { FoodIcon, GoldIcon, StoneIcon, WoodIcon, AgeIcon, VillagerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
-import { iconMap } from './GameUI';
+import { unitIconMap } from './icons/iconRegistry';
 import { Trash2, Wrench } from 'lucide-react';
 
 interface BuildingManagementPanelProps {
@@ -20,7 +20,7 @@ interface BuildingManagementPanelProps {
     onTrainVillagers: (count: number) => void;
     resources: Resources;
     population: { current: number; capacity: number };
-    unitList: UnitInfo[];
+    unitList: UnitConfig[];
     onAdvanceAge: () => void;
     activeTasks: GameTask[];
     anchorRect: DOMRect | null;
@@ -203,6 +203,8 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const getTrainUnitTooltip = () => { if (!unitToTrain) return ''; if (activeTrainTask) return 'Training in progress...'; if (!hasPopCapacity) return `Need ${trainCount - popSpace} more housing.`; if (!canAffordUnit) return 'Insufficient Resources.'; return `Train ${trainCount} ${unitToTrain.name}(s)`; };
     const getTrainVillagerTooltip = () => { if (activeVillagerTask) return 'Training in progress...'; if (!hasPopCapacity) return `Need ${trainCount - popSpace} more housing.`; if (!canAffordVillagers) return 'Insufficient Food.'; return `Train ${trainCount} Villager(s)`; };
     const getAdvanceAgeTooltip = () => { if (activeAgeTask) return 'Advancement in progress.'; if (resources.food < 500 || resources.gold < 200) return 'Insufficient resources to advance.'; return 'Advance to the next age (60s)'; };
+    
+    const UnitIcon = unitToTrain ? unitIconMap[unitToTrain.iconId] || unitIconMap.default : null;
 
     return (
         <div style={panelStyle} className={`fixed z-40 w-96 transform transition-all duration-300 ease-in-out ${isOpen && !isClosing ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
@@ -241,17 +243,17 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                             )}
                         </>
                     )}
-                    {unitToTrain && (
+                    {unitToTrain && UnitIcon && (
                         <>
                             {activeTrainTask ? (
                                 <div className="h-16 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Training {activeTrainTask.payload?.count} {unitToTrain.name}(s)...</p><ProgressBar startTime={activeTrainTask.startTime} duration={activeTrainTask.duration} className="w-full h-2"/></div>
                             ) : (
                                  <div className="sci-fi-unit-row !p-2 flex items-center gap-3">
-                                    <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-red">{iconMap[unitToTrain.id]}</div>
+                                    <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-red"><UnitIcon/></div>
                                      <div className="flex-grow"><CostDisplay cost={totalUnitCost} resources={resources} /></div>
                                      <input type="range" min="1" max={Math.max(1, popSpace)} value={trainCount} onChange={(e) => setTrainCount(Math.min(Number(e.target.value), popSpace))} className="sci-fi-slider w-24" disabled={popSpace <= 0}/>
                                      <span className="font-bold text-base w-8 text-center bg-black/20 p-1 rounded-md">{popSpace > 0 ? trainCount : 0}</span>
-                                     <div className="relative group"><button onClick={() => onTrainUnits(unitToTrain.id, trainCount)} disabled={!canTrainUnit} className="sci-fi-action-button"><div className="w-6 h-6">{iconMap[unitToTrain.id]}</div></button><div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getTrainUnitTooltip()}</div></div>
+                                     <div className="relative group"><button onClick={() => onTrainUnits(unitToTrain.id, trainCount)} disabled={!canTrainUnit} className="sci-fi-action-button"><div className="w-6 h-6"><UnitIcon/></div></button><div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getTrainUnitTooltip()}</div></div>
                                 </div>
                             )}
                         </>

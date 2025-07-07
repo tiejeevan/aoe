@@ -5,6 +5,7 @@ import type { Buildings, BuildingType, BuildingInstance, GameTask, BuildingConfi
 import { iconMap } from './GameUI';
 import ProgressBar from './ProgressBar';
 import { VillagerIcon } from './icons/ResourceIcons';
+import { buildingIconMap } from './icons/iconRegistry';
 
 const ConstructionTooltip: React.FC<{ task: GameTask; buildingInfo: BuildingConfig | undefined; builderCount: number }> = ({ task, buildingInfo, builderCount }) => {
     const [remainingTime, setRemainingTime] = useState(0);
@@ -185,7 +186,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                     >
                         {building && (
                              <div className="absolute inset-0 p-1 text-parchment-light cursor-pointer">
-                                {iconMap[Object.keys(buildings).find(key => buildings[key as string].some(b => b.id === building.id)) as string]}
+                                {React.createElement(buildingIconMap[buildingList.find(b => b.id === (Object.keys(buildings).find(key => buildings[key as string].some(b => b.id === building.id))))?.iconId || 'default'] || buildingIconMap.default)}
                                 <div className="bg-stone-dark text-white text-xs rounded py-1 px-2 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
                                     {building.name}
                                 </div>
@@ -193,7 +194,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                         )}
                         {constructionTask && buildingInfo && (
                             <div className="absolute inset-0 p-1 text-parchment-light opacity-60 flex flex-col justify-center items-center gap-1 group">
-                                {iconMap[buildingInfo.iconId]}
+                                {React.createElement(buildingIconMap[buildingInfo.iconId] || buildingIconMap.default)}
                                 <ProgressBar startTime={constructionTask.startTime} duration={constructionTask.duration} className="w-10/12 h-1.5"/>
                                 {buildingInfo && <ConstructionTooltip task={constructionTask} buildingInfo={buildingInfo} builderCount={constructionTask.payload.villagerIds?.length || 0} />}
                                 {(constructionTask.payload.villagerIds?.length || 0) > 0 && (
@@ -223,7 +224,7 @@ const GameMap: React.FC<GameMapProps> = ({ buildings, activeTasks, playerAction,
                         )}
                         {playerAction?.mode === 'build' && hoveredCell?.x === x && hoveredCell?.y === y && !isOccupied && (
                             <div className="absolute inset-0 p-1 text-parchment-light opacity-50">
-                               {iconMap[buildingList.find(b => b.id === playerAction.buildingType)!.iconId]}
+                               {React.createElement(buildingIconMap[buildingList.find(b => b.id === playerAction.buildingType)!.iconId] || buildingIconMap.default)}
                             </div>
                         )}
                     </div>

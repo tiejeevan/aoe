@@ -1161,6 +1161,9 @@ video {
 .items-stretch {
   align-items: stretch;
 }
+.justify-end {
+  justify-content: flex-end;
+}
 .justify-center {
   justify-content: center;
 }
@@ -1759,6 +1762,9 @@ video {
 .text-white {
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+}
+.text-stone-light\/80 {
+  color: rgb(102 92 84 / 0.8);
 }
 .underline-offset-4 {
   text-underline-offset: 4px;
@@ -2820,6 +2826,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
 
   .md\:grid-cols-5 {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .md\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .md\:text-sm {

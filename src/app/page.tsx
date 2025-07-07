@@ -355,7 +355,6 @@ const GamePage: React.FC = () => {
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
         setActivityStatus('Your settlement awaits your command.');
-        fetchSavesAndConfigs();
     };
 
     const isVillagerBusy = useCallback((villagerId: string): boolean => !!units.villagers.find(v => v.id === villagerId)?.currentTask, [units.villagers]);
@@ -371,7 +370,7 @@ const GamePage: React.FC = () => {
     }, [activeTasks, resourceNodes, units.villagers, buildingList]);
 
     const handleResumeGame = async (saveName: string) => {
-        await fetchSavesAndConfigs();
+        const { allBuildingConfigs } = await fetchSavesAndConfigs();
         const savedState = await loadGameState(saveName) as FullGameState;
         if (savedState) {
             setGameState(GameStatus.LOADING);
@@ -387,12 +386,12 @@ const GamePage: React.FC = () => {
             const occupiedCells = new Set([...Object.values(savedState.buildings || {}).flat().map((b: any) => `${b.position.x},${b.position.y}`), ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)]);
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
             Object.keys(finalBuildings).forEach(bType => {
-                const info = buildingList.find(b => b.id === bType);
+                const info = allBuildingConfigs.find(b => b.id === bType);
                 if(info) finalBuildings[bType] = finalBuildings[bType].map(b => ({ ...b, currentHp: b.currentHp === undefined ? info.hp : b.currentHp }));
             });
             if (!finalBuildings.townCenter || finalBuildings.townCenter.length === 0) {
                 let tcPos = { x: 10, y: 5 }; while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
-                const tcInfo = buildingList.find(b => b.id === 'townCenter')!;
+                const tcInfo = allBuildingConfigs.find(b => b.id === 'townCenter')!;
                 finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPos, currentHp: tcInfo.hp }];
                 occupiedCells.add(`${tcPos.x},${tcPos.y}`);
             }
@@ -809,7 +808,7 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />

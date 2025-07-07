@@ -38,7 +38,8 @@ const MAP_DIMENSIONS = { width: 25, height: 18 };
 
 
 const GamePage: React.FC = () => {
-    const [gameState, setGameState] = useState<GameStatus>(GameStatus.MENU);
+    // Core Game State
+    const [gameState, setGameState] = useState<GameStatus>(GameStatus.LOADING);
     const [civilization, setCivilization] = useState<Civilization | null>(null);
     const [resources, setResources] = useState<Resources>({ food: 200, wood: 150, gold: 50, stone: 100 });
     const [units, setUnits] = useState<Units>({ villagers: [], military: [] });
@@ -62,6 +63,9 @@ const GamePage: React.FC = () => {
     const [masterAgeList, setMasterAgeList] = useState<AgeConfig[]>([]);
     const [masterBuildingList, setMasterBuildingList] = useState<BuildingConfig[]>([]);
     const [masterUnitList, setMasterUnitList] = useState<UnitConfig[]>([]);
+
+    // App Loading State
+    const [isAppLoading, setIsAppLoading] = useState(true);
 
     
     // Panel States
@@ -89,57 +93,71 @@ const GamePage: React.FC = () => {
     };
     
     const fetchSavesAndConfigs = useCallback(async () => {
-        const names = await getAllSaveNames();
-        setAllSaves(names);
-        
-        let allAgeConfigs = await getAllAgeConfigs();
-        if (allAgeConfigs.length === 0) {
-            allAgeConfigs = [];
-            for (const [index, pa] of INITIAL_AGES.entries()) {
-                 const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
-                 await saveAgeConfig(newPredefinedAge);
-                 allAgeConfigs.push(newPredefinedAge);
+        try {
+            const names = await getAllSaveNames();
+            setAllSaves(names);
+            
+            let allAgeConfigs = await getAllAgeConfigs();
+            if (allAgeConfigs.length === 0) {
+                allAgeConfigs = [];
+                for (const [index, pa] of INITIAL_AGES.entries()) {
+                     const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
+                     await saveAgeConfig(newPredefinedAge);
+                     allAgeConfigs.push(newPredefinedAge);
+                }
             }
-        }
-        setMasterAgeList(allAgeConfigs);
+            setMasterAgeList(allAgeConfigs);
 
-        let allBuildingConfigs = await getAllBuildingConfigs();
-        if (allBuildingConfigs.length === 0) {
-            allBuildingConfigs = [];
-            const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || 'Nomadic Age';
-            for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
-                const newPredefinedBuilding: BuildingConfig = {
-                    ...pb,
-                    buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
-                    isActive: true,
-                    isPredefined: true,
-                    order: index,
-                    unlockedInAge: defaultAge, 
-                    iconId: pb.id,
-                };
-                await saveBuildingConfig(newPredefinedBuilding);
-                allBuildingConfigs.push(newPredefinedBuilding);
+            let allBuildingConfigs = await getAllBuildingConfigs();
+            if (allBuildingConfigs.length === 0) {
+                allBuildingConfigs = [];
+                const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || 'Nomadic Age';
+                for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
+                    const newPredefinedBuilding: BuildingConfig = {
+                        ...pb,
+                        buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
+                        isActive: true,
+                        isPredefined: true,
+                        order: index,
+                        unlockedInAge: defaultAge, 
+                        iconId: pb.id,
+                        canTrainUnits: pb.canTrainUnits,
+                        upgradesTo: pb.upgradesTo || []
+                    };
+                    await saveBuildingConfig(newPredefinedBuilding);
+                    allBuildingConfigs.push(newPredefinedBuilding);
+                }
             }
-        }
-        setMasterBuildingList(allBuildingConfigs);
+            setMasterBuildingList(allBuildingConfigs);
 
-        let allUnitConfigs = await getAllUnitConfigs();
-        if (allUnitConfigs.length === 0) {
-            allUnitConfigs = [];
-            for (const [index, pu] of INITIAL_UNITS.entries()) {
-                 const newPredefinedUnit: UnitConfig = {
-                    ...pu,
-                    isActive: true,
-                    isPredefined: true,
-                    order: index,
-                };
-                await saveUnitConfig(newPredefinedUnit);
-                allUnitConfigs.push(newPredefinedUnit);
+            let allUnitConfigs = await getAllUnitConfigs();
+            if (allUnitConfigs.length === 0) {
+                allUnitConfigs = [];
+                for (const [index, pu] of INITIAL_UNITS.entries()) {
+                     const newPredefinedUnit: UnitConfig = {
+                        ...pu,
+                        isActive: true,
+                        isPredefined: true,
+                        order: index,
+                    };
+                    await saveUnitConfig(newPredefinedUnit);
+                    allUnitConfigs.push(newPredefinedUnit);
+                }
             }
+            setMasterUnitList(allUnitConfigs);
+            
+            return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
+        } catch (error) {
+            console.error("Error during initial config fetch:", error);
+            // In case of a catastrophic DB failure, we can use fallbacks
+            setMasterAgeList(INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i})));
+            setMasterBuildingList(INITIAL_BUILDINGS.map((b, i) => ({...b, buildLimit: b.isUnique ? 1 : 0, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age', iconId: b.id, canTrainUnits: b.canTrainUnits, upgradesTo: b.upgradesTo || []})));
+            setMasterUnitList(INITIAL_UNITS.map((u, i) => ({...u, isActive: true, isPredefined: true, order: i})));
+            return { allAgeConfigs: [], allBuildingConfigs: [], allUnitConfigs: [] }; // Return empty to signal fallback
+        } finally {
+            setIsAppLoading(false);
+            setGameState(GameStatus.MENU);
         }
-        setMasterUnitList(allUnitConfigs);
-        
-        return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
     }, []);
     
     useEffect(() => {
@@ -211,7 +229,7 @@ const GamePage: React.FC = () => {
 
         switch (task.type) {
             case 'build': {
-                const { buildingType, villagerIds, position } = task.payload!;
+                const { buildingType, position } = task.payload!;
                 const buildingInfo = buildingList.find(b => b.id === buildingType)!;
                 const [name] = getRandomNames('building', 1);
                 const newBuilding: BuildingInstance = { id: task.id, name, position: position!, currentHp: buildingInfo.hp };
@@ -221,10 +239,8 @@ const GamePage: React.FC = () => {
                     return { ...p, [buildingType as string]: [...currentBuildings, newBuilding] };
                 });
                 
-                if (villagerIds && villagerIds.length > 0) {
-                    addToLog(`${villagerIds.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingInfo.iconId);
-                    setActivityStatus(`Construction of ${name} is complete.`);
-                }
+                addToLog(`${task.payload!.villagerIds!.length} builder(s) have constructed ${name}, a new ${buildingInfo.name}.`, buildingInfo.iconId);
+                setActivityStatus(`Construction of ${name} is complete.`);
                 break;
             }
             case 'gather': break;
@@ -367,8 +383,7 @@ const GamePage: React.FC = () => {
         setGameState(GameStatus.LOADING);
         setCurrentSaveName(saveName);
         
-        const { allAgeConfigs, allBuildingConfigs } = await fetchSavesAndConfigs();
-        const localAgeProgressionList = allAgeConfigs.filter(a => a.isActive);
+        const localAgeProgressionList = masterAgeList.filter(a => a.isActive);
 
         const civ = getPredefinedCivilization();
         setCivilization(civ);
@@ -376,7 +391,7 @@ const GamePage: React.FC = () => {
         const initialVillagers = getRandomNames('villager', 3).map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
         setUnits({ villagers: initialVillagers, military: [] });
         const tcPosition = { x: Math.floor(MAP_DIMENSIONS.width / 2), y: Math.floor(MAP_DIMENSIONS.height / 2) };
-        const tcInfo = allBuildingConfigs.find(b => b.id === 'townCenter')!;
+        const tcInfo = masterBuildingList.find(b => b.id === 'townCenter')!;
         const initialTC = { id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
@@ -401,7 +416,6 @@ const GamePage: React.FC = () => {
     }, [activeTasks, resourceNodes, units.villagers, buildingList]);
 
     const handleResumeGame = async (saveName: string) => {
-        const { allBuildingConfigs } = await fetchSavesAndConfigs();
         const savedState = await loadGameState(saveName) as FullGameState;
         if (savedState) {
             setGameState(GameStatus.LOADING);
@@ -417,12 +431,12 @@ const GamePage: React.FC = () => {
             const occupiedCells = new Set([...Object.values(savedState.buildings || {}).flat().map((b: any) => `${b.position.x},${b.position.y}`), ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)]);
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
             Object.keys(finalBuildings).forEach(bType => {
-                const info = allBuildingConfigs.find(b => b.id === bType);
+                const info = masterBuildingList.find(b => b.id === bType);
                 if(info) finalBuildings[bType] = finalBuildings[bType].map(b => ({ ...b, currentHp: b.currentHp === undefined ? info.hp : b.currentHp }));
             });
             if (!finalBuildings.townCenter || finalBuildings.townCenter.length === 0) {
                 let tcPos = { x: 10, y: 5 }; while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
-                const tcInfo = allBuildingConfigs.find(b => b.id === 'townCenter')!;
+                const tcInfo = masterBuildingList.find(b => b.id === 'townCenter')!;
                 finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPos, currentHp: tcInfo.hp }];
                 occupiedCells.add(`${tcPos.x},${tcPos.y}`);
             }
@@ -513,7 +527,7 @@ const GamePage: React.FC = () => {
         const existingCount = buildings[buildingInfo.id as string]?.length || 0;
         const constructingCount = activeTasks.filter(t => t.type === 'build' && t.payload?.buildingType === buildingInfo.id).length;
         const totalCount = existingCount + constructingCount;
-        const limit = buildingInfo.isUnique ? 1 : (buildingInfo.buildLimit || 0);
+        const limit = buildingInfo.buildLimit || 0;
 
         if (limit > 0 && totalCount >= limit) {
             addNotification(`You have reached the build limit for ${buildingInfo.name} (${limit}).`);
@@ -819,6 +833,10 @@ const GamePage: React.FC = () => {
     }, [closeAllPanels]);
 
     const renderContent = () => {
+        if (isAppLoading) {
+            return <LoadingScreen />;
+        }
+
         switch (gameState) {
             case GameStatus.MENU: return <StartScreen onNewGame={handleStartNewGame} onResumeGame={handleResumeGame} savedGames={allSaves} onDeleteGame={handleDeleteGame} />;
             case GameStatus.LOADING: return <LoadingScreen />;

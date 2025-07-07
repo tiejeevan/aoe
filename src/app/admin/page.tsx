@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -21,7 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/pop
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
 import { INITIAL_UNITS } from '../../../data/unitInfo';
 import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
-import { buildingIconMap, unitIconMap, resourceIconMap } from '../../../components/icons/iconRegistry';
+import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../../components/icons/iconRegistry';
 import { INITIAL_AGES } from '../../../data/ageInfo';
 import { INITIAL_RESEARCH } from '../../../data/researchInfo';
 
@@ -496,7 +497,7 @@ const UnitEditor: React.FC<{
                                     <Label>Additional Required Buildings (Prerequisites)</Label>
                                     <Input type="text" value={(editedUnit.requiredBuildingIds || []).join(',')} onChange={(e) => handleInputChange('requiredBuildingIds', e.target.value.split(',').map(s=>s.trim()).filter(Boolean))} className="sci-fi-input" placeholder="barracks,blacksmith" />
                                 </div>
-                                <div><Label>Required Research IDs (Prerequisites)</Label><Input type="text" value={(editedUnit.requiredResearchIds || []).join(',')} onChange={(e) => handleInputChange('requiredResearchIds', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_armor_1" className="sci-fi-input" /></div>
+                                <div><Label>Required Research IDs (Prerequisites)</Label><Input type="text" value={(editedUnit.prerequisites || []).join(',')} onChange={(e) => handleInputChange('prerequisites', e.target.value.split(',').map(s => s.trim()))} placeholder="tech_armor_1" className="sci-fi-input" /></div>
                             </div>
                             <div className="flex items-center gap-2 pt-2"><Switch id="edit-unit-isUpgradeOnly" checked={!!editedUnit.isUpgradeOnly} onCheckedChange={(c) => handleInputChange('isUpgradeOnly', c)} /><Label htmlFor="edit-unit-isUpgradeOnly">Upgrade Only (Cannot be trained directly)</Label></div>
                             <hr className="border-stone-light/20"/>
@@ -653,7 +654,6 @@ const ResearchEditor: React.FC<{
 
     const researchBuildings = allBuildings.filter(b => b.canResearch);
     const activeResources = allResources.filter(r => r.isActive);
-    const researchIcons = { shield: Shield, wrench: Wrench, beaker: Beaker, target: Target };
     
     return (
         <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
@@ -664,7 +664,7 @@ const ResearchEditor: React.FC<{
                 <CardContent className="space-y-4">
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><Label>Name</Label><Input type="text" value={editedResearch.name} onChange={(e) => handleInputChange('name', e.target.value)} className="sci-fi-input" /></div>
-                        <div><Label>Icon</Label><Select value={editedResearch.iconId} onValueChange={(val) => handleInputChange('iconId', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(researchIcons).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent></Select></div>
+                        <div><Label>Icon</Label><Select value={editedResearch.iconId} onValueChange={(val) => handleInputChange('iconId', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(researchIconMap).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                      <div><Label>Description</Label><Textarea value={editedResearch.description} onChange={(e) => handleInputChange('description', e.target.value)} className="sci-fi-input" /></div>
                 </CardContent>
@@ -686,11 +686,11 @@ const ResearchEditor: React.FC<{
                                 <div key={req.id} className="flex items-center gap-2">
                                 <Checkbox
                                     id={`req-${req.id}`}
-                                    checked={(editedResearch.requiredResearchIds || []).includes(req.id)}
+                                    checked={(editedResearch.prerequisites || []).includes(req.id)}
                                     onCheckedChange={(checked) => {
-                                        const currentReqs = editedResearch.requiredResearchIds || [];
+                                        const currentReqs = editedResearch.prerequisites || [];
                                         const newReqs = checked ? [...currentReqs, req.id] : currentReqs.filter(id => id !== req.id);
-                                        handleInputChange('requiredResearchIds', newReqs);
+                                        handleInputChange('prerequisites', newReqs);
                                     }}
                                 />
                                 <label htmlFor={`req-${req.id}`} className="text-sm">{req.name}</label>
@@ -842,6 +842,7 @@ const AdminPage: React.FC = () => {
                 isActive: existingItem?.isActive ?? true,
                 order: existingItem?.order ?? index,
                 ageRequirement: existingItem?.ageRequirement || defaultAge,
+                requiredBuildingId: existingItem?.requiredBuildingId || 'blacksmith',
             };
             if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
                 await saveResearchConfig(newItem);
@@ -906,7 +907,7 @@ const AdminPage: React.FC = () => {
      const handleShowAddUnit = () => {
         const trainingBuildings = buildings.filter(b => b.canTrainUnits && b.isActive);
         if (trainingBuildings.length === 0) { alert("Please create/activate a building with 'Can Train Units' enabled."); return; }
-        const newUnit: UnitConfig = { id: `custom-unit-${Date.now()}`, treeId: `utree-${Date.now()}`, name: 'New Unit', description: 'A new custom unit.', cost: {}, trainTime: 20, hp: 50, attack: 5, iconId: 'default', isActive: true, isPredefined: false, order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0, requiredBuilding: trainingBuildings[0].id, populationCost: 1, attackRate: 1, movementSpeed: 1, unitType: 'infantry', upgradesTo: [], armorValues: [], attackBonuses: [], damageTypes: [], terrainModifiers: [], requiredBuildingIds: [], requiredResearchIds: [] };
+        const newUnit: UnitConfig = { id: `custom-unit-${Date.now()}`, treeId: `utree-${Date.now()}`, name: 'New Unit', description: 'A new custom unit.', cost: {}, trainTime: 20, hp: 50, attack: 5, iconId: 'default', isActive: true, isPredefined: false, order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0, requiredBuilding: trainingBuildings[0].id, populationCost: 1, attackRate: 1, movementSpeed: 1, unitType: 'infantry', upgradesTo: [], armorValues: [], attackBonuses: [], damageTypes: [], terrainModifiers: [], requiredBuildingIds: [], prerequisites: [] };
         setEditingUnit(newUnit);
     };
      const handleSaveUnit = async (unitToSave: UnitConfig) => { await saveUnitConfig(unitToSave); setEditingUnit(null); await fetchUnits(); };
@@ -934,13 +935,13 @@ const AdminPage: React.FC = () => {
     const handleShowAddResearch = () => {
         const researchBuildings = buildings.filter(b => b.canResearch && b.isActive);
         if (researchBuildings.length === 0) { alert("Please create/activate a building with 'Can Research' enabled."); return; }
-        const newResearch: ResearchConfig = { id: `custom-tech-${Date.now()}`, name: 'New Technology', description: '', iconId: 'beaker', cost: {}, researchTime: 60, requiredBuildingId: researchBuildings[0].id, ageRequirement: ages[0]?.name || '', effects: [], requiredResearchIds: [], isActive: true, isPredefined: false, order: research.length > 0 ? Math.max(...research.map(r => r.order)) + 1 : 0 };
+        const newResearch: ResearchConfig = { id: `custom-tech-${Date.now()}`, name: 'New Technology', description: '', iconId: 'beaker', cost: {}, researchTime: 60, requiredBuildingId: researchBuildings[0].id, ageRequirement: ages[0]?.name || '', effects: [], prerequisites: [], isActive: true, isPredefined: false, order: research.length > 0 ? Math.max(...research.map(r => r.order)) + 1 : 0, treeId: 'custom_tree', treeName: 'Custom' };
         setEditingResearch(newResearch);
     };
     const handleSaveResearch = async (researchToSave: ResearchConfig) => { await saveResearchConfig(researchToSave); setEditingResearch(null); await fetchResearch(ages); };
     const handleToggleResearchActive = async (researchItem: ResearchConfig) => { await saveResearchConfig({ ...researchItem, isActive: !researchItem.isActive }); await fetchResearch(ages); };
     const handleDeleteResearch = async (researchItem: ResearchConfig) => {
-        if (research.some(r => r.requiredResearchIds?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
+        if (research.some(r => r.prerequisites?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
         if (window.confirm(`Are you sure you want to delete "${researchItem.name}"?`)) { await deleteResearchConfig(researchItem.id); await fetchResearch(ages); }
     };
 
@@ -1105,10 +1106,7 @@ const AdminPage: React.FC = () => {
                                                 <div key={r.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
                                                     <div className="flex items-center gap-3 flex-grow">
                                                         <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">
-                                                            {r.iconId === 'shield' && <Shield/>}
-                                                            {r.iconId === 'wrench' && <Wrench/>}
-                                                            {r.iconId === 'beaker' && <Beaker/>}
-                                                            {r.iconId === 'target' && <Target/>}
+                                                            {React.createElement(researchIconMap[r.iconId] || researchIconMap.default)}
                                                         </div>
                                                         <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{r.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{r.name}</h3><p className="text-xs text-parchment-dark">Requires: {buildings.find(b=>b.id===r.requiredBuildingId)?.name || 'N/A'}</p></div>
                                                     </div>

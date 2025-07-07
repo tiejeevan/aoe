@@ -174,7 +174,7 @@ export interface UnitConfig {
     upgradesTo?: UnitUpgradePath[];
     isUpgradeOnly?: boolean;
     requiredBuildingIds?: string[]; // Additional buildings that must exist to enable training
-    requiredResearchIds?: string[];
+    prerequisites?: string[]; // research ids
 }
 
 

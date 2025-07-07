@@ -1,11 +1,15 @@
 
+'use client';
+
 import React, { useState, useMemo } from 'react';
-import type { ResearchConfig, Resources, GameTask, AgeConfig } from '../types';
-import { Button } from './ui/button';
-import { ScrollArea } from './ui/scroll-area';
-import { resourceIconMap, researchIconMap } from './icons/iconRegistry';
+import type { ResearchConfig, Resources, GameTask, AgeConfig } from '@/types';
+import { Button } from '@/src/components/ui/button';
+import { ScrollArea } from '@/src/components/ui/scroll-area';
+import { resourceIconMap, researchIconMap } from '@/components/icons/iconRegistry';
 import { CheckCircle2, Lock, Clock, Info, X } from 'lucide-react';
-import ProgressBar from './ProgressBar';
+import ProgressBar from '@/components/ProgressBar';
+import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
 
 interface ResearchPanelProps {
     isOpen: boolean;
@@ -63,7 +67,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         const currentAgeIndex = ageProgressionList.findIndex(a => a.name === currentAge);
         const techAgeIndex = ageProgressionList.findIndex(a => a.name === tech.ageRequirement);
         
-        const prerequisitesMet = tech.prerequisites.every(id => completedResearch.includes(id));
+        const prerequisitesMet = (tech.prerequisites || []).every(id => completedResearch.includes(id));
         const ageMet = techAgeIndex <= currentAgeIndex;
 
         if (completedResearch.includes(tech.id)) return 'researched';
@@ -156,7 +160,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
                                     <div>
                                         <h4 className="font-serif text-base mb-1">Requirements:</h4>
                                         <ul className="text-sm space-y-1">
-                                            {selectedTech.prerequisites.length > 0 && selectedTech.prerequisites.map(reqId => {
+                                            {(selectedTech.prerequisites || []).map(reqId => {
                                                 const reqTech = masterResearchList.find(t => t.id === reqId);
                                                 const isMet = completedResearch.includes(reqId);
                                                 return (<li key={reqId} className={`flex items-center gap-2 ${isMet ? 'text-brand-green' : 'text-brand-red'}`}>{isMet ? <CheckCircle2 className="w-4 h-4"/> : <X className="w-4 h-4"/>}{reqTech?.name || reqId}</li>)

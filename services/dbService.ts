@@ -1,12 +1,13 @@
-import type { FullGameState, AgeConfig, BuildingConfig, UnitConfig, ResourceConfig } from '../types';
+import type { FullGameState, AgeConfig, BuildingConfig, UnitConfig, ResourceConfig, ResearchConfig } from '../types';
 
 const DB_NAME = 'GeminiEmpiresDB';
 const GAME_STATE_STORE_NAME = 'gameState';
 const AGES_CONFIG_STORE_NAME = 'ageConfigurations';
 const BUILDING_CONFIG_STORE_NAME = 'buildingConfigurations';
 const UNIT_CONFIG_STORE_NAME = 'unitConfigurations';
-const RESOURCE_CONFIG_STORE_NAME = 'resourceConfigurations'; // New store
-const DB_VERSION = 6; // Incremented version
+const RESOURCE_CONFIG_STORE_NAME = 'resourceConfigurations';
+const RESEARCH_CONFIG_STORE_NAME = 'researchConfigurations'; // New store
+const DB_VERSION = 7; // Incremented version
 
 const openDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
@@ -28,6 +29,9 @@ const openDB = (): Promise<IDBDatabase> => {
             }
             if (!db.objectStoreNames.contains(RESOURCE_CONFIG_STORE_NAME)) {
                 db.createObjectStore(RESOURCE_CONFIG_STORE_NAME, { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains(RESEARCH_CONFIG_STORE_NAME)) {
+                db.createObjectStore(RESEARCH_CONFIG_STORE_NAME, { keyPath: 'id' });
             }
         };
 
@@ -350,5 +354,64 @@ export const deleteResourceConfig = async (id: string): Promise<void> => {
         });
     } catch (error) {
         console.error("Failed to delete resource config:", error);
+    }
+};
+
+
+// --- Research Configuration Functions ---
+
+export const saveResearchConfig = async (research: ResearchConfig): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(RESEARCH_CONFIG_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(RESEARCH_CONFIG_STORE_NAME);
+        store.put(research);
+
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to save research config:", error);
+    }
+};
+
+export const getAllResearchConfigs = async (): Promise<ResearchConfig[]> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(RESEARCH_CONFIG_STORE_NAME, 'readonly');
+        const store = transaction.objectStore(RESEARCH_CONFIG_STORE_NAME);
+        const request = store.getAll();
+
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => {
+                const researches = request.result as ResearchConfig[];
+                researches.sort((a, b) => a.order - b.order);
+                resolve(researches);
+            };
+            request.onerror = () => {
+                console.error("Failed to load research configs:", request.error);
+                reject(request.error);
+            };
+        });
+    } catch (error) {
+        console.error("Failed to open DB for loading research configs:", error);
+        return [];
+    }
+};
+
+export const deleteResearchConfig = async (id: string): Promise<void> => {
+    try {
+        const db = await openDB();
+        const transaction = db.transaction(RESEARCH_CONFIG_STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(RESEARCH_CONFIG_STORE_NAME);
+        store.delete(id);
+
+        return new Promise<void>((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    } catch (error) {
+        console.error("Failed to delete research config:", error);
     }
 };

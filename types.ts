@@ -1,19 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export enum GameStatus {
     MENU,
     LOADING,
@@ -206,7 +191,7 @@ export interface ResourceNode {
   richness?: number; // e.g., 1 for normal, 2 for rich
 }
 
-export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' | 'advance_age' | 'upgrade_building';
+export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' | 'advance_age' | 'upgrade_building' | 'research';
 
 export type PlayerActionState = {
     mode: 'build';
@@ -240,6 +225,9 @@ export interface GameTask {
         originalBuildingId?: string;
         originalBuildingType?: string;
         targetBuildingType?: string;
+
+        // Research Task
+        researchId?: string;
     };
 }
 
@@ -285,6 +273,7 @@ export interface BuildingConfig {
     isPredefined: boolean;
     order: number;
     canTrainUnits: boolean;
+    canResearch?: boolean; // New flag for research buildings
     isUpgradeOnly?: boolean;
     upgradesTo?: BuildingUpgradePath[];
     treeId?: string; // Unique ID for an upgrade family of buildings.
@@ -330,6 +319,7 @@ export interface FullGameState {
     resourceNodes: ResourceNode[];
     inventory: GameItem[];
     activeBuffs: ActiveBuffs;
+    completedResearch: string[];
 }
 
 export type ResourceRarity = 'Abundant' | 'Common' | 'Uncommon' | 'Rare' | 'Strategic';
@@ -354,4 +344,33 @@ export interface ResourceConfig {
     decaysOverTime?: boolean;
     decayRate?: number; // percentage per minute
     storageBuildingId?: string; // ID of building that increases capacity
+}
+
+export type ResearchEffectType = 'stat_boost' | 'unlock_unit' | 'unlock_building';
+export type ResearchTargetType = 'unit_type' | 'unit_class' | 'building_type';
+export type ResearchOperation = 'add' | 'multiply';
+
+export interface ResearchEffect {
+    type: ResearchEffectType;
+    targetType: ResearchTargetType;
+    targetId: string; // e.g., 'swordsman', 'infantry', 'barracks'
+    stat: string; // e.g., 'hp', 'attack', 'meleeArmor'
+    value: number;
+    operation: ResearchOperation;
+}
+
+export interface ResearchConfig {
+    id: string;
+    name: string;
+    description: string;
+    iconId: string;
+    cost: BuildingCosts;
+    researchTime: number; // in seconds
+    requiredBuildingId: string;
+    ageRequirement: string;
+    requiredResearchIds?: string[];
+    effects: ResearchEffect[];
+    isActive: boolean;
+    isPredefined: boolean;
+    order: number;
 }

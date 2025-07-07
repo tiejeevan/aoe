@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask, BuildingUpgradePath } from '../types';
-import { AgeIcon, VillagerIcon } from './icons/ResourceIcons';
+import type { Buildings, BuildingInstance, BuildingType, BuildingConfig, Resources, UnitConfig, MilitaryUnitType, GameTask, BuildingUpgradePath, ResearchConfig, AgeConfig } from '../types';
+import { AgeIcon, VillagerIcon, BeakerIcon } from './icons/ResourceIcons';
 import ProgressBar from './ProgressBar';
-import { unitIconMap, resourceIconMap } from './icons/iconRegistry';
+import { unitIconMap, resourceIconMap, researchIconMap } from './icons/iconRegistry';
 import { Trash2, Wrench, ChevronsUp, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
 import { Button } from '@/src/components/ui/button';
@@ -27,6 +27,11 @@ interface BuildingManagementPanelProps {
     onAdvanceAge: () => void;
     activeTasks: GameTask[];
     anchorRect: DOMRect | null;
+    masterResearchList: ResearchConfig[];
+    completedResearch: string[];
+    onStartResearch: (researchId: string) => void;
+    currentAge: string;
+    ageProgressionList: AgeConfig[];
 }
 
 const CostDisplay: React.FC<{ cost: { [key: string]: number }, resources: Resources, isUpgradeCost?: boolean }> = ({ cost, resources, isUpgradeCost }) => (
@@ -183,7 +188,7 @@ const BuildingRow: React.FC<{
 };
 
 const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) => {
-    const { isOpen, onClose, panelState, buildings, buildingList, onUpdateBuilding, onDemolishBuilding, onTrainUnits, onTrainVillagers, onUpgradeBuilding, resources, population, unitList, onAdvanceAge, activeTasks, anchorRect } = props;
+    const { isOpen, onClose, panelState, buildings, buildingList, onUpdateBuilding, onDemolishBuilding, onTrainUnits, onTrainVillagers, onUpgradeBuilding, resources, population, unitList, onAdvanceAge, activeTasks, anchorRect, masterResearchList, completedResearch, onStartResearch, currentAge, ageProgressionList } = props;
     
     const [isClosing, setIsClosing] = useState(false);
     const [currentData, setCurrentData] = useState({ panelState, buildings, anchorRect });
@@ -235,6 +240,15 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
     const hasPopForVillagers = popSpace >= villagerTrainCount;
     const canTrainVillagers = canAffordVillagers && hasPopForVillagers && !activeVillagerTask;
 
+    const currentAgeIndex = ageProgressionList.findIndex(a => a.name === currentAge);
+    const availableResearch = masterResearchList.filter(r => {
+        const ageReqIndex = ageProgressionList.findIndex(a => a.name === r.ageRequirement);
+        return r.isActive && r.requiredBuildingId === buildingInfo.id &&
+            !completedResearch.includes(r.id) &&
+            (r.requiredResearchIds || []).every(reqId => completedResearch.includes(reqId)) &&
+            ageReqIndex !== -1 && ageReqIndex <= currentAgeIndex;
+    });
+
     const getTrainVillagerTooltip = () => { if (activeVillagerTask) return 'Training in progress...'; if (!hasPopForVillagers) return `Need ${villagerTrainCount - popSpace} more housing.`; if (!canAffordVillagers) return 'Insufficient Food.'; return `Train ${villagerTrainCount} Villager(s)`; };
     const getAdvanceAgeTooltip = () => { if (activeAgeTask) return 'Advancement in progress.'; if ((resources['food'] || 0) < 500 || (resources['gold'] || 0) < 200) return 'Insufficient resources to advance.'; return 'Advance to the next age (60s)'; };
     
@@ -262,7 +276,7 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                     ) : ( <p className="text-center text-parchment-dark py-4">You have no {buildingInfo?.name?.toLowerCase()}s.</p> )}
                 </div>
 
-                {(type === 'townCenter' || unitsToTrain.length > 0) && <hr className="border-stone-light/20 my-3" />}
+                {(type === 'townCenter' || unitsToTrain.length > 0 || availableResearch.length > 0) && <hr className="border-stone-light/20 my-3" />}
                 
                 <div className="space-y-3">
                     {type === 'townCenter' && (
@@ -311,6 +325,36 @@ const BuildingManagementPanel: React.FC<BuildingManagementPanelProps> = (props) 
                                         <span className="font-bold text-base w-8 text-center bg-black/20 p-1 rounded-md">{popSpace > 0 ? trainCount : 0}</span>
                                         <div className="relative group"><button onClick={() => onTrainUnits(unitToTrain.id, trainCount)} disabled={!canTrainUnit} className="sci-fi-action-button"><div className="w-6 h-6"><UnitIcon/></div></button><div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getTrainUnitTooltip()}</div></div>
                                     </div>
+                                )}
+                            </React.Fragment>
+                        )
+                    })}
+                     {availableResearch.map(tech => {
+                        const TechIcon = researchIconMap[tech.iconId] || researchIconMap.default;
+                        const activeResearchTask = activeTasks.find(t => t.type === 'research' && t.payload?.researchId === tech.id);
+                        const canAffordTech = Object.entries(tech.cost).every(([res, cost]) => (resources[res as keyof Resources] || 0) >= (cost as number));
+                        const canResearchTech = canAffordTech && !activeResearchTask;
+                        const getResearchTooltip = () => { if (activeResearchTask) return 'Research in progress...'; if (!canAffordTech) return 'Insufficient Resources.'; return `Research ${tech.name}`; };
+
+                        return (
+                             <React.Fragment key={tech.id}>
+                                {activeResearchTask ? (
+                                     <div className="h-16 flex flex-col justify-center items-center"><p className="text-sm text-parchment-dark mb-2">Researching {tech.name}...</p><ProgressBar startTime={activeResearchTask.startTime} duration={activeResearchTask.duration} className="w-full h-2"/></div>
+                                ) : (
+                                     <div className="sci-fi-unit-row !p-2 flex items-center gap-3">
+                                        <div className="w-8 h-8 p-1 bg-black/30 rounded-md text-brand-gold"><TechIcon /></div>
+                                        <div className="flex-grow">
+                                            <p className="font-bold">{tech.name}</p>
+                                            <p className="text-xs text-parchment-dark">{tech.description}</p>
+                                            <CostDisplay cost={tech.cost} resources={resources} />
+                                        </div>
+                                        <div className="relative group">
+                                            <button onClick={() => onStartResearch(tech.id)} disabled={!canResearchTech} className="sci-fi-action-button">
+                                                <div className="w-6 h-6"><BeakerIcon /></div>
+                                            </button>
+                                            <div className="absolute bottom-full right-0 mb-2 w-max px-2 py-1 bg-stone-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">{getResearchTooltip()}</div>
+                                        </div>
+                                     </div>
                                 )}
                             </React.Fragment>
                         )

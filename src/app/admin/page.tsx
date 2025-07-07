@@ -1,11 +1,10 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity } from '../../../types';
-import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig } from '../../../services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout } from 'lucide-react';
+import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '../../../types';
+import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '../../../services/dbService';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -24,6 +23,7 @@ import { INITIAL_UNITS } from '../../../data/unitInfo';
 import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
 import { buildingIconMap, unitIconMap, resourceIconMap } from '../../../components/icons/iconRegistry';
 import { INITIAL_AGES } from '../../../data/ageInfo';
+import { INITIAL_RESEARCH } from '../../../data/researchInfo';
 
 const BuildingEditor: React.FC<{
     building: BuildingConfig;
@@ -96,7 +96,7 @@ const BuildingEditor: React.FC<{
                     <TabsTrigger value="general"><Building className="w-4 h-4 mr-2"/>General</TabsTrigger>
                     <TabsTrigger value="economy"><Coins className="w-4 h-4 mr-2"/>Economy</TabsTrigger>
                     <TabsTrigger value="military"><Shield className="w-4 h-4 mr-2"/>Military</TabsTrigger>
-                    <TabsTrigger value="research"><Beaker className="w-4 h-4 mr-2"/>Research & Upgrades</TabsTrigger>
+                    <TabsTrigger value="research"><Beaker className="w-4 h-4 mr-2"/>Research &amp; Upgrades</TabsTrigger>
                     <TabsTrigger value="meta"><Star className="w-4 h-4 mr-2"/>Meta</TabsTrigger>
                 </TabsList>
 
@@ -135,7 +135,7 @@ const BuildingEditor: React.FC<{
                      </Card>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <Card className="bg-stone-dark/20 border-stone-light/20">
-                            <CardHeader><CardTitle className="text-base font-serif">Population & Housing</CardTitle></CardHeader>
+                            <CardHeader><CardTitle className="text-base font-serif">Population &amp; Housing</CardTitle></CardHeader>
                             <CardContent className="grid grid-cols-2 gap-4">
                                 <div><Label>Population Provided</Label><Input type="number" value={editedBuilding.populationCapacity || ''} onChange={(e) => handleNumberChange('populationCapacity', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
                                 <div><Label>Garrison Capacity</Label><Input type="number" value={editedBuilding.garrisonCapacity || ''} onChange={(e) => handleNumberChange('garrisonCapacity', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
@@ -153,7 +153,7 @@ const BuildingEditor: React.FC<{
                 
                 <TabsContent value="military" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
-                         <CardHeader><CardTitle className="text-base font-serif">Combat & Vision</CardTitle></CardHeader>
+                         <CardHeader><CardTitle className="text-base font-serif">Combat &amp; Vision</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div><Label>Attack Damage</Label><Input type="number" value={editedBuilding.attack || ''} onChange={(e) => handleNumberChange('attack', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
                             <div><Label>Attack Rate (/s)</Label><Input type="number" value={editedBuilding.attackRate || ''} onChange={(e) => handleNumberChange('attackRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
@@ -162,7 +162,7 @@ const BuildingEditor: React.FC<{
                         </CardContent>
                      </Card>
                      <Card className="bg-stone-dark/20 border-stone-light/20 mt-4">
-                         <CardHeader><CardTitle className="text-base font-serif">Durability & Repair</CardTitle></CardHeader>
+                         <CardHeader><CardTitle className="text-base font-serif">Durability &amp; Repair</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><Label>Decay Rate (HP/min)</Label><Input type="number" value={editedBuilding.decayRate || ''} onChange={(e) => handleNumberChange('decayRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
                              <div><Label>Heal Rate (HP/s)</Label><Input type="number" value={editedBuilding.healRate || ''} onChange={(e) => handleNumberChange('healRate', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
@@ -172,10 +172,11 @@ const BuildingEditor: React.FC<{
 
                  <TabsContent value="research" className="pt-4">
                     <Card className="bg-stone-dark/20 border-stone-light/20">
-                        <CardHeader><CardTitle className="text-base font-serif">Technology & Progression</CardTitle></CardHeader>
+                        <CardHeader><CardTitle className="text-base font-serif">Technology &amp; Progression</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
                                 <div className="flex items-center gap-2"><Switch id="edit-canTrainUnits" checked={!!editedBuilding.canTrainUnits} onCheckedChange={(c) => handleInputChange('canTrainUnits', c)} /><Label htmlFor="edit-canTrainUnits">Can Train Units</Label></div>
+                                <div className="flex items-center gap-2"><Switch id="edit-canResearch" checked={!!editedBuilding.canResearch} onCheckedChange={(c) => handleInputChange('canResearch', c)} /><Label htmlFor="edit-canResearch">Can Research Tech</Label></div>
                                 <div className="flex items-center gap-2"><Switch id="edit-isUnique" checked={!!editedBuilding.isUnique} onCheckedChange={(c) => { handleInputChange('isUnique', c); if(c) handleInputChange('buildLimit', 1); }} /><Label htmlFor="edit-isUnique">Unique Building</Label></div>
                                 {!editedBuilding.isUnique && (<div className="flex items-center gap-2"><Label htmlFor="edit-buildLimit">Build Limit (0=inf)</Label><Input id="edit-buildLimit" type="number" value={editedBuilding.buildLimit || 0} onChange={(e) => handleInputChange('buildLimit', Math.max(0, parseInt(e.target.value, 10) || 0))} className="sci-fi-input w-24" min="0" /></div>)}
                                 <div className="flex items-center gap-2"><Switch id="edit-isUpgradeOnly" checked={!!editedBuilding.isUpgradeOnly} onCheckedChange={(c) => handleInputChange('isUpgradeOnly', c)} /><Label htmlFor="edit-isUpgradeOnly">Upgrade Only (Cannot be built directly)</Label></div>
@@ -231,7 +232,7 @@ const BuildingEditor: React.FC<{
                                                         {isEnabled && (
                                                             <div className="mt-2 pl-6 space-y-2 animate-in fade-in-50">
                                                                 <div className={`grid grid-cols-2 sm:grid-cols-${(activeResources.length || 0) + 1} gap-2 items-end`}>
-                                                                    <Label className="sm:col-span-5 text-xs text-brand-gold">Upgrade Cost & Time for {targetBuilding.name}:</Label>
+                                                                    <Label className="sm:col-span-5 text-xs text-brand-gold">Upgrade Cost &amp; Time for {targetBuilding.name}:</Label>
                                                                     {activeResources.map(res => (
                                                                         <div key={res.id}>
                                                                             <Label className="capitalize text-xs">{res.name}</Label>
@@ -260,7 +261,7 @@ const BuildingEditor: React.FC<{
 
                  <TabsContent value="meta" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
-                         <CardHeader><CardTitle className="text-base font-serif">Meta & Aesthetics</CardTitle></CardHeader>
+                         <CardHeader><CardTitle className="text-base font-serif">Meta &amp; Aesthetics</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                  <div><Label>Award Points</Label><Input type="number" value={editedBuilding.awardPoints || ''} onChange={(e) => handleNumberChange('awardPoints', e.target.value)} placeholder="0" className="sci-fi-input" /></div>
@@ -353,11 +354,11 @@ const UnitEditor: React.FC<{
 
             <Tabs defaultValue="general">
                  <TabsList className="grid w-full grid-cols-5 bg-stone-dark/80 border border-stone-light/20">
-                    <TabsTrigger value="general">General & Combat</TabsTrigger>
+                    <TabsTrigger value="general">General &amp; Combat</TabsTrigger>
                     <TabsTrigger value="mobility">Mobility</TabsTrigger>
-                    <TabsTrigger value="economy">Cost & Training</TabsTrigger>
-                    <TabsTrigger value="bonuses">Bonuses & Armor</TabsTrigger>
-                    <TabsTrigger value="upgrades">Upgrades & Tech</TabsTrigger>
+                    <TabsTrigger value="economy">Cost &amp; Training</TabsTrigger>
+                    <TabsTrigger value="bonuses">Bonuses &amp; Armor</TabsTrigger>
+                    <TabsTrigger value="upgrades">Upgrades &amp; Tech</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="general" className="pt-4">
@@ -385,7 +386,7 @@ const UnitEditor: React.FC<{
                 
                  <TabsContent value="mobility" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
-                        <CardHeader><CardTitle className="text-base font-serif">Movement & Terrain</CardTitle></CardHeader>
+                        <CardHeader><CardTitle className="text-base font-serif">Movement &amp; Terrain</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
                              <div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -441,7 +442,7 @@ const UnitEditor: React.FC<{
                 
                 <TabsContent value="bonuses" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
-                        <CardHeader><CardTitle className="text-base font-serif">Combat Roles & Bonuses</CardTitle></CardHeader>
+                        <CardHeader><CardTitle className="text-base font-serif">Combat Roles &amp; Bonuses</CardTitle></CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
                              <div>
                                 <Label>Attack Bonuses (vs Unit Types)</Label>
@@ -481,7 +482,7 @@ const UnitEditor: React.FC<{
                 
                  <TabsContent value="upgrades" className="pt-4">
                      <Card className="bg-stone-dark/20 border-stone-light/20">
-                        <CardHeader><CardTitle className="text-base font-serif">Progression & Unlocks</CardTitle></CardHeader>
+                        <CardHeader><CardTitle className="text-base font-serif">Progression &amp; Unlocks</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
@@ -594,7 +595,7 @@ const ResourceEditor: React.FC<{
             </Card>
 
             <Card className="bg-stone-dark/20 border-stone-light/20">
-                <CardHeader><CardTitle className="text-base font-serif">Economy & Spawning</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-serif">Economy &amp; Spawning</CardTitle></CardHeader>
                 <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div><Label>Rarity</Label><Select value={editedResource.rarity} onValueChange={(val) => handleInputChange('rarity', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{rarityOptions.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
                     <div><Label>Initial Amount</Label><Input type="number" value={editedResource.initialAmount} onChange={(e) => handleNumberChange('initialAmount', e.target.value)} className="sci-fi-input" /></div>
@@ -628,6 +629,95 @@ const ResourceEditor: React.FC<{
     );
 };
 
+const ResearchEditor: React.FC<{
+    research: ResearchConfig;
+    onSave: (research: ResearchConfig) => void;
+    onCancel: () => void;
+    allBuildings: BuildingConfig[];
+    allAges: AgeConfig[];
+    allResearch: ResearchConfig[];
+    allResources: ResourceConfig[];
+}> = ({ research, onSave, onCancel, allBuildings, allAges, allResearch, allResources }) => {
+    const [editedResearch, setEditedResearch] = useState<ResearchConfig>(research);
+
+    const handleInputChange = (field: keyof ResearchConfig, value: any) => {
+        setEditedResearch(prev => ({ ...prev, [field]: value }));
+    };
+    const handleNumberChange = (field: keyof ResearchConfig, value: string) => {
+        setEditedResearch(prev => ({ ...prev, [field]: value === '' ? 0 : parseInt(value, 10) || 0 }));
+    };
+    const handleCostChange = (resource: string, value: string) => {
+        const amount = parseInt(value, 10) || 0;
+        setEditedResearch(prev => ({ ...prev, cost: { ...prev.cost, [resource]: amount } }));
+    };
+
+    const researchBuildings = allBuildings.filter(b => b.canResearch);
+    const activeResources = allResources.filter(r => r.isActive);
+    const researchIcons = { shield: Shield, wrench: Wrench, beaker: Beaker, target: Target };
+    
+    return (
+        <div className="bg-stone-dark/40 p-4 rounded-lg border-2 border-brand-gold my-4 space-y-4 animate-in fade-in-50">
+            <h3 className="text-xl font-bold text-brand-gold font-serif">Editing: {research.name}</h3>
+
+            <Card className="bg-stone-dark/20 border-stone-light/20">
+                <CardHeader><CardTitle className="text-base font-serif">Core Attributes</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><Label>Name</Label><Input type="text" value={editedResearch.name} onChange={(e) => handleInputChange('name', e.target.value)} className="sci-fi-input" /></div>
+                        <div><Label>Icon</Label><Select value={editedResearch.iconId} onValueChange={(val) => handleInputChange('iconId', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{Object.keys(researchIcons).map(iconId => <SelectItem key={iconId} value={iconId}>{iconId}</SelectItem>)}</SelectContent></Select></div>
+                    </div>
+                     <div><Label>Description</Label><Textarea value={editedResearch.description} onChange={(e) => handleInputChange('description', e.target.value)} className="sci-fi-input" /></div>
+                </CardContent>
+            </Card>
+
+             <Card className="bg-stone-dark/20 border-stone-light/20">
+                <CardHeader><CardTitle className="text-base font-serif">Requirements &amp; Cost</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div><Label>Research Building</Label><Select value={editedResearch.requiredBuildingId} onValueChange={(val) => handleInputChange('requiredBuildingId', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{researchBuildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div><Label>Age Requirement</Label><Select value={editedResearch.ageRequirement} onValueChange={(val) => handleInputChange('ageRequirement', val)}><SelectTrigger className="sci-fi-input"><SelectValue /></SelectTrigger><SelectContent>{allAges.map(a => <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div><Label>Research Time (s)</Label><Input type="number" value={editedResearch.researchTime} onChange={(e) => handleNumberChange('researchTime', e.target.value)} className="sci-fi-input" /></div>
+                    </div>
+                     <div>
+                        <Label>Prerequisite Research (multi-select)</Label>
+                        <ScrollArea className="h-24 w-full rounded-md border border-stone-light/20 p-2 bg-black/20">
+                            <div className="space-y-1">
+                            {allResearch.filter(r => r.id !== editedResearch.id).map(req => (
+                                <div key={req.id} className="flex items-center gap-2">
+                                <Checkbox
+                                    id={`req-${req.id}`}
+                                    checked={(editedResearch.requiredResearchIds || []).includes(req.id)}
+                                    onCheckedChange={(checked) => {
+                                        const currentReqs = editedResearch.requiredResearchIds || [];
+                                        const newReqs = checked ? [...currentReqs, req.id] : currentReqs.filter(id => id !== req.id);
+                                        handleInputChange('requiredResearchIds', newReqs);
+                                    }}
+                                />
+                                <label htmlFor={`req-${req.id}`} className="text-sm">{req.name}</label>
+                                </div>
+                            ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                    <div>
+                         <Label>Research Cost</Label>
+                        <div className={`grid grid-cols-2 sm:grid-cols-${activeResources.length || 1} gap-2 border border-stone-light/20 p-2 rounded-md bg-black/20 mt-1`}>
+                            {activeResources.map(res => (<div key={res.id}><Label className="capitalize text-xs">{res.name}</Label><Input type="number" value={editedResearch.cost?.[res.id] || ''} onChange={(e) => handleCostChange(res.id, e.target.value)} placeholder="0" className="sci-fi-input w-full" /></div>))}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Effects editor could go here, but is very complex. Leaving as a placeholder for now. */}
+
+            <div className="flex justify-end gap-2 pt-4">
+                <Button variant="ghost" onClick={onCancel} className="text-brand-red hover:bg-brand-red/10"><XCircle className="w-4 h-4 mr-2"/>Cancel</Button>
+                <Button onClick={() => onSave(editedResearch)} className="bg-brand-green hover:bg-brand-green/80"><Save className="w-4 h-4 mr-2"/>Save Changes</Button>
+            </div>
+        </div>
+    );
+};
+
 
 const AdminPage: React.FC = () => {
     // Ages State
@@ -650,6 +740,11 @@ const AdminPage: React.FC = () => {
     const [resources, setResources] = useState<ResourceConfig[]>([]);
     const [isResourcesLoading, setIsResourcesLoading] = useState(true);
     const [editingResource, setEditingResource] = useState<ResourceConfig | null>(null);
+    
+    // Research State
+    const [research, setResearch] = useState<ResearchConfig[]>([]);
+    const [isResearchLoading, setIsResearchLoading] = useState(true);
+    const [editingResearch, setEditingResearch] = useState<ResearchConfig | null>(null);
 
 
     // --- Data Fetching and Seeding ---
@@ -729,15 +824,47 @@ const AdminPage: React.FC = () => {
         return allItems;
     }, []);
 
+    const fetchResearch = useCallback(async (allAgeConfigs: AgeConfig[]) => {
+        setIsResearchLoading(true);
+        let allItems = await getAllResearchConfigs();
+        const itemMap = new Map(allItems.map(i => [i.id, i]));
+        let needsUpdate = false;
+        const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
+
+        for (const [index, pItem] of INITIAL_RESEARCH.entries()) {
+            const id = pItem.name.toLowerCase().replace(/\s/g, '_');
+            const existingItem = itemMap.get(id);
+            const newItem: ResearchConfig = {
+                ...(pItem as any),
+                ...(existingItem || {}),
+                id,
+                isPredefined: true,
+                isActive: existingItem?.isActive ?? true,
+                order: existingItem?.order ?? index,
+                ageRequirement: existingItem?.ageRequirement || defaultAge,
+            };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveResearchConfig(newItem);
+                needsUpdate = true;
+            }
+        }
+
+        if (needsUpdate) allItems = await getAllResearchConfigs();
+        setResearch(allItems);
+        setIsResearchLoading(false);
+        return allItems;
+    }, []);
+
     useEffect(() => {
         const loadAll = async () => {
             await fetchResources();
             const allAges = await fetchAges();
             await fetchBuildings(allAges);
             await fetchUnits();
+            await fetchResearch(allAges);
         };
         loadAll();
-    }, [fetchAges, fetchBuildings, fetchUnits, fetchResources]);
+    }, [fetchAges, fetchBuildings, fetchUnits, fetchResources, fetchResearch]);
 
     // --- Ages Handlers ---
     const handleAddAge = async () => {
@@ -798,9 +925,23 @@ const AdminPage: React.FC = () => {
     const handleSaveResource = async (resourceToSave: ResourceConfig) => { await saveResourceConfig(resourceToSave); setEditingResource(null); await fetchResources(); };
     const handleToggleResourceActive = async (resource: ResourceConfig) => { await saveResourceConfig({ ...resource, isActive: !resource.isActive }); await fetchResources(); };
     const handleDeleteResource = async (resourceToDelete: ResourceConfig) => {
-        const isUsedInCost = [...buildings, ...units].some(item => item.cost[resourceToDelete.id] > 0 || item.maintenanceCost?.[resourceToDelete.id] > 0);
-        if (isUsedInCost) { alert(`Cannot delete "${resourceToDelete.name}". It is used in a building or unit cost.`); return; }
+        const isUsedInCost = [...buildings, ...units, ...research].some(item => item.cost[resourceToDelete.id] > 0);
+        if (isUsedInCost) { alert(`Cannot delete "${resourceToDelete.name}". It is used as a cost for a building, unit, or research item.`); return; }
         if (window.confirm(`Are you sure you want to delete "${resourceToDelete.name}"?`)) { await deleteResourceConfig(resourceToDelete.id); await fetchResources(); }
+    };
+
+    // --- Research Handlers ---
+    const handleShowAddResearch = () => {
+        const researchBuildings = buildings.filter(b => b.canResearch && b.isActive);
+        if (researchBuildings.length === 0) { alert("Please create/activate a building with 'Can Research' enabled."); return; }
+        const newResearch: ResearchConfig = { id: `custom-tech-${Date.now()}`, name: 'New Technology', description: '', iconId: 'beaker', cost: {}, researchTime: 60, requiredBuildingId: researchBuildings[0].id, ageRequirement: ages[0]?.name || '', effects: [], requiredResearchIds: [], isActive: true, isPredefined: false, order: research.length > 0 ? Math.max(...research.map(r => r.order)) + 1 : 0 };
+        setEditingResearch(newResearch);
+    };
+    const handleSaveResearch = async (researchToSave: ResearchConfig) => { await saveResearchConfig(researchToSave); setEditingResearch(null); await fetchResearch(ages); };
+    const handleToggleResearchActive = async (researchItem: ResearchConfig) => { await saveResearchConfig({ ...researchItem, isActive: !researchItem.isActive }); await fetchResearch(ages); };
+    const handleDeleteResearch = async (researchItem: ResearchConfig) => {
+        if (research.some(r => r.requiredResearchIds?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
+        if (window.confirm(`Are you sure you want to delete "${researchItem.name}"?`)) { await deleteResearchConfig(researchItem.id); await fetchResearch(ages); }
     };
 
     return (
@@ -812,11 +953,12 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <Tabs defaultValue="ages" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 bg-stone-dark/80 border border-stone-light/20">
+                    <TabsList className="grid w-full grid-cols-5 bg-stone-dark/80 border border-stone-light/20">
                         <TabsTrigger value="ages">Ages</TabsTrigger>
                         <TabsTrigger value="buildings">Buildings</TabsTrigger>
                         <TabsTrigger value="units">Units</TabsTrigger>
                         <TabsTrigger value="resources">Resources</TabsTrigger>
+                        <TabsTrigger value="research">Research</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="ages" className="mt-6">
@@ -948,6 +1090,42 @@ const AdminPage: React.FC = () => {
                         </Card>
                     </TabsContent>
 
+                    <TabsContent value="research" className="mt-6">
+                        <Card className="bg-stone-dark/30 border-stone-light/30">
+                           <CardHeader className="flex flex-row items-center justify-between">
+                                <div><CardTitle className="text-brand-gold">Manage Research</CardTitle><CardDescription className="text-parchment-dark">Create and configure the technology tree for your civilization.</CardDescription></div>
+                                <Button onClick={handleShowAddResearch} disabled={!!editingResearch}><PlusCircle className="mr-2"/> Add Technology</Button>
+                            </CardHeader>
+                             <CardContent>
+                                {isResearchLoading ? <p>Loading research...</p> : (
+                                    <>
+                                        {editingResearch && <ResearchEditor research={editingResearch} onSave={handleSaveResearch} onCancel={() => setEditingResearch(null)} allBuildings={buildings} allAges={ages} allResearch={research} allResources={resources} />}
+                                        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
+                                            {research.map((r) => (
+                                                <div key={r.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-3 flex-grow">
+                                                        <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">
+                                                            {r.iconId === 'shield' && <Shield/>}
+                                                            {r.iconId === 'wrench' && <Wrench/>}
+                                                            {r.iconId === 'beaker' && <Beaker/>}
+                                                            {r.iconId === 'target' && <Target/>}
+                                                        </div>
+                                                        <div className="flex-grow"><h3 className="font-bold flex items-center gap-2">{r.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{r.name}</h3><p className="text-xs text-parchment-dark">Requires: {buildings.find(b=>b.id===r.requiredBuildingId)?.name || 'N/A'}</p></div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center space-x-2"><Label htmlFor={`active-tech-${r.id}`} className="text-xs">Active</Label><Switch id={`active-tech-${r.id}`} checked={r.isActive} onCheckedChange={() => handleToggleResearchActive(r)} /></div>
+                                                        <Button variant="ghost" size="icon" onClick={() => setEditingResearch(r)} className="text-parchment-dark/70 hover:text-brand-blue" disabled={!!editingResearch}><Edit className="w-4 h-4"/></Button>
+                                                        {!r.isPredefined && <button onClick={() => handleDeleteResearch(r)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
                 </Tabs>
             </div>
         </div>
@@ -955,5 +1133,3 @@ const AdminPage: React.FC = () => {
 };
 
 export default AdminPage;
-
-    

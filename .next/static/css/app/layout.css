@@ -854,6 +854,9 @@ video {
 .h-64 {
   height: 16rem;
 }
+.h-24 {
+  height: 6rem;
+}
 .max-h-48 {
   max-height: 12rem;
 }
@@ -1849,6 +1852,10 @@ video {
 .text-purple-400 {
   --tw-text-opacity: 1;
   color: rgb(192 132 252 / var(--tw-text-opacity, 1));
+}
+.text-green-400 {
+  --tw-text-opacity: 1;
+  color: rgb(74 222 128 / var(--tw-text-opacity, 1));
 }
 .underline-offset-4 {
   text-underline-offset: 4px;

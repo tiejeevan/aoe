@@ -1,16 +1,16 @@
-
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath, ResourceConfig } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath, ResourceConfig, ResearchConfig } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '@/services/geminiService';
-import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig, getAllResourceConfigs, saveResourceConfig } from '@/services/dbService';
+import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig, getAllResourceConfigs, saveResourceConfig, getAllResearchConfigs, saveResearchConfig } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
 import { GAME_ITEMS } from '@/data/itemContent';
 import { INITIAL_AGES } from '@/data/ageInfo';
 import { INITIAL_BUILDINGS } from '@/data/buildingInfo';
 import { INITIAL_UNITS } from '@/data/unitInfo';
 import { INITIAL_RESOURCES } from '@/data/resourceInfo';
+import { INITIAL_RESEARCH } from '@/data/researchInfo';
 import GameUI from '@/components/GameUI';
 import StartScreen from '@/components/StartScreen';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -51,12 +51,15 @@ const GamePage: React.FC = () => {
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
     const [inventory, setInventory] = useState<GameItem[]>([]);
     const [activeBuffs, setActiveBuffs] = useState<ActiveBuffs>({ resourceBoost: [] });
+    const [completedResearch, setCompletedResearch] = useState<string[]>([]);
     
     // Master lists of all configurations from DB
     const [masterAgeList, setMasterAgeList] = useState<AgeConfig[]>([]);
     const [masterBuildingList, setMasterBuildingList] = useState<BuildingConfig[]>([]);
     const [masterUnitList, setMasterUnitList] = useState<UnitConfig[]>([]);
     const [masterResourceList, setMasterResourceList] = useState<ResourceConfig[]>([]);
+    const [masterResearchList, setMasterResearchList] = useState<ResearchConfig[]>([]);
+
 
     // App Loading State
     const [isAppLoading, setIsAppLoading] = useState(true);
@@ -210,20 +213,45 @@ const GamePage: React.FC = () => {
             if (unitsNeedUpdate) allUnitConfigs = await getAllUnitConfigs();
             setMasterUnitList(allUnitConfigs);
             
+             // --- Smart Seeding/Updating for Research ---
+            let allResearchConfigs = await getAllResearchConfigs();
+            let researchMap = new Map(allResearchConfigs.map(item => [item.id, item]));
+            let researchNeedUpdate = false;
+            for (const [index, pItem] of INITIAL_RESEARCH.entries()) {
+                const id = pItem.name.toLowerCase().replace(/\s/g, '_');
+                const existingItem = researchMap.get(id);
+                const newItem: ResearchConfig = {
+                     ...(pItem as any), // Base predefined values
+                    ...(existingItem || {}), // Overwrite with saved values
+                    id, isPredefined: true,
+                    isActive: existingItem?.isActive ?? true,
+                    order: existingItem?.order ?? index,
+                    ageRequirement: existingItem?.ageRequirement || defaultAge,
+                };
+                if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                    await saveResearchConfig(newItem);
+                    researchNeedUpdate = true;
+                }
+            }
+            if (researchNeedUpdate) allResearchConfigs = await getAllResearchConfigs();
+            setMasterResearchList(allResearchConfigs);
+
             const allResourceConfigs = await fetchResources();
 
-            return { allAgeConfigs, allBuildingConfigs, allUnitConfigs, allResourceConfigs };
+            return { allAgeConfigs, allBuildingConfigs, allUnitConfigs, allResourceConfigs, allResearchConfigs };
         } catch (error) {
             console.error("Error during initial config fetch:", error);
             const ages = INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
             const buildings = INITIAL_BUILDINGS.map((b, i) => ({...b, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age' } as BuildingConfig));
             const units = INITIAL_UNITS.map((u, i) => ({...u, id: u.name.toLowerCase().replace(/\s/g, ''), isActive: true, isPredefined: true, order: i}));
             const resources = INITIAL_RESOURCES.map((r,i) => ({...r, isActive: true, isPredefined: true, order: i}));
+            const research = INITIAL_RESEARCH.map((r,i) => ({...r, id: r.name.toLowerCase().replace(/\s/g, '_'), isActive: true, isPredefined: true, order: i, ageRequirement: 'Nomadic Age'} as ResearchConfig));
             setMasterAgeList(ages);
             setMasterBuildingList(buildings);
             setMasterUnitList(units as UnitConfig[]);
             setMasterResourceList(resources);
-            return { allAgeConfigs: ages, allBuildingConfigs: buildings, allUnitConfigs: units as UnitConfig[], allResourceConfigs: resources };
+            setMasterResearchList(research);
+            return { allAgeConfigs: ages, allBuildingConfigs: buildings, allUnitConfigs: units as UnitConfig[], allResourceConfigs: resources, allResearchConfigs: research };
         } finally {
             setIsAppLoading(false);
             setGameState(GameStatus.MENU);
@@ -247,10 +275,11 @@ const GamePage: React.FC = () => {
                 resourceNodes,
                 inventory,
                 activeBuffs,
+                completedResearch,
             };
             saveGameState(currentSaveName, fullState);
         }
-    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes, inventory, activeBuffs]);
+    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes, inventory, activeBuffs, completedResearch]);
 
     const addNotification = useCallback((message: string) => {
         const id = `${Date.now()}-${Math.random()}`;
@@ -367,8 +396,19 @@ const GamePage: React.FC = () => {
                 setActivityStatus(`Welcome to the ${ageResult.name}!`);
                 break;
             }
+            case 'research': {
+                const { researchId } = task.payload!;
+                const researchInfo = masterResearchList.find(r => r.id === researchId);
+                if (researchInfo) {
+                    setCompletedResearch(prev => [...new Set([...prev, researchId!])]);
+                    addToLog(`Research complete: ${researchInfo.name}!`, researchInfo.iconId);
+                    setActivityStatus(`Completed research for ${researchInfo.name}.`);
+                    // TODO: Apply research effects
+                }
+                break;
+            }
         }
-    }, [currentAge, addToLog, buildingList, unitList, masterAgeList, buildings]);
+    }, [currentAge, addToLog, buildingList, unitList, masterAgeList, masterResearchList, buildings]);
     
     useEffect(() => {
         if (gameState !== GameStatus.PLAYING) {
@@ -551,7 +591,7 @@ const GamePage: React.FC = () => {
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(tcPosition));
         setCurrentAge(localAgeProgressionList[0]?.name || INITIAL_AGES[0].name);
-        setGameLog([]); setCurrentEvent(null); setUnlimitedResources(false); setActiveTasks([]); setInventory([]); setActiveBuffs({ resourceBoost: [] });
+        setGameLog([]); setCurrentEvent(null); setUnlimitedResources(false); setActiveTasks([]); setInventory([]); setActiveBuffs({ resourceBoost: [] }); setCompletedResearch([]);
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
@@ -604,6 +644,7 @@ const GamePage: React.FC = () => {
             setResourceNodes((savedState.resourceNodes || []).length === 0 ? generateResourceNodes(tcPosition) : (savedState.resourceNodes || []));
             setCurrentAge(savedState.currentAge); setGameLog(savedState.gameLog); setActiveTasks(migratedTasks);
             setInventory(savedState.inventory || []); setActiveBuffs(savedState.activeBuffs || { resourceBoost: [] });
+            setCompletedResearch(savedState.completedResearch || []);
             setCurrentEvent(null); setActivityStatus('Welcome back to your saga.');
             setGameState(GameStatus.PLAYING);
         } else {
@@ -738,8 +779,8 @@ const GamePage: React.FC = () => {
         const buildingInstance = buildings[type as string].find(b => b.id === id);
         if (!buildingInfo || !buildingInstance) return;
         
-        const capacityWithoutThisBuilding = populationCapacity - (buildingInfo.populationCapacity || 0);
-        if ((buildingInfo.populationCapacity || 0) > 0 && population.current > capacityWithoutThisBuilding) {
+        const capacityLost = buildingInfo.populationCapacity || 0;
+        if (capacityLost > 0 && population.current > populationCapacity - capacityLost) {
              addNotification("Cannot demolish this building, your people would be homeless."); return;
         }
 
@@ -811,6 +852,17 @@ const GamePage: React.FC = () => {
                 return;
             }
         }
+        
+        // Check for required research
+        if(unitInfo.requiredResearchIds && unitInfo.requiredResearchIds.length > 0) {
+            const missingResearch = unitInfo.requiredResearchIds.filter(reqId => !completedResearch.includes(reqId));
+             if (missingResearch.length > 0) {
+                const missingNames = missingResearch.map(id => masterResearchList.find(r => r.id === id)?.name || id).join(', ');
+                addNotification(`Training this unit requires research: ${missingNames}.`);
+                return;
+            }
+        }
+
 
         if (!unlimitedResources) {
             const missing = (Object.keys(unitInfo.cost) as (keyof Resources)[]).filter(res => (resources[res] || 0) < (unitInfo.cost[res] || 0) * count);
@@ -941,6 +993,27 @@ const GamePage: React.FC = () => {
             setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
         }
     };
+
+    const handleStartResearch = (researchId: string) => {
+        const researchInfo = masterResearchList.find(r => r.id === researchId);
+        if (!researchInfo || activeTasks.some(t => t.payload?.researchId === researchId)) return;
+        
+        if (!unlimitedResources) {
+            const missing = (Object.keys(researchInfo.cost) as (keyof Resources)[]).filter(res => (resources[res] || 0) < (researchInfo.cost[res] || 0));
+            if (missing.length > 0) { addNotification(`Need more ${missing.join(', ')}.`); return; }
+            updateResources(Object.entries(researchInfo.cost).reduce((acc, [k, v]) => ({...acc, [k]: -(v || 0)}), {}));
+        }
+
+        const taskPayload = { researchId };
+        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'research', startTime: 0, duration: 0, payload: taskPayload });
+        else {
+            setActiveTasks(prev => [...prev, { id: `${Date.now()}-research-${researchId}`, type: 'research', startTime: Date.now(), duration: researchInfo.researchTime * 1000, payload: taskPayload }]);
+            setActivityStatus(`Researching ${researchInfo.name}...`);
+            addToLog(`Began research for ${researchInfo.name}.`, researchInfo.iconId);
+        }
+        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
+    };
+
     
     const handleExitGame = async () => { setCurrentSaveName(null); await fetchSavesAndConfigs(); setGameState(GameStatus.MENU); };
     const handleDeleteGame = async (saveName: string) => { await deleteGameState(saveName); await fetchSavesAndConfigs(); addNotification(`Deleted saga: "${saveName}"`); };
@@ -1068,7 +1141,7 @@ const GamePage: React.FC = () => {
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />
-                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} onUpgradeBuilding={handleUpgradeBuilding} resources={resources} population={population} unitList={activeUnits} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} />
+                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} onUpgradeBuilding={handleUpgradeBuilding} resources={resources} population={population} unitList={activeUnits} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} masterResearchList={masterResearchList} completedResearch={completedResearch} onStartResearch={handleStartResearch} currentAge={currentAge} ageProgressionList={ageProgressionList} />
                         <ResourceAssignmentPanel isOpen={assignmentPanelState.isOpen} onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })} assignmentTarget={assignmentTarget || null} idleVillagerCount={idleVillagerCount} onAssignVillagers={handleAssignVillagers} onRecallVillagers={handleRecallVillagers} gatherInfo={gatherInfoRef.current} buildingList={buildingList} units={units} anchorRect={assignmentPanelState.anchorRect} />
                         <CivilizationPanel isOpen={civPanelState.isOpen} onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })} civilization={civilization} anchorRect={civPanelState.anchorRect} />
                         <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })} buildingList={buildingList} buildingCounts={buildingCounts} activeTasks={activeTasks} onOpenBuildingPanel={handleOpenBuildingPanel} anchorRect={allBuildingsPanel.anchorRect} />

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Target, Gem, FlaskConical, Wheat } from 'lucide-react';
+import { Target, Gem, FlaskConical, Wheat, TestTube } from 'lucide-react';
 
 export const FoodIcon: React.FC = () => (
    <Wheat className="w-full h-full text-[#f59e0b]" />
@@ -40,6 +40,10 @@ export const CrystalIcon: React.FC = () => (
 
 export const ManaIcon: React.FC = () => (
     <FlaskConical className="w-full h-full text-purple-400" />
+);
+
+export const BeakerIcon: React.FC = () => (
+    <TestTube className="w-full h-full text-green-400" />
 );
 
 

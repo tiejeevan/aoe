@@ -118,7 +118,12 @@ const BuildingEditor: React.FC<{
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
-                    <Switch id="edit-canTrainUnits" checked={editedBuilding.canTrainUnits} onCheckedChange={(c) => handleInputChange('canTrainUnits', c)} />
+                    <Switch
+                        id="edit-canTrainUnits"
+                        checked={editedBuilding.canTrainUnits}
+                        onCheckedChange={(c) => handleInputChange('canTrainUnits', c)}
+                        className="data-[state=checked]:bg-brand-green data-[state=unchecked]:bg-brand-red"
+                    />
                     <Label htmlFor="edit-canTrainUnits">Can Train Units?</Label>
                 </div>
                 <div>

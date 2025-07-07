@@ -93,26 +93,32 @@ const GamePage: React.FC = () => {
     };
     
     const fetchSavesAndConfigs = useCallback(async () => {
+        setIsAppLoading(true);
         try {
             const names = await getAllSaveNames();
             setAllSaves(names);
             
+            // --- Smart Seeding for Ages ---
             let allAgeConfigs = await getAllAgeConfigs();
-            if (allAgeConfigs.length === 0) {
-                allAgeConfigs = [];
-                for (const [index, pa] of INITIAL_AGES.entries()) {
+            const existingAgeIds = new Set(allAgeConfigs.map(a => a.id));
+            let hasSeededAges = false;
+            for (const [index, pa] of INITIAL_AGES.entries()) {
+                 if (!existingAgeIds.has(pa.name)) {
                      const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
                      await saveAgeConfig(newPredefinedAge);
-                     allAgeConfigs.push(newPredefinedAge);
-                }
+                     hasSeededAges = true;
+                 }
             }
+            if (hasSeededAges) allAgeConfigs = await getAllAgeConfigs(); // Refetch if seeded
             setMasterAgeList(allAgeConfigs);
 
+            // --- Smart Seeding for Buildings ---
             let allBuildingConfigs = await getAllBuildingConfigs();
-            if (allBuildingConfigs.length === 0) {
-                allBuildingConfigs = [];
-                const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || 'Nomadic Age';
-                for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
+            const existingBuildingIds = new Set(allBuildingConfigs.map(b => b.id));
+            let hasSeededBuildings = false;
+            for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
+                if (!existingBuildingIds.has(pb.id)) {
+                    const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
                     const newPredefinedBuilding: BuildingConfig = {
                         ...pb,
                         buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
@@ -125,15 +131,18 @@ const GamePage: React.FC = () => {
                         upgradesTo: pb.upgradesTo || []
                     };
                     await saveBuildingConfig(newPredefinedBuilding);
-                    allBuildingConfigs.push(newPredefinedBuilding);
+                    hasSeededBuildings = true;
                 }
             }
+            if (hasSeededBuildings) allBuildingConfigs = await getAllBuildingConfigs(); // Refetch if seeded
             setMasterBuildingList(allBuildingConfigs);
 
+            // --- Smart Seeding for Units ---
             let allUnitConfigs = await getAllUnitConfigs();
-            if (allUnitConfigs.length === 0) {
-                allUnitConfigs = [];
-                for (const [index, pu] of INITIAL_UNITS.entries()) {
+            const existingUnitIds = new Set(allUnitConfigs.map(u => u.id));
+            let hasSeededUnits = false;
+            for (const [index, pu] of INITIAL_UNITS.entries()) {
+                 if (!existingUnitIds.has(pu.id)) {
                      const newPredefinedUnit: UnitConfig = {
                         ...pu,
                         isActive: true,
@@ -141,19 +150,23 @@ const GamePage: React.FC = () => {
                         order: index,
                     };
                     await saveUnitConfig(newPredefinedUnit);
-                    allUnitConfigs.push(newPredefinedUnit);
-                }
+                    hasSeededUnits = true;
+                 }
             }
+            if(hasSeededUnits) allUnitConfigs = await getAllUnitConfigs(); // Refetch if seeded
             setMasterUnitList(allUnitConfigs);
             
             return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
         } catch (error) {
             console.error("Error during initial config fetch:", error);
-            // In case of a catastrophic DB failure, we can use fallbacks
-            setMasterAgeList(INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i})));
-            setMasterBuildingList(INITIAL_BUILDINGS.map((b, i) => ({...b, buildLimit: b.isUnique ? 1 : 0, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age', iconId: b.id, canTrainUnits: b.canTrainUnits, upgradesTo: b.upgradesTo || []})));
-            setMasterUnitList(INITIAL_UNITS.map((u, i) => ({...u, isActive: true, isPredefined: true, order: i})));
-            return { allAgeConfigs: [], allBuildingConfigs: [], allUnitConfigs: [] }; // Return empty to signal fallback
+            // Fallback to static data if IndexedDB fails catastrophically
+            const ages = INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
+            const buildings = INITIAL_BUILDINGS.map((b, i) => ({...b, buildLimit: b.isUnique ? 1 : 0, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age', iconId: b.id, canTrainUnits: b.canTrainUnits, upgradesTo: b.upgradesTo || []}));
+            const units = INITIAL_UNITS.map((u, i) => ({...u, isActive: true, isPredefined: true, order: i}));
+            setMasterAgeList(ages);
+            setMasterBuildingList(buildings);
+            setMasterUnitList(units);
+            return { allAgeConfigs: ages, allBuildingConfigs: buildings, allUnitConfigs: units };
         } finally {
             setIsAppLoading(false);
             setGameState(GameStatus.MENU);
@@ -380,10 +393,12 @@ const GamePage: React.FC = () => {
 
     const handleStartNewGame = async (saveName: string) => {
         if (allSaves.includes(saveName)) { addNotification(`A saga named "${saveName}" already exists.`); return; }
+        
+        const configs = await fetchSavesAndConfigs();
         setGameState(GameStatus.LOADING);
         setCurrentSaveName(saveName);
         
-        const localAgeProgressionList = masterAgeList.filter(a => a.isActive);
+        const localAgeProgressionList = configs.allAgeConfigs.filter(a => a.isActive);
 
         const civ = getPredefinedCivilization();
         setCivilization(civ);
@@ -391,7 +406,7 @@ const GamePage: React.FC = () => {
         const initialVillagers = getRandomNames('villager', 3).map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
         setUnits({ villagers: initialVillagers, military: [] });
         const tcPosition = { x: Math.floor(MAP_DIMENSIONS.width / 2), y: Math.floor(MAP_DIMENSIONS.height / 2) };
-        const tcInfo = masterBuildingList.find(b => b.id === 'townCenter')!;
+        const tcInfo = configs.allBuildingConfigs.find(b => b.id === 'townCenter')!;
         const initialTC = { id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
         setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
@@ -416,6 +431,7 @@ const GamePage: React.FC = () => {
     }, [activeTasks, resourceNodes, units.villagers, buildingList]);
 
     const handleResumeGame = async (saveName: string) => {
+        const configs = await fetchSavesAndConfigs();
         const savedState = await loadGameState(saveName) as FullGameState;
         if (savedState) {
             setGameState(GameStatus.LOADING);
@@ -431,12 +447,12 @@ const GamePage: React.FC = () => {
             const occupiedCells = new Set([...Object.values(savedState.buildings || {}).flat().map((b: any) => `${b.position.x},${b.position.y}`), ...constructionTasks.map(t => `${t.payload!.position!.x},${t.payload!.position!.y}`)]);
             let finalBuildings = { ...initialBuildingsState, ...(savedState.buildings || {}) };
             Object.keys(finalBuildings).forEach(bType => {
-                const info = masterBuildingList.find(b => b.id === bType);
+                const info = configs.allBuildingConfigs.find(b => b.id === bType);
                 if(info) finalBuildings[bType] = finalBuildings[bType].map(b => ({ ...b, currentHp: b.currentHp === undefined ? info.hp : b.currentHp }));
             });
             if (!finalBuildings.townCenter || finalBuildings.townCenter.length === 0) {
                 let tcPos = { x: 10, y: 5 }; while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
-                const tcInfo = masterBuildingList.find(b => b.id === 'townCenter')!;
+                const tcInfo = configs.allBuildingConfigs.find(b => b.id === 'townCenter')!;
                 finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPos, currentHp: tcInfo.hp }];
                 occupiedCells.add(`${tcPos.x},${tcPos.y}`);
             }
@@ -857,7 +873,7 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />

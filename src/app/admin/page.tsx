@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -273,26 +274,33 @@ const AdminPage: React.FC = () => {
     const fetchAges = useCallback(async () => {
         setIsAgesLoading(true);
         let allAges = await getAllAgeConfigs();
-        if (allAges.length === 0) {
-            allAges = [];
-            for (const [index, pa] of INITIAL_AGES.entries()) {
-                const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
-                await saveAgeConfig(newPredefinedAge);
-                allAges.push(newPredefinedAge);
-            }
+        const existingAgeIds = new Set(allAges.map(a => a.id));
+        let hasSeededAges = false;
+
+        for (const [index, pa] of INITIAL_AGES.entries()) {
+             if (!existingAgeIds.has(pa.name)) {
+                 const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
+                 await saveAgeConfig(newPredefinedAge);
+                 hasSeededAges = true;
+             }
         }
+        if (hasSeededAges) allAges = await getAllAgeConfigs();
         setAges(allAges);
         setIsAgesLoading(false);
+        return allAges;
     }, []);
     
     const fetchBuildings = useCallback(async () => {
         setIsBuildingsLoading(true);
         let allBuildings = await getAllBuildingConfigs();
-        if (allBuildings.length === 0) {
-            allBuildings = [];
-            const initialAges = await getAllAgeConfigs();
-            const defaultAge = initialAges.find(a => a.order === 0)?.name || 'Nomadic Age';
-            for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
+        const existingBuildingIds = new Set(allBuildings.map(b => b.id));
+        let hasSeededBuildings = false;
+
+        const allAges = await getAllAgeConfigs();
+        const defaultAge = allAges.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
+
+        for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
+            if (!existingBuildingIds.has(pb.id)) {
                 const newPredefinedBuilding: BuildingConfig = {
                     ...pb,
                     buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
@@ -303,9 +311,10 @@ const AdminPage: React.FC = () => {
                     iconId: pb.id,
                 };
                 await saveBuildingConfig(newPredefinedBuilding);
-                allBuildings.push(newPredefinedBuilding);
+                hasSeededBuildings = true;
             }
         }
+        if (hasSeededBuildings) allBuildings = await getAllBuildingConfigs();
         setBuildings(allBuildings);
         setIsBuildingsLoading(false);
     }, []);
@@ -313,9 +322,10 @@ const AdminPage: React.FC = () => {
     const fetchUnits = useCallback(async () => {
         setIsUnitsLoading(true);
         let allUnits = await getAllUnitConfigs();
-        if (allUnits.length === 0) {
-            allUnits = [];
-            for (const [index, pu] of INITIAL_UNITS.entries()) {
+        const existingUnitIds = new Set(allUnits.map(u => u.id));
+        let hasSeededUnits = false;
+        for (const [index, pu] of INITIAL_UNITS.entries()) {
+             if (!existingUnitIds.has(pu.id)) {
                  const newPredefinedUnit: UnitConfig = {
                     ...pu,
                     isActive: true,
@@ -323,9 +333,10 @@ const AdminPage: React.FC = () => {
                     order: index,
                 };
                 await saveUnitConfig(newPredefinedUnit);
-                allUnits.push(newPredefinedUnit);
-            }
+                hasSeededUnits = true;
+             }
         }
+        if(hasSeededUnits) allUnits = await getAllUnitConfigs();
         setUnits(allUnits);
         setIsUnitsLoading(false);
     }, []);

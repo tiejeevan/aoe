@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -601,6 +602,13 @@ const GamePage: React.FC = () => {
                     }
                     setInventory(prev => [...prev, ...newItems]);
                     logMessage += ` You received ${reward.amount}x ${itemInfo.name}!`;
+                }
+            } else if (reward.type === 'unit') {
+                if (reward.unitType === 'villager') {
+                    const newVillagerNames = getRandomNames('villager', reward.amount);
+                    const newVillagers: Villager[] = newVillagerNames.map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
+                    setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
+                    logMessage += ` You gained ${reward.amount} villager(s).`;
                 }
             }
         });

@@ -398,7 +398,7 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
         choices: [
             {
                 text: "Embrace their vision (Gain a villager)",
-                successEffects: { rewards: [{ type: 'resource', resource: 'villager', amount: 1 }], log: "Inspired by their words, a new family joins your settlement to seek their fortune." },
+                successEffects: { rewards: [{ type: 'unit', unitType: 'villager', amount: 1 }], log: "Inspired by their words, a new family joins your settlement to seek their fortune." },
             },
             {
                 text: "Urge caution (Gain 100 stone)",
@@ -1364,7 +1364,7 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
         choices: [
             {
                 text: "Welcome them (Gain 2 villagers)",
-                successEffects: { rewards: [{ type: 'resource', resource: 'villager', amount: 2 }], log: "You welcome the refugees. Their skills will be a great asset." }
+                successEffects: { rewards: [{ type: 'unit', unitType: 'villager', amount: 2 }], log: "You welcome the refugees. Their skills will be a great asset." }
             },
             {
                 text: "Turn them away",

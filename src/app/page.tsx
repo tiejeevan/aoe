@@ -2,10 +2,11 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice } from '@/types';
+import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, BuildingInfo, UINotification, FullGameState, Villager, MilitaryUnit, UnitInfo, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward } from '@/types';
 import { getPredefinedCivilization, getPredefinedGameEvent, getPredefinedAge } from '@/services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState } from '@/services/dbService';
 import { getRandomNames } from '@/services/nameService';
+import { GAME_ITEMS } from '@/data/itemContent';
 import GameUI from '@/components/GameUI';
 import StartScreen from '@/components/StartScreen';
 import LoadingScreen from '@/components/LoadingScreen';
@@ -66,6 +67,7 @@ const GamePage: React.FC = () => {
     const [playerAction, setPlayerAction] = useState<PlayerActionState>(null);
     const [activeTasks, setActiveTasks] = useState<GameTask[]>([]);
     const [resourceNodes, setResourceNodes] = useState<ResourceNode[]>([]);
+    const [inventory, setInventory] = useState<GameItem[]>([]);
     
     // Panel States
     const [buildPanelState, setBuildPanelState] = useState<{ isOpen: boolean; villagerId: string | null; anchorRect: DOMRect | null }>({ isOpen: false, villagerId: null, anchorRect: null });
@@ -105,10 +107,11 @@ const GamePage: React.FC = () => {
                 gameLog,
                 activeTasks,
                 resourceNodes,
+                inventory,
             };
             saveGameState(currentSaveName, fullState);
         }
-    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes]);
+    }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes, inventory]);
 
     const addNotification = useCallback((message: string) => {
         const id = `${Date.now()}-${Math.random()}`;
@@ -374,6 +377,7 @@ const GamePage: React.FC = () => {
         setCurrentEvent(null);
         setUnlimitedResources(false);
         setActiveTasks([]);
+        setInventory([]);
         addToLog(`${civ.name} has been founded!`, 'system');
         addToLog('Your story begins...', 'system');
         setGameState(GameStatus.PLAYING);
@@ -487,6 +491,7 @@ const GamePage: React.FC = () => {
             setCurrentAge(savedState.currentAge);
             setGameLog(savedState.gameLog);
             setActiveTasks(migratedTasks);
+            setInventory(savedState.inventory || []);
             
             setCurrentEvent(null);
             setActivityStatus('Welcome back to your saga.');
@@ -547,34 +552,44 @@ const GamePage: React.FC = () => {
             return;
         }
 
-        // 3. Calculate resource change
-        let amount = 0;
-        if (Array.isArray(effects.amount)) {
-            const [min, max] = effects.amount;
-            amount = Math.floor(Math.random() * (max - min + 1)) + min;
-        } else {
-            amount = effects.amount;
-        }
-        
-        // 4. Apply effects
-        if (effects.resource !== 'none' && amount !== 0) {
-            updateResources({ [effects.resource]: amount });
-        }
-        
-        // 5. Log and update UI
+        // 3. Construct detailed log message
         let logMessage = `Decision: "${choice.text}".`;
-
         if (choice.successChance !== undefined) {
             logMessage += ` The outcome was a ${isSuccess ? 'success' : 'failure'}.`;
         }
-
         logMessage += ` ${effects.log}`;
 
-        if (effects.resource !== 'none' && amount !== 0) {
-            logMessage += ` You ${amount > 0 ? 'gained' : 'lost'} ${Math.abs(amount)} ${effects.resource}.`;
-        }
+        // 4. Apply rewards and update log
+        effects.rewards.forEach((reward: Reward) => {
+            if (reward.type === 'resource') {
+                let amount = 0;
+                if (Array.isArray(reward.amount)) {
+                    const [min, max] = reward.amount;
+                    amount = Math.floor(Math.random() * (max - min + 1)) + min;
+                } else {
+                    amount = reward.amount;
+                }
+
+                if (amount !== 0) {
+                    updateResources({ [reward.resource]: amount });
+                    logMessage += ` You ${amount > 0 ? 'gained' : 'lost'} ${Math.abs(amount)} ${reward.resource}.`;
+                }
+            } else if (reward.type === 'item') {
+                const itemInfo = GAME_ITEMS[reward.itemId];
+                if (itemInfo) {
+                    const newItems: GameItem[] = [];
+                    for(let i = 0; i < reward.amount; i++) {
+                        // Create a unique ID for each item instance
+                        newItems.push({ ...itemInfo, id: `${reward.itemId}-${Date.now()}-${i}` });
+                    }
+                    setInventory(prev => [...prev, ...newItems]);
+                    logMessage += ` You received ${reward.amount}x ${itemInfo.name}!`;
+                }
+            }
+        });
         
-        addToLog(logMessage, effects.resource !== 'none' ? effects.resource : 'system');
+        // 5. Log and update UI
+        addToLog(logMessage, 'event');
         setActivityStatus(effects.log);
         setCurrentEvent(null);
         scheduleNextEvent();

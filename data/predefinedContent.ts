@@ -45,11 +45,11 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
             { 
                 text: "Buy 100 Wood", 
                 cost: { gold: 40 },
-                successEffects: { resource: 'wood', amount: 100, log: "The deal is made. The wood is added to your stockpile." } 
+                successEffects: { rewards: [{ type: 'resource', resource: 'wood', amount: 100 }], log: "The deal is made. The wood is added to your stockpile." } 
             },
             { 
                 text: "Politely decline", 
-                successEffects: { resource: 'none', amount: 0, log: "You send the merchant on their way." } 
+                successEffects: { rewards: [], log: "You send the merchant on their way." } 
             }
         ]
     },
@@ -60,21 +60,24 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
                 text: "Send an expedition (70% success)",
                 cost: { food: 50 },
                 successChance: 0.7,
-                successEffects: { resource: 'gold', amount: [150, 250], log: "Success! Your explorers return with a hoard of ancient gold." },
-                failureEffects: { resource: 'food', amount: 0, log: "The expedition fails, and some supplies are lost, but everyone returns safely." }
+                successEffects: { rewards: [{ type: 'resource', resource: 'gold', amount: [150, 250] }], log: "Success! Your explorers return with a hoard of ancient gold." },
+                failureEffects: { rewards: [], log: "The expedition fails, and some supplies are lost, but everyone returns safely." }
             },
             { 
                 text: "Leave it be",
-                successEffects: { resource: 'none', amount: 0, log: "You decide the potential treasure is not worth the risk." }
+                successEffects: { rewards: [], log: "You decide the potential treasure is not worth the risk." }
             }
         ]
     },
     {
-        message: "Unusually rich soil has been discovered nearby. A perfect place for a temporary farm.",
+        message: "A grateful farmer, whose family you protected, offers you a gift.",
         choices: [
-            { 
-                text: "Exploit the fertile ground", 
-                successEffects: { resource: 'food', amount: [200, 300], log: "Your workers quickly establish a farm and bring in a massive surplus of food." } 
+            {
+                text: "Accept their Hearty Meal",
+                successEffects: {
+                    rewards: [{ type: 'item', itemId: 'hearty_meal', amount: 1 }],
+                    log: "You accept the meal. The food is a great boon to your people."
+                }
             }
         ]
     },
@@ -84,12 +87,12 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
             { 
                 text: "Organize a bucket brigade (80% success)",
                 successChance: 0.8,
-                successEffects: { resource: 'wood', amount: -25, log: "The fire is quickly put out, with only minor losses." },
-                failureEffects: { resource: 'wood', amount: [-100, -150], log: "The fire rages out of control before being contained, destroying a large amount of wood." }
+                successEffects: { rewards: [{ type: 'resource', resource: 'wood', amount: -25 }], log: "The fire is quickly put out, with only minor losses." },
+                failureEffects: { rewards: [{ type: 'resource', resource: 'wood', amount: [-100, -150] }], log: "The fire rages out of control before being contained, destroying a large amount of wood." }
             },
             {
                 text: "Prioritize saving villagers",
-                successEffects: { resource: 'wood', amount: [-80, -120], log: "Everyone is safe, but the storage hut and its contents are mostly lost." }
+                successEffects: { rewards: [{ type: 'resource', resource: 'wood', amount: [-80, -120] }], log: "Everyone is safe, but the storage hut and its contents are mostly lost." }
             }
         ]
     },
@@ -98,11 +101,23 @@ export const PREDEFINED_EVENTS: GameEvent[] = [
         choices: [
             {
                 text: "Accept the gift of stone",
-                successEffects: { resource: 'stone', amount: 75, log: "You accept the gift, strengthening ties with your neighbors." }
+                successEffects: { rewards: [{ type: 'resource', resource: 'stone', amount: 75 }], log: "You accept the gift, strengthening ties with your neighbors." }
             },
              {
                 text: "Accept the gift of food",
-                successEffects: { resource: 'food', amount: 100, log: "You accept the gift, a welcome addition to your stores." }
+                successEffects: { rewards: [{ type: 'resource', resource: 'food', amount: 100 }], log: "You accept the gift, a welcome addition to your stores." }
+            }
+        ]
+    },
+    {
+        message: "A wandering mystic reads the stars and offers you a cryptic blessing.",
+        choices: [
+            {
+                text: "Heed their words",
+                successEffects: {
+                    rewards: [{ type: 'item', itemId: 'builders_charm', amount: 1 }],
+                    log: "The mystic nods and hands you a strange-looking compass. 'May it guide your hand,' they say."
+                }
             }
         ]
     }

@@ -82,18 +82,25 @@ export interface GameStatePayload {
 
 export type BuildingCosts = { [key in keyof Resources]?: number };
 
-export interface EventEffect {
-    resource: keyof Resources | 'none';
-    amount: number | [number, number]; // e.g., 50 or [50, 100]
-    log: string;
+export type ItemRarity = 'Common' | 'Epic' | 'Legendary' | 'Spiritual';
+
+export interface GameItem {
+    id: string;
+    name: string;
+    description: string;
+    rarity: ItemRarity;
 }
+
+export type Reward = 
+    { type: 'resource', resource: keyof Resources, amount: number | [number, number] } |
+    { type: 'item', itemId: string, amount: number };
 
 export interface GameEventChoice {
     text: string;
     cost?: BuildingCosts;
     successChance?: number; // 0-1, undefined means 100%
-    successEffects: EventEffect;
-    failureEffects?: EventEffect;
+    successEffects: { rewards: Reward[], log: string };
+    failureEffects?: { rewards: Reward[], log: string };
 }
 
 export interface GameEvent {
@@ -182,4 +189,5 @@ export interface FullGameState {
     gameLog: GameLogEntry[];
     activeTasks: GameTask[];
     resourceNodes: ResourceNode[];
+    inventory: GameItem[];
 }

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -293,71 +292,92 @@ const AdminPage: React.FC = () => {
     // --- Data Fetching and Seeding ---
     const fetchAges = useCallback(async () => {
         setIsAgesLoading(true);
-        let allAges = await getAllAgeConfigs();
-        const existingAgeIds = new Set(allAges.map(a => a.id));
-        let hasSeededAges = false;
+        let allItems = await getAllAgeConfigs();
+        const itemMap = new Map(allItems.map(i => [i.id, i]));
+        let needsUpdate = false;
 
-        for (const [index, pa] of INITIAL_AGES.entries()) {
-             if (!existingAgeIds.has(pa.name)) {
-                 const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
-                 await saveAgeConfig(newPredefinedAge);
-                 hasSeededAges = true;
-             }
+        for (const [index, pItem] of INITIAL_AGES.entries()) {
+            const existingItem = itemMap.get(pItem.name);
+            const newItem: AgeConfig = {
+                ...(existingItem || {}),
+                ...pItem,
+                id: pItem.name,
+                isPredefined: true,
+                isActive: existingItem?.isActive ?? true,
+                order: existingItem?.order ?? index,
+            };
+
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveAgeConfig(newItem);
+                needsUpdate = true;
+            }
         }
-        if (hasSeededAges) allAges = await getAllAgeConfigs();
-        setAges(allAges);
+
+        if (needsUpdate) allItems = await getAllAgeConfigs();
+        setAges(allItems);
         setIsAgesLoading(false);
-        return allAges;
+        return allItems;
     }, []);
     
     const fetchBuildings = useCallback(async (allAgeConfigs: AgeConfig[]) => {
         setIsBuildingsLoading(true);
-        let allBuildings = await getAllBuildingConfigs();
-        const existingBuildingIds = new Set(allBuildings.map(b => b.id));
-        let hasSeededBuildings = false;
+        let allItems = await getAllBuildingConfigs();
+        const itemMap = new Map(allItems.map(i => [i.id, i]));
+        let needsUpdate = false;
+        
+        const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
 
-        const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
+        for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
+            const existingItem = itemMap.get(pItem.id);
+            const newItem: BuildingConfig = {
+                ...(existingItem || {}),
+                ...pItem,
+                id: pItem.id,
+                isPredefined: true,
+                unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge),
+                isActive: existingItem?.isActive ?? true,
+                order: existingItem?.order ?? index,
+            };
 
-        for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
-            if (!existingBuildingIds.has(pb.id)) {
-                const newPredefinedBuilding: BuildingConfig = {
-                    ...pb,
-                    buildLimit: pb.isUnique ? 1 : (pb.buildLimit || 0),
-                    isActive: true,
-                    isPredefined: true,
-                    order: index,
-                    unlockedInAge: pb.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge, 
-                    iconId: pb.iconId || pb.id,
-                };
-                await saveBuildingConfig(newPredefinedBuilding);
-                hasSeededBuildings = true;
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveBuildingConfig(newItem);
+                needsUpdate = true;
             }
         }
-        if (hasSeededBuildings) allBuildings = await getAllBuildingConfigs();
-        setBuildings(allBuildings);
+
+        if (needsUpdate) allItems = await getAllBuildingConfigs();
+        setBuildings(allItems);
         setIsBuildingsLoading(false);
+        return allItems;
     }, []);
 
     const fetchUnits = useCallback(async () => {
         setIsUnitsLoading(true);
-        let allUnits = await getAllUnitConfigs();
-        const existingUnitIds = new Set(allUnits.map(u => u.id));
-        let hasSeededUnits = false;
-        for (const [index, pu] of INITIAL_UNITS.entries()) {
-             if (!existingUnitIds.has(pu.id)) {
-                 const newPredefinedUnit: UnitConfig = {
-                    ...pu,
-                    isActive: true,
-                    isPredefined: true,
-                    order: index,
-                };
-                await saveUnitConfig(newPredefinedUnit);
-                hasSeededUnits = true;
-             }
+        let allItems = await getAllUnitConfigs();
+        const itemMap = new Map(allItems.map(i => [i.id, i]));
+        let needsUpdate = false;
+
+        for (const [index, pItem] of INITIAL_UNITS.entries()) {
+            const existingItem = itemMap.get(pItem.id);
+            const newItem: UnitConfig = {
+                ...(existingItem || {}),
+                ...pItem,
+                id: pItem.id,
+                isPredefined: true,
+                isActive: existingItem?.isActive ?? true,
+                order: existingItem?.order ?? index,
+            };
+
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveUnitConfig(newItem);
+                needsUpdate = true;
+            }
         }
-        if(hasSeededUnits) allUnits = await getAllUnitConfigs();
-        setUnits(allUnits);
+
+        if (needsUpdate) allItems = await getAllUnitConfigs();
+        setUnits(allItems);
         setIsUnitsLoading(false);
+        return allItems;
     }, []);
 
 
@@ -657,3 +677,5 @@ const AdminPage: React.FC = () => {
 };
 
 export default AdminPage;
+
+    

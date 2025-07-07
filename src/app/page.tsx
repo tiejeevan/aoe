@@ -109,65 +109,57 @@ const GamePage: React.FC = () => {
             const names = await getAllSaveNames();
             setAllSaves(names);
             
-            // --- Smart Seeding for Ages ---
+            // --- Smart Seeding/Updating for Ages ---
             let allAgeConfigs = await getAllAgeConfigs();
-            const ageIds = new Set(allAgeConfigs.map(a => a.id));
-            if (INITIAL_AGES.some(pa => !ageIds.has(pa.name))) {
-                 for (const [index, pa] of INITIAL_AGES.entries()) {
-                    if (!ageIds.has(pa.name)) {
-                        const newPredefinedAge: AgeConfig = { id: pa.name, name: pa.name, description: pa.description, isActive: true, isPredefined: true, order: index };
-                        await saveAgeConfig(newPredefinedAge);
-                    }
+            let ageMap = new Map(allAgeConfigs.map(item => [item.id, item]));
+            let agesNeedUpdate = false;
+            for (const [index, pItem] of INITIAL_AGES.entries()) {
+                const existingItem = ageMap.get(pItem.name);
+                const newItem: AgeConfig = { ...(existingItem || {}), ...pItem, id: pItem.name, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+                if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                    await saveAgeConfig(newItem);
+                    agesNeedUpdate = true;
                 }
-                allAgeConfigs = await getAllAgeConfigs();
             }
+            if (agesNeedUpdate) allAgeConfigs = await getAllAgeConfigs();
             setMasterAgeList(allAgeConfigs);
 
-            // --- Smart Seeding for Buildings ---
+            // --- Smart Seeding/Updating for Buildings ---
             let allBuildingConfigs = await getAllBuildingConfigs();
-            const buildingIds = new Set(allBuildingConfigs.map(b => b.id));
-             if (INITIAL_BUILDINGS.some(pb => !buildingIds.has(pb.id))) {
-                 for (const [index, pb] of INITIAL_BUILDINGS.entries()) {
-                    if (!buildingIds.has(pb.id)) {
-                        const defaultAge = allAgeConfigs.find(a => a.order === 0)?.name || INITIAL_AGES[0].name;
-                        const newPredefinedBuilding: BuildingConfig = {
-                            ...pb,
-                            isActive: true,
-                            isPredefined: true,
-                            order: index,
-                            unlockedInAge: pb.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge,
-                        };
-                        await saveBuildingConfig(newPredefinedBuilding);
-                    }
+            let buildingMap = new Map(allBuildingConfigs.map(item => [item.id, item]));
+            let buildingsNeedUpdate = false;
+            const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
+            for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
+                const existingItem = buildingMap.get(pItem.id);
+                const newItem: BuildingConfig = { ...(existingItem || {}), ...pItem, id: pItem.id, isPredefined: true, unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge), isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+                if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                    await saveBuildingConfig(newItem);
+                    buildingsNeedUpdate = true;
                 }
-                allBuildingConfigs = await getAllBuildingConfigs();
             }
+            if (buildingsNeedUpdate) allBuildingConfigs = await getAllBuildingConfigs();
             setMasterBuildingList(allBuildingConfigs);
 
-            // --- Smart Seeding for Units ---
+            // --- Smart Seeding/Updating for Units ---
             let allUnitConfigs = await getAllUnitConfigs();
-            const unitIds = new Set(allUnitConfigs.map(u => u.id));
-            if (INITIAL_UNITS.some(pu => !unitIds.has(pu.id))) {
-                for (const [index, pu] of INITIAL_UNITS.entries()) {
-                     if (!unitIds.has(pu.id)) {
-                        const newPredefinedUnit: UnitConfig = {
-                            ...pu,
-                            isActive: true,
-                            isPredefined: true,
-                            order: index,
-                        };
-                        await saveUnitConfig(newPredefinedUnit);
-                    }
+            let unitMap = new Map(allUnitConfigs.map(item => [item.id, item]));
+            let unitsNeedUpdate = false;
+            for (const [index, pItem] of INITIAL_UNITS.entries()) {
+                const existingItem = unitMap.get(pItem.id);
+                const newItem: UnitConfig = { ...(existingItem || {}), ...pItem, id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+                if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                    await saveUnitConfig(newItem);
+                    unitsNeedUpdate = true;
                 }
-                allUnitConfigs = await getAllUnitConfigs();
             }
+            if (unitsNeedUpdate) allUnitConfigs = await getAllUnitConfigs();
             setMasterUnitList(allUnitConfigs);
             
             return { allAgeConfigs, allBuildingConfigs, allUnitConfigs };
         } catch (error) {
             console.error("Error during initial config fetch:", error);
             const ages = INITIAL_AGES.map((a, i) => ({...a, id: a.name, isActive: true, isPredefined: true, order: i}));
-            const buildings = INITIAL_BUILDINGS.map((b, i) => ({...b, buildLimit: b.isUnique ? 1 : 0, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age', iconId: b.id, canTrainUnits: b.canTrainUnits, upgradesTo: b.upgradesTo || []}));
+            const buildings = INITIAL_BUILDINGS.map((b, i) => ({...b, isActive: true, isPredefined: true, order: i, unlockedInAge: 'Nomadic Age' } as BuildingConfig));
             const units = INITIAL_UNITS.map((u, i) => ({...u, isActive: true, isPredefined: true, order: i}));
             setMasterAgeList(ages);
             setMasterBuildingList(buildings);
@@ -904,7 +896,7 @@ const GamePage: React.FC = () => {
                             onOpenAssignmentPanel={(nodeId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: nodeId, targetType: 'resource', anchorRect: rect }); }}
                             onOpenConstructionPanel={(constructionId, rect) => { closeAllPanels(); setAssignmentPanelState({ isOpen: true, targetId: constructionId, targetType: 'construction', anchorRect: rect }); }}
                             gatherInfo={GATHER_INFO} currentEvent={currentEvent} onEventChoice={handleEventChoice} inventory={inventory}
-                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: null }); }}
+                            onOpenInventoryPanel={(rect) => { closeAllPanels(); setInventoryPanelState({ isOpen: true, anchorRect: rect }); }}
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />
@@ -933,3 +925,5 @@ const GamePage: React.FC = () => {
 };
 
 export default GamePage;
+
+    

@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '../../../types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '../../../services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target } from 'lucide-react';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target, WandSparkles, LoaderCircle } from 'lucide-react';
 import { Switch } from '../../components/ui/switch';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Checkbox } from '../../components/ui/checkbox';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/src/components/ui/popover';
+import { Alert, AlertDescription, AlertTitle } from '@/src/components/ui/alert';
 
 
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
@@ -25,6 +26,7 @@ import { INITIAL_RESOURCES } from '../../../data/resourceInfo';
 import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '../../../components/icons/iconRegistry';
 import { INITIAL_AGES } from '../../../data/ageInfo';
 import { INITIAL_RESEARCH } from '../../../data/researchInfo';
+import { generateResourcesAction } from '../actions';
 
 const BuildingEditor: React.FC<{
     building: BuildingConfig;
@@ -745,6 +747,11 @@ const AdminPage: React.FC = () => {
     const [research, setResearch] = useState<ResearchConfig[]>([]);
     const [isResearchLoading, setIsResearchLoading] = useState(true);
     const [editingResearch, setEditingResearch] = useState<ResearchConfig | null>(null);
+    
+    // DGE State
+    const [dgeResourceCount, setDgeResourceCount] = useState<number>(3);
+    const [isGenerating, setIsGenerating] = useState<boolean>(false);
+    const [dgeError, setDgeError] = useState<string | null>(null);
 
 
     // --- Data Fetching and Seeding ---
@@ -944,6 +951,46 @@ const AdminPage: React.FC = () => {
         if (research.some(r => r.prerequisites?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
         if (window.confirm(`Are you sure you want to delete "${researchItem.name}"?`)) { await deleteResearchConfig(researchItem.id); await fetchResearch(ages); }
     };
+    
+    // --- DGE Handlers ---
+    const handleGenerateResources = async () => {
+        setIsGenerating(true);
+        setDgeError(null);
+        try {
+            const existingResourceNames = resources.map(r => r.name);
+            const response = await generateResourcesAction({ count: dgeResourceCount, existingResourceNames });
+
+            if (response.error) throw new Error(response.error);
+            if (!response.data) throw new Error("No data returned from AI.");
+
+            const highestOrder = resources.length > 0 ? Math.max(...resources.map(r => r.order)) : 0;
+            
+            for (const [index, genRes] of response.data.resources.entries()) {
+                const newResource: ResourceConfig = {
+                    id: `custom-${genRes.name.toLowerCase().replace(/\s+/g, '_')}-${Date.now()}`,
+                    name: genRes.name,
+                    description: genRes.description,
+                    iconId: genRes.iconId,
+                    rarity: genRes.rarity,
+                    isActive: true,
+                    isPredefined: false,
+                    order: highestOrder + index + 1,
+                    initialAmount: 0,
+                    baseGatherRate: 5, // Default value
+                    spawnInSafeZone: false,
+                    isTradable: true,
+                    decaysOverTime: false
+                };
+                await saveResourceConfig(newResource);
+            }
+            await fetchResources(); // Refresh the list
+        } catch (error) {
+            setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during generation.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
 
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light p-4 sm:p-8">
@@ -954,12 +1001,13 @@ const AdminPage: React.FC = () => {
                 </div>
 
                 <Tabs defaultValue="ages" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5 bg-stone-dark/80 border border-stone-light/20">
+                    <TabsList className="grid w-full grid-cols-6 bg-stone-dark/80 border border-stone-light/20">
                         <TabsTrigger value="ages">Ages</TabsTrigger>
                         <TabsTrigger value="buildings">Buildings</TabsTrigger>
                         <TabsTrigger value="units">Units</TabsTrigger>
                         <TabsTrigger value="resources">Resources</TabsTrigger>
                         <TabsTrigger value="research">Research</TabsTrigger>
+                        <TabsTrigger value="dge">Data Generator</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="ages" className="mt-6">
@@ -1120,6 +1168,51 @@ const AdminPage: React.FC = () => {
                                         </div>
                                     </>
                                 )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    
+                     <TabsContent value="dge" className="mt-6">
+                        <Card className="bg-stone-dark/30 border-stone-light/30">
+                            <CardHeader>
+                                <CardTitle className="text-brand-gold flex items-center gap-2"><WandSparkles /> Data Generator Engine (DGE)</CardTitle>
+                                <CardDescription className="text-parchment-dark">Use AI to procedurally generate new content for your game.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Card className="bg-stone-dark/20 border-stone-light/20">
+                                    <CardHeader>
+                                        <CardTitle className="text-base font-serif">Resource Generator</CardTitle>
+                                        <CardDescription className="text-parchment-dark">Generate new, creative economic resources.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="flex items-end gap-4">
+                                        <div className="flex-grow">
+                                            <Label htmlFor="dge-resource-count">Number of Resources to Generate</Label>
+                                            <Input 
+                                                id="dge-resource-count" 
+                                                type="number" 
+                                                value={dgeResourceCount} 
+                                                onChange={(e) => setDgeResourceCount(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))} 
+                                                min="1" 
+                                                max="10" 
+                                                className="sci-fi-input" 
+                                                disabled={isGenerating}
+                                            />
+                                        </div>
+                                        <Button onClick={handleGenerateResources} disabled={isGenerating}>
+                                            {isGenerating ? <LoaderCircle className="mr-2 animate-spin"/> : <WandSparkles className="mr-2" />}
+                                            {isGenerating ? 'Generating...' : 'Generate'}
+                                        </Button>
+                                    </CardContent>
+                                     {dgeError && (
+                                        <CardContent>
+                                            <Alert variant="destructive">
+                                                <AlertTitle>Generation Failed</AlertTitle>
+                                                <AlertDescription>{dgeError}</AlertDescription>
+                                            </Alert>
+                                        </CardContent>
+                                    )}
+                                </Card>
+                                 <p className="text-center text-parchment-dark mt-8">More generators for Ages, Buildings, and Research are coming soon!</p>
                             </CardContent>
                         </Card>
                     </TabsContent>

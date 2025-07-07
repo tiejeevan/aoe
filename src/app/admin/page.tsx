@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -292,6 +293,23 @@ const AdminPage: React.FC = () => {
     };
 
     // --- Buildings Handlers ---
+     const handleShowAddBuilding = () => {
+        const newBuilding: BuildingConfig = {
+            id: `custom-bld-${Date.now()}`,
+            name: 'New Building',
+            description: 'A new custom building.',
+            cost: { wood: 50, food: 0, gold: 0, stone: 0 },
+            isUnique: false,
+            buildTime: 30,
+            hp: 1000,
+            unlockedInAge: ages[0]?.name || 'Nomadic Age',
+            iconId: 'default',
+            isActive: true,
+            isPredefined: false,
+            order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0,
+        };
+        setEditingBuilding(newBuilding);
+    };
     const handleDeleteBuilding = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this custom building?')) {
             await deleteBuildingConfig(id); await fetchBuildings();
@@ -307,6 +325,27 @@ const AdminPage: React.FC = () => {
     };
 
     // --- Units Handlers ---
+     const handleShowAddUnit = () => {
+        if (buildings.length === 0) {
+            alert("Please create a building first before adding a unit.");
+            return;
+        }
+        const newUnit: UnitConfig = {
+            id: `custom-unit-${Date.now()}`,
+            name: 'New Unit',
+            description: 'A new custom unit.',
+            cost: { food: 50, gold: 10, wood: 0, stone: 0 },
+            requiredBuilding: buildings.find(b => b.id === 'barracks')?.id || buildings[0].id,
+            trainTime: 20,
+            hp: 50,
+            attack: 5,
+            iconId: 'default',
+            isActive: true,
+            isPredefined: false,
+            order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0,
+        };
+        setEditingUnit(newUnit);
+    };
      const handleSaveUnit = async (unitToSave: UnitConfig) => {
         await saveUnitConfig(unitToSave);
         setEditingUnit(null);
@@ -389,36 +428,38 @@ const AdminPage: React.FC = () => {
                     
                     <TabsContent value="buildings" className="mt-6">
                         <Card className="bg-stone-dark/30 border-stone-light/30">
-                            <CardHeader>
-                                <CardTitle className="text-brand-gold">Manage Buildings</CardTitle>
-                                <CardDescription className="text-parchment-dark">Edit, activate, or delete buildings.</CardDescription>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-brand-gold">Manage Buildings</CardTitle>
+                                    <CardDescription className="text-parchment-dark">Create, edit, activate, or delete buildings.</CardDescription>
+                                </div>
+                                <Button onClick={handleShowAddBuilding} disabled={!!editingBuilding}><PlusCircle className="mr-2"/> Add Building</Button>
                             </CardHeader>
                             <CardContent>
                                 {isBuildingsLoading ? <p>Loading buildings...</p> : (
-                                    <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
-                                        {buildings.map((b) => (
-                                            <div key={b.id}>
-                                                {editingBuilding?.id === b.id ? (
-                                                    <BuildingEditor building={editingBuilding} onSave={handleSaveBuilding} onCancel={() => setEditingBuilding(null)} allAges={ages} />
-                                                ) : (
-                                                    <div className="sci-fi-unit-row flex items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-3 flex-grow">
-                                                            <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(buildingIconMap[b.iconId] || buildingIconMap.default)}</div>
-                                                            <div className="flex-grow">
-                                                                <h3 className="font-bold flex items-center gap-2">{b.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{b.name}</h3>
-                                                                <p className="text-xs text-parchment-dark">Unlocks in: {b.unlockedInAge}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex items-center space-x-2"><Label htmlFor={`active-bld-${b.id}`} className="text-xs">Active</Label><Switch id={`active-bld-${b.id}`} checked={b.isActive} onCheckedChange={() => handleToggleBuildingActive(b)} /></div>
-                                                            <Button variant="ghost" size="icon" onClick={() => setEditingBuilding(b)} className="text-parchment-dark/70 hover:text-brand-blue"><Edit className="w-4 h-4"/></Button>
-                                                            {!b.isPredefined && <button onClick={() => handleDeleteBuilding(b.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                    <>
+                                        {editingBuilding && (
+                                            <BuildingEditor building={editingBuilding} onSave={handleSaveBuilding} onCancel={() => setEditingBuilding(null)} allAges={ages} />
+                                        )}
+                                        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
+                                            {buildings.map((b) => (
+                                                <div key={b.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-3 flex-grow">
+                                                        <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(buildingIconMap[b.iconId] || buildingIconMap.default)}</div>
+                                                        <div className="flex-grow">
+                                                            <h3 className="font-bold flex items-center gap-2">{b.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{b.name}</h3>
+                                                            <p className="text-xs text-parchment-dark">Unlocks in: {b.unlockedInAge}</p>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center space-x-2"><Label htmlFor={`active-bld-${b.id}`} className="text-xs">Active</Label><Switch id={`active-bld-${b.id}`} checked={b.isActive} onCheckedChange={() => handleToggleBuildingActive(b)} /></div>
+                                                        <Button variant="ghost" size="icon" onClick={() => setEditingBuilding(b)} className="text-parchment-dark/70 hover:text-brand-blue" disabled={!!editingBuilding}><Edit className="w-4 h-4"/></Button>
+                                                        {!b.isPredefined && <button onClick={() => handleDeleteBuilding(b.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
                                 )}
                             </CardContent>
                         </Card>
@@ -426,36 +467,38 @@ const AdminPage: React.FC = () => {
 
                     <TabsContent value="units" className="mt-6">
                          <Card className="bg-stone-dark/30 border-stone-light/30">
-                            <CardHeader>
-                                <CardTitle className="text-brand-gold">Manage Units</CardTitle>
-                                <CardDescription className="text-parchment-dark">Create, edit, and manage all military units in the game.</CardDescription>
+                           <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-brand-gold">Manage Units</CardTitle>
+                                    <CardDescription className="text-parchment-dark">Create, edit, and manage all military units in the game.</CardDescription>
+                                </div>
+                                <Button onClick={handleShowAddUnit} disabled={!!editingUnit}><PlusCircle className="mr-2"/> Add Unit</Button>
                             </CardHeader>
                             <CardContent>
                                 {isUnitsLoading ? <p>Loading units...</p> : (
-                                     <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
-                                        {units.map((u) => (
-                                            <div key={u.id}>
-                                                {editingUnit?.id === u.id ? (
-                                                    <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} allBuildings={buildings} />
-                                                ) : (
-                                                    <div className="sci-fi-unit-row flex items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-3 flex-grow">
-                                                            <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(unitIconMap[u.iconId] || unitIconMap.default)}</div>
-                                                            <div className="flex-grow">
-                                                                <h3 className="font-bold flex items-center gap-2">{u.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{u.name}</h3>
-                                                                <p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack} | Requires: {buildings.find(b=>b.id===u.requiredBuilding)?.name || 'N/A'}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex items-center space-x-2"><Label htmlFor={`active-unit-${u.id}`} className="text-xs">Active</Label><Switch id={`active-unit-${u.id}`} checked={u.isActive} onCheckedChange={() => handleToggleUnitActive(u)} /></div>
-                                                            <Button variant="ghost" size="icon" onClick={() => setEditingUnit(u)} className="text-parchment-dark/70 hover:text-brand-blue"><Edit className="w-4 h-4"/></Button>
-                                                            {!u.isPredefined && <button onClick={() => handleDeleteUnit(u.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                    <>
+                                        {editingUnit && (
+                                            <UnitEditor unit={editingUnit} onSave={handleSaveUnit} onCancel={() => setEditingUnit(null)} allBuildings={buildings} />
+                                        )}
+                                        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 mt-4">
+                                            {units.map((u) => (
+                                                <div key={u.id} className="sci-fi-unit-row flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-3 flex-grow">
+                                                        <div className="flex-shrink-0 w-10 h-10 p-1.5 bg-black/20 rounded-md">{React.createElement(unitIconMap[u.iconId] || unitIconMap.default)}</div>
+                                                        <div className="flex-grow">
+                                                            <h3 className="font-bold flex items-center gap-2">{u.isPredefined && <Lock className="w-3 h-3 text-brand-gold" />}{u.name}</h3>
+                                                            <p className="text-xs text-parchment-dark">HP: {u.hp} | ATK: {u.attack} | Requires: {buildings.find(b=>b.id===u.requiredBuilding)?.name || 'N/A'}</p>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center space-x-2"><Label htmlFor={`active-unit-${u.id}`} className="text-xs">Active</Label><Switch id={`active-unit-${u.id}`} checked={u.isActive} onCheckedChange={() => handleToggleUnitActive(u)} /></div>
+                                                        <Button variant="ghost" size="icon" onClick={() => setEditingUnit(u)} className="text-parchment-dark/70 hover:text-brand-blue" disabled={!!editingUnit}><Edit className="w-4 h-4"/></Button>
+                                                        {!u.isPredefined && <button onClick={() => handleDeleteUnit(u.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
                                 )}
                             </CardContent>
                         </Card>

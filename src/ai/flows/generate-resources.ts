@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI agent that generates new, creative game resources.
@@ -7,9 +8,9 @@
  * - GenerateResourcesOutput - The return type for the generateResources function.
  */
 
-import { ai } from '@/src/ai/genkit';
+import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { resourceIconMap } from '../../../components/icons/iconRegistry';
+import { resourceIconMap } from '@/components/icons/iconRegistry';
 
 const GenerateResourcesInputSchema = z.object({
   count: z.number().min(1).max(10).describe('The number of resources to generate.'),

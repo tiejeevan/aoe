@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import type { AgeConfig, BuildingConfig, BuildingCosts, Resources, UnitConfig, UnitClassification, AttackBonus, ArmorValue, ArmorClassification, DamageType, TerrainModifier, UnitUpgradePath, ResourceConfig, ResourceRarity, ResearchConfig, ResearchEffect, ResearchEffectType, ResearchOperation, ResearchTargetType } from '@/types';
 import { saveAgeConfig, getAllAgeConfigs, deleteAgeConfig, saveBuildingConfig, getAllBuildingConfigs, deleteBuildingConfig, saveUnitConfig, getAllUnitConfigs, deleteUnitConfig, saveResourceConfig, getAllResourceConfigs, deleteResourceConfig, saveResearchConfig, getAllResearchConfigs, deleteResearchConfig } from '@/services/dbService';
-import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target, WandSparkles, LoaderCircle } from 'lucide-react';
+import { Trash2, Lock, ArrowUp, ArrowDown, Edit, Save, XCircle, PlusCircle, Building, Swords, Shield, Coins, TestTube, ChevronsUp, Star, Wrench, Calendar, Beaker, Info, Copy, RefreshCw, Footprints, Sprout, FlaskConical, Target, WandSparkles } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -17,8 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import TechnologyGeneratorCard from './components/TechnologyGeneratorCard';
+import DataGenerator from '@/app/admin/components/DataGenerator';
 
 
 import { INITIAL_BUILDINGS } from '@/data/buildingInfo';
@@ -27,7 +26,6 @@ import { INITIAL_RESOURCES } from '@/data/resourceInfo';
 import { buildingIconMap, unitIconMap, resourceIconMap, researchIconMap } from '@/components/icons/iconRegistry';
 import { INITIAL_AGES } from '@/data/ageInfo';
 import { INITIAL_RESEARCH } from '@/data/researchInfo';
-import { generateResourcesAction, generateAgesAction, generateTechnologyAction } from '@/src/app/actions';
 
 const BuildingEditor: React.FC<{
     building: BuildingConfig;
@@ -748,105 +746,122 @@ const AdminPage: React.FC = () => {
     const [research, setResearch] = useState<ResearchConfig[]>([]);
     const [isResearchLoading, setIsResearchLoading] = useState(true);
     const [editingResearch, setEditingResearch] = useState<ResearchConfig | null>(null);
-    
-    // DGE State
-    const [dgeResourceCount, setDgeResourceCount] = useState<number>(3);
-    const [dgeAgeCount, setDgeAgeCount] = useState<number>(4);
-    const [dgeTechTheme, setDgeTechTheme] = useState<string>('Economic');
-    const [isGenerating, setIsGenerating] = useState<boolean>(false);
-    const [dgeError, setDgeError] = useState<string | null>(null);
-
 
     // --- Data Fetching and Seeding ---
-    const fetchAges = useCallback(async () => {
+    const loadAllData = useCallback(async () => {
+        // This function will now be responsible for fetching all data types
+        // to ensure dependent operations have the data they need.
         setIsAgesLoading(true);
-        let allItems = await getAllAgeConfigs();
-        const itemMap = new Map(allItems.map(i => [i.id, i]));
-        let needsUpdate = false;
-
-        for (const [index, pItem] of INITIAL_AGES.entries()) {
-            const existingItem = itemMap.get(pItem.name);
-            const newItem: AgeConfig = { ...(existingItem || {}), ...pItem, id: pItem.name, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, };
-            if (!existingItem) { await saveAgeConfig(newItem); needsUpdate = true; }
-        }
-
-        if (needsUpdate) allItems = await getAllAgeConfigs();
-        setAges(allItems);
-        setIsAgesLoading(false);
-        return allItems;
-    }, []);
-    
-    const fetchBuildings = useCallback(async (allAgeConfigs: AgeConfig[]) => {
         setIsBuildingsLoading(true);
-        let allItems = await getAllBuildingConfigs();
-        const itemMap = new Map(allItems.map(i => [i.id, i]));
-        let needsUpdate = false;
-        
-        const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
-
-        for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
-            const existingItem = itemMap.get(pItem.id);
-            const newItem: BuildingConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge), isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`, populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity, generatesResource: existingItem?.generatesResource ?? pItem.generatesResource, generationRate: existingItem?.generationRate ?? pItem.generationRate, maintenanceCost: existingItem?.maintenanceCost ?? pItem.maintenanceCost, };
-            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) { await saveBuildingConfig(newItem); needsUpdate = true; }
-        }
-
-        if (needsUpdate) allItems = await getAllBuildingConfigs();
-        setBuildings(allItems);
-        setIsBuildingsLoading(false);
-        return allItems;
-    }, []);
-
-    const fetchUnits = useCallback(async () => {
         setIsUnitsLoading(true);
-        let allItems = await getAllUnitConfigs();
-        const itemMap = new Map(allItems.map(i => [i.id, i]));
-        let needsUpdate = false;
-        
-        const initialUnitsWithIds = INITIAL_UNITS.map(u => ({ ...u, id: u.name.toLowerCase().replace(/\s/g, '') }));
-
-        for (const [index, pItem] of initialUnitsWithIds.entries()) {
-            const existingItem = itemMap.get(pItem.id);
-            const newItem: UnitConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`, populationCost: existingItem?.populationCost ?? pItem.populationCost, attack: existingItem?.attack ?? pItem.attack, };
-            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) { await saveUnitConfig(newItem); needsUpdate = true; }
-        }
-
-        if (needsUpdate) allItems = await getAllUnitConfigs();
-        setUnits(allItems);
-        setIsUnitsLoading(false);
-        return allItems;
-    }, []);
-    
-    const fetchResources = useCallback(async () => {
         setIsResourcesLoading(true);
-        let allItems = await getAllResourceConfigs();
-        const itemMap = new Map(allItems.map(i => [i.id, i]));
-        let needsUpdate = false;
-
-        for (const [index, pItem] of INITIAL_RESOURCES.entries()) {
-            const existingItem = itemMap.get(pItem.id);
-            const newItem: ResourceConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
-            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) { await saveResourceConfig(newItem); needsUpdate = true; }
-        }
-
-        if (needsUpdate) allItems = await getAllResourceConfigs();
-        setResources(allItems);
-        setIsResourcesLoading(false);
-        return allItems;
-    }, []);
-
-    const fetchResearch = useCallback(async (allAgeConfigs: AgeConfig[]) => {
         setIsResearchLoading(true);
-        let allItems = await getAllResearchConfigs();
-        const itemMap = new Map(allItems.map(i => [i.id, i]));
-        let needsUpdate = false;
+
+        // Fetch all configs in parallel
+        const [
+            allAgeConfigs,
+            allBuildingConfigs,
+            allUnitConfigs,
+            allResourceConfigs,
+            allResearchConfigs
+        ] = await Promise.all([
+            getAllAgeConfigs(),
+            getAllBuildingConfigs(),
+            getAllUnitConfigs(),
+            getAllResourceConfigs(),
+            getAllResearchConfigs()
+        ]);
+
+        // Seed initial data if necessary
         const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
 
-        for (const [index, pItem] of INITIAL_RESEARCH.entries()) {
-            const id = pItem.name.toLowerCase().replace(/\s/g, '_');
-            const existingItem = itemMap.get(id);
-            const newItem: ResearchConfig = {
+        const ageMap = new Map(allAgeConfigs.map(item => [item.id, item]));
+        let agesNeedUpdate = false;
+        for (const [index, pItem] of INITIAL_AGES.entries()) {
+            const existingItem = ageMap.get(pItem.name);
+            const newItem: AgeConfig = { ...(existingItem || {}), ...pItem, id: pItem.name, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveAgeConfig(newItem);
+                agesNeedUpdate = true;
+            }
+        }
+        if (agesNeedUpdate) setAges(await getAllAgeConfigs());
+        else setAges(allAgeConfigs);
+        setIsAgesLoading(false);
+
+        const buildingMap = new Map(allBuildingConfigs.map(item => [item.id, item]));
+        let buildingsNeedUpdate = false;
+        for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
+            const existingItem = buildingMap.get(pItem.id);
+             const newItem: BuildingConfig = {
                 ...(pItem as any),
                 ...(existingItem || {}),
+                id: pItem.id,
+                isPredefined: true,
+                unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge),
+                isActive: existingItem?.isActive ?? true,
+                order: existingItem?.order ?? index,
+                treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`,
+                populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity,
+                generatesResource: existingItem?.generatesResource ?? pItem.generatesResource,
+                generationRate: existingItem?.generationRate ?? pItem.generationRate,
+                maintenanceCost: existingItem?.maintenanceCost ?? pItem.maintenanceCost,
+            };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveBuildingConfig(newItem);
+                buildingsNeedUpdate = true;
+            }
+        }
+        if (buildingsNeedUpdate) setBuildings(await getAllBuildingConfigs());
+        else setBuildings(allBuildingConfigs);
+        setIsBuildingsLoading(false);
+
+        const unitMap = new Map(allUnitConfigs.map(item => [item.id, item]));
+        let unitsNeedUpdate = false;
+        const initialUnitsWithIds = INITIAL_UNITS.map(u => ({ ...u, id: u.name.toLowerCase().replace(/\s/g, '') }));
+        for (const [index, pItem] of initialUnitsWithIds.entries()) {
+            const existingItem = unitMap.get(pItem.id);
+            const newItem: UnitConfig = {
+                ...(pItem as any),
+                ...(existingItem || {}),
+                id: pItem.id,
+                isPredefined: true,
+                isActive: existingItem?.isActive ?? true,
+                order: existingItem?.order ?? index,
+                treeId: existingItem?.treeId || `utree-predefined-${pItem.id}`,
+                populationCost: existingItem?.populationCost ?? pItem.populationCost,
+            };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveUnitConfig(newItem);
+                unitsNeedUpdate = true;
+            }
+        }
+        if (unitsNeedUpdate) setUnits(await getAllUnitConfigs());
+        else setUnits(allUnitConfigs);
+        setIsUnitsLoading(false);
+        
+        const resourceMap = new Map(allResourceConfigs.map(item => [item.id, item]));
+        let resourcesNeedUpdate = false;
+        for (const [index, pItem] of INITIAL_RESOURCES.entries()) {
+            const existingItem = resourceMap.get(pItem.id);
+            const newItem: ResourceConfig = { ...(pItem as any), ...(existingItem || {}), id: pItem.id, isPredefined: true, isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index };
+            if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
+                await saveResourceConfig(newItem);
+                resourcesNeedUpdate = true;
+            }
+        }
+        if (resourcesNeedUpdate) setResources(await getAllResourceConfigs());
+        else setResources(allResourceConfigs);
+        setIsResourcesLoading(false);
+
+        const researchMap = new Map(allResearchConfigs.map(item => [item.id, item]));
+        let researchNeedUpdate = false;
+        for (const [index, pItem] of INITIAL_RESEARCH.entries()) {
+            const id = pItem.name.toLowerCase().replace(/\s/g, '_');
+            const existingItem = researchMap.get(id);
+            const newItem: ResearchConfig = {
+                ...(pItem as any),
+                ...(existingItem || {} as ResearchConfig),
                 id,
                 isPredefined: true,
                 isActive: existingItem?.isActive ?? true,
@@ -856,39 +871,32 @@ const AdminPage: React.FC = () => {
             };
             if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
                 await saveResearchConfig(newItem);
-                needsUpdate = true;
+                researchNeedUpdate = true;
             }
         }
-
-        if (needsUpdate) allItems = await getAllResearchConfigs();
-        setResearch(allItems);
+        if (researchNeedUpdate) setResearch(await getAllResearchConfigs());
+        else setResearch(allResearchConfigs);
         setIsResearchLoading(false);
-        return allItems;
+
     }, []);
 
     useEffect(() => {
-        const loadAll = async () => {
-            const allResources = await fetchResources();
-            const allAges = await fetchAges();
-            await fetchBuildings(allAges);
-            await fetchUnits();
-            await fetchResearch(allAges);
-        };
-        loadAll();
-    }, [fetchAges, fetchBuildings, fetchUnits, fetchResources, fetchResearch]);
+        loadAllData();
+    }, [loadAllData]);
+    
 
     // --- Ages Handlers ---
     const handleAddAge = async () => {
         if (!newAgeName.trim() || !newAgeDescription.trim()) return alert('Age name and description cannot be empty.');
         const newAge: AgeConfig = { id: `custom-${Date.now()}`, name: newAgeName, description: newAgeDescription, isActive: true, isPredefined: false, order: ages.length > 0 ? Math.max(...ages.map(a => a.order)) + 1 : 0, };
         await saveAgeConfig(newAge);
-        setNewAgeName(''); setNewAgeDescription(''); await fetchAges();
+        setNewAgeName(''); setNewAgeDescription(''); await loadAllData();
     };
     const handleDeleteAge = async (ageToDelete: AgeConfig) => {
         if (buildings.some(b => b.unlockedInAge === ageToDelete.name)) { alert(`Cannot delete "${ageToDelete.name}". One or more buildings are assigned to this age.`); return; }
-        if (window.confirm(`Are you sure you want to delete the custom age "${ageToDelete.name}"?`)) { await deleteAgeConfig(ageToDelete.id); await fetchAges(); }
+        if (window.confirm(`Are you sure you want to delete the custom age "${ageToDelete.name}"?`)) { await deleteAgeConfig(ageToDelete.id); await loadAllData(); }
     };
-    const handleToggleAgeActive = async (age: AgeConfig) => { await saveAgeConfig({ ...age, isActive: !age.isActive }); await fetchAges(); };
+    const handleToggleAgeActive = async (age: AgeConfig) => { await saveAgeConfig({ ...age, isActive: !age.isActive }); await loadAllData(); };
     const handleMoveAge = async (index: number, direction: 'up' | 'down') => {
         const newIndex = direction === 'up' ? index - 1 : index + 1;
         if (newIndex < 0 || newIndex >= ages.length) return;
@@ -897,7 +905,7 @@ const AdminPage: React.FC = () => {
         reorderedAges.splice(newIndex, 0, movedItem);
         const updatedAges = reorderedAges.map((age, i) => ({ ...age, order: i }));
         for (const age of updatedAges) { await saveAgeConfig(age); }
-        await fetchAges();
+        await loadAllData();
     };
 
     // --- Buildings Handlers ---
@@ -908,10 +916,10 @@ const AdminPage: React.FC = () => {
     const handleDeleteBuilding = async (buildingToDelete: BuildingConfig) => {
         if (buildings.some(b => b.upgradesTo?.some(u => u.id === buildingToDelete.id))) { alert(`Cannot delete "${buildingToDelete.name}". It is an upgrade target.`); return; }
         if (units.some(u => u.requiredBuilding === buildingToDelete.id || u.requiredBuildingIds?.includes(buildingToDelete.id))) { alert(`Cannot delete "${buildingToDelete.name}". A unit requires it.`); return; }
-        if (window.confirm(`Are you sure you want to delete "${buildingToDelete.name}"?`)) { await deleteBuildingConfig(buildingToDelete.id); await fetchBuildings(ages); }
+        if (window.confirm(`Are you sure you want to delete "${buildingToDelete.name}"?`)) { await deleteBuildingConfig(buildingToDelete.id); await loadAllData(); }
     };
-    const handleToggleBuildingActive = async (building: BuildingConfig) => { await saveBuildingConfig({ ...building, isActive: !building.isActive }); await fetchBuildings(ages); };
-    const handleSaveBuilding = async (buildingToSave: BuildingConfig) => { await saveBuildingConfig(buildingToSave); setEditingBuilding(null); await fetchBuildings(ages); };
+    const handleToggleBuildingActive = async (building: BuildingConfig) => { await saveBuildingConfig({ ...building, isActive: !building.isActive }); await loadAllData(); };
+    const handleSaveBuilding = async (buildingToSave: BuildingConfig) => { await saveBuildingConfig(buildingToSave); setEditingBuilding(null); await loadAllData(); };
 
     // --- Units Handlers ---
      const handleShowAddUnit = () => {
@@ -920,12 +928,12 @@ const AdminPage: React.FC = () => {
         const newUnit: UnitConfig = { id: `custom-unit-${Date.now()}`, treeId: `utree-${Date.now()}`, name: 'New Unit', description: 'A new custom unit.', cost: {}, trainTime: 20, hp: 50, attack: 5, iconId: 'default', isActive: true, isPredefined: false, order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0, requiredBuilding: trainingBuildings[0].id, populationCost: 1, attackRate: 1, movementSpeed: 1, unitType: 'infantry', upgradesTo: [], armorValues: [], attackBonuses: [], damageTypes: [], terrainModifiers: [], requiredBuildingIds: [], prerequisites: [] };
         setEditingUnit(newUnit);
     };
-     const handleSaveUnit = async (unitToSave: UnitConfig) => { await saveUnitConfig(unitToSave); setEditingUnit(null); await fetchUnits(); };
+     const handleSaveUnit = async (unitToSave: UnitConfig) => { await saveUnitConfig(unitToSave); setEditingUnit(null); await loadAllData(); };
     const handleDeleteUnit = async (id: string) => {
         if (units.some(u => u.upgradesTo?.some(path => path.targetUnitId === id))) { alert(`Cannot delete. This unit is an upgrade target.`); return; }
-        if (window.confirm('Are you sure you want to delete this custom unit?')) { await deleteUnitConfig(id); await fetchUnits(); }
+        if (window.confirm('Are you sure you want to delete this custom unit?')) { await deleteUnitConfig(id); await loadAllData(); }
     };
-     const handleToggleUnitActive = async (unit: UnitConfig) => { await saveUnitConfig({ ...unit, isActive: !unit.isActive }); await fetchUnits(); };
+     const handleToggleUnitActive = async (unit: UnitConfig) => { await saveUnitConfig({ ...unit, isActive: !unit.isActive }); await loadAllData(); };
      
     // --- Resources Handlers ---
     const handleShowAddResource = () => {
@@ -933,12 +941,12 @@ const AdminPage: React.FC = () => {
         const newResource: ResourceConfig = { id: newId, name: 'New Resource', description: '', iconId: 'default', isActive: true, isPredefined: false, order: resources.length + 1, rarity: 'Common', initialAmount: 0, baseGatherRate: 5, spawnInSafeZone: false, isTradable: false, decaysOverTime: false };
         setEditingResource(newResource);
     };
-    const handleSaveResource = async (resourceToSave: ResourceConfig) => { await saveResourceConfig(resourceToSave); setEditingResource(null); await fetchResources(); };
-    const handleToggleResourceActive = async (resource: ResourceConfig) => { await saveResourceConfig({ ...resource, isActive: !resource.isActive }); await fetchResources(); };
+    const handleSaveResource = async (resourceToSave: ResourceConfig) => { await saveResourceConfig(resourceToSave); setEditingResource(null); await loadAllData(); };
+    const handleToggleResourceActive = async (resource: ResourceConfig) => { await saveResourceConfig({ ...resource, isActive: !resource.isActive }); await loadAllData(); };
     const handleDeleteResource = async (resourceToDelete: ResourceConfig) => {
         const isUsedInCost = [...buildings, ...units, ...research].some(item => item.cost[resourceToDelete.id] > 0);
         if (isUsedInCost) { alert(`Cannot delete "${resourceToDelete.name}". It is used as a cost for a building, unit, or research item.`); return; }
-        if (window.confirm(`Are you sure you want to delete "${resourceToDelete.name}"?`)) { await deleteResourceConfig(resourceToDelete.id); await fetchResources(); }
+        if (window.confirm(`Are you sure you want to delete "${resourceToDelete.name}"?`)) { await deleteResourceConfig(resourceToDelete.id); await loadAllData(); }
     };
 
     // --- Research Handlers ---
@@ -948,124 +956,13 @@ const AdminPage: React.FC = () => {
         const newResearch: ResearchConfig = { id: `custom-tech-${Date.now()}`, name: 'New Technology', description: '', iconId: 'beaker', cost: {}, researchTime: 60, requiredBuildingId: researchBuildings[0].id, ageRequirement: ages[0]?.name || '', effects: [], prerequisites: [], isActive: true, isPredefined: false, order: research.length > 0 ? Math.max(...research.map(r => r.order)) + 1 : 0, treeId: 'custom_tree', treeName: 'Custom' };
         setEditingResearch(newResearch);
     };
-    const handleSaveResearch = async (researchToSave: ResearchConfig) => { await saveResearchConfig(researchToSave); setEditingResearch(null); await fetchResearch(ages); };
-    const handleToggleResearchActive = async (researchItem: ResearchConfig) => { await saveResearchConfig({ ...researchItem, isActive: !researchItem.isActive }); await fetchResearch(ages); };
+    const handleSaveResearch = async (researchToSave: ResearchConfig) => { await saveResearchConfig(researchToSave); setEditingResearch(null); await loadAllData(); };
+    const handleToggleResearchActive = async (researchItem: ResearchConfig) => { await saveResearchConfig({ ...researchItem, isActive: !researchItem.isActive }); await loadAllData(); };
     const handleDeleteResearch = async (researchItem: ResearchConfig) => {
         if (research.some(r => r.prerequisites?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
-        if (window.confirm(`Are you sure you want to delete "${researchItem.name}"?`)) { await deleteResearchConfig(researchItem.id); await fetchResearch(ages); }
+        if (window.confirm(`Are you sure you want to delete "${researchItem.name}"?`)) { await deleteResearchConfig(researchItem.id); await loadAllData(); }
     };
     
-    // --- DGE Handlers ---
-    const handleGenerateResources = async () => {
-        setIsGenerating(true);
-        setDgeError(null);
-        try {
-            const existingResourceNames = resources.map(r => r.name);
-            const response = await generateResourcesAction({ count: dgeResourceCount, existingResourceNames });
-
-            if (response.error) throw new Error(response.error);
-            if (!response.data) throw new Error("No data returned from AI.");
-
-            const highestOrder = resources.length > 0 ? Math.max(...resources.map(r => r.order)) : 0;
-            
-            for (const [index, genRes] of response.data.resources.entries()) {
-                const newResource: ResourceConfig = {
-                    id: `custom-${genRes.name.toLowerCase().replace(/\s+/g, '_')}-${Date.now()}`,
-                    name: genRes.name,
-                    description: genRes.description,
-                    iconId: genRes.iconId,
-                    rarity: genRes.rarity,
-                    isActive: true,
-                    isPredefined: false,
-                    order: highestOrder + index + 1,
-                    initialAmount: 0,
-                    baseGatherRate: 5, // Default value
-                    spawnInSafeZone: false,
-                    isTradable: true,
-                    decaysOverTime: false
-                };
-                await saveResourceConfig(newResource);
-            }
-            await fetchResources(); // Refresh the list
-        } catch (error) {
-            setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during generation.');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-    
-    const handleGenerateAges = async () => {
-        setIsGenerating(true);
-        setDgeError(null);
-        try {
-            const existingAgeNames = ages.map(a => a.name);
-            const response = await generateAgesAction({ count: dgeAgeCount, existingAgeNames });
-
-            if (response.error) throw new Error(response.error);
-            if (!response.data) throw new Error("No age data returned from AI.");
-
-            const highestOrder = ages.length > 0 ? Math.max(...ages.map(a => a.order)) : 0;
-            
-            for (const [index, genAge] of response.data.ages.entries()) {
-                const newAge: AgeConfig = {
-                    id: `custom-age-${genAge.name.toLowerCase().replace(/\s+/g, '_')}-${Date.now()}`,
-                    name: genAge.name,
-                    description: genAge.description,
-                    isActive: true,
-                    isPredefined: false,
-                    order: highestOrder + index + 1,
-                };
-                await saveAgeConfig(newAge);
-            }
-            await fetchAges();
-        } catch (error) {
-            setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during age generation.');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-    
-    const handleGenerateTechnology = async () => {
-        setIsGenerating(true);
-        setDgeError(null);
-        try {
-            const existingTechNames = research.map(r => r.name);
-            const response = await generateTechnologyAction({ theme: dgeTechTheme, existingTechNames });
-
-            if (response.error) throw new Error(response.error);
-            if (!response.data) throw new Error("No technology data returned from AI.");
-
-            const genTech = response.data;
-            const highestOrder = research.length > 0 ? Math.max(...research.map(r => r.order)) : 0;
-            
-            const newTech: ResearchConfig = {
-                id: `custom-tech-${genTech.name.toLowerCase().replace(/\s+/g, '_')}-${Date.now()}`,
-                name: genTech.name,
-                description: genTech.description,
-                iconId: genTech.iconId,
-                cost: genTech.cost,
-                researchTime: genTech.researchTime,
-                prerequisites: [],
-                effects: [],
-                treeId: genTech.treeId.toLowerCase().replace(/\s+/g, '_'),
-                treeName: genTech.treeName,
-                requiredBuildingId: 'blacksmith', // Default, can be changed by admin
-                ageRequirement: ages[0]?.name || 'Nomadic Age', // Default
-                isActive: true,
-                isPredefined: false,
-                order: highestOrder + 1,
-            };
-
-            await saveResearchConfig(newTech);
-            await fetchResearch(ages); // Refresh the list
-        } catch (error) {
-            setDgeError(error instanceof Error ? error.message : 'An unknown error occurred during technology generation.');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
-
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light p-4 sm:p-8">
             <div className="w-full max-w-7xl mx-auto">
@@ -1247,81 +1144,12 @@ const AdminPage: React.FC = () => {
                     </TabsContent>
                     
                      <TabsContent value="dge" className="mt-6">
-                        <Card className="bg-stone-dark/30 border-stone-light/30">
-                            <CardHeader>
-                                <CardTitle className="text-brand-gold flex items-center gap-2"><WandSparkles /> Data Generator Engine (DGE)</CardTitle>
-                                <CardDescription className="text-parchment-dark">Use AI to procedurally generate new content for your game.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <Card className="bg-stone-dark/20 border-stone-light/20">
-                                    <CardHeader>
-                                        <CardTitle className="text-base font-serif">Resource Generator</CardTitle>
-                                        <CardDescription className="text-parchment-dark">Generate new, creative economic resources.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="flex items-end gap-4">
-                                        <div className="flex-grow">
-                                            <Label htmlFor="dge-resource-count">Number to Generate</Label>
-                                            <Input 
-                                                id="dge-resource-count" 
-                                                type="number" 
-                                                value={dgeResourceCount} 
-                                                onChange={(e) => setDgeResourceCount(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))} 
-                                                min="1" 
-                                                max="10" 
-                                                className="sci-fi-input" 
-                                                disabled={isGenerating}
-                                            />
-                                        </div>
-                                        <Button onClick={handleGenerateResources} disabled={isGenerating}>
-                                            {isGenerating ? <LoaderCircle className="mr-2 animate-spin"/> : <WandSparkles className="mr-2" />}
-                                            {isGenerating ? 'Generating...' : 'Generate'}
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                                <Card className="bg-stone-dark/20 border-stone-light/20">
-                                    <CardHeader>
-                                        <CardTitle className="text-base font-serif">Age Generator</CardTitle>
-                                        <CardDescription className="text-parchment-dark">Generate a sequence of thematic ages for your game.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="flex items-end gap-4">
-                                        <div className="flex-grow">
-                                            <Label htmlFor="dge-age-count">Number to Generate</Label>
-                                            <Input 
-                                                id="dge-age-count" 
-                                                type="number" 
-                                                value={dgeAgeCount} 
-                                                onChange={(e) => setDgeAgeCount(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))} 
-                                                min="1" 
-                                                max="10" 
-                                                className="sci-fi-input" 
-                                                disabled={isGenerating}
-                                            />
-                                        </div>
-                                        <Button onClick={handleGenerateAges} disabled={isGenerating}>
-                                            {isGenerating ? <LoaderCircle className="mr-2 animate-spin"/> : <WandSparkles className="mr-2" />}
-                                            {isGenerating ? 'Generating...' : 'Generate'}
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                                
-                                <TechnologyGeneratorCard
-                                  theme={dgeTechTheme}
-                                  onThemeChange={setDgeTechTheme}
-                                  onGenerate={handleGenerateTechnology}
-                                  isGenerating={isGenerating}
-                                />
-                                
-                                {dgeError && (
-                                    <div className="md:col-span-2 lg:col-span-3">
-                                        <Alert variant="destructive">
-                                            <AlertTitle>Generation Failed</AlertTitle>
-                                            <AlertDescription>{dgeError}</AlertDescription>
-                                        </Alert>
-                                    </div>
-                                )}
-                                 <p className="text-center text-parchment-dark md:col-span-2 lg:col-span-3 mt-4">More generators for Buildings and full Research Trees are coming soon!</p>
-                            </CardContent>
-                        </Card>
+                        <DataGenerator
+                           resources={resources}
+                           ages={ages}
+                           research={research}
+                           onGenerationComplete={loadAllData}
+                        />
                     </TabsContent>
 
                 </Tabs>

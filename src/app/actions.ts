@@ -1,9 +1,10 @@
+
 'use server';
 
-import { suggestPalette, type SuggestPaletteInput } from '@/src/ai/flows/suggest-palette';
-import { generateResources, type GenerateResourcesInput, type GenerateResourcesOutput } from '@/src/ai/flows/generate-resources';
-import { generateAges, type GenerateAgesInput, type GenerateAgesOutput } from '@/src/ai/flows/generate-ages';
-import { generateTechnology, type GenerateTechnologyInput, type GeneratedTechnologyOutput } from '@/src/ai/flows/generate-technology';
+import { suggestPalette, type SuggestPaletteInput } from '@/ai/flows/suggest-palette';
+import { generateResources, type GenerateResourcesInput, type GenerateResourcesOutput } from '@/ai/flows/generate-resources';
+import { generateAges, type GenerateAgesInput, type GenerateAgesOutput } from '@/ai/flows/generate-ages';
+import { generateTechnology, type GenerateTechnologyInput, type GeneratedTechnologyOutput } from '@/ai/flows/generate-technology';
 
 
 export async function suggestPaletteAction(input: SuggestPaletteInput) {

@@ -68,7 +68,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                 </div>
             ) : (
                 <>
-                    <p className="text-lg text-parchment-dark mb-8 font-sans">Your Civilization's Saga, Written by AI</p>
+                    <p className="text-lg text-parchment-dark mb-8 font-sans">Your Civilization's Saga</p>
                     <div className="flex flex-col gap-4 items-center">
                         {savedGames.length > 0 && (
                             <div className="w-full max-w-sm">

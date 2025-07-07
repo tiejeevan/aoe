@@ -12,6 +12,7 @@
 
 
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -218,6 +219,7 @@ export interface ResourceNode {
   type: ResourceNodeType;
   position: { x: number; y: number; };
   amount: number;
+  richness?: number; // e.g., 1 for normal, 2 for rich
 }
 
 export type TaskType = 'gather' | 'build' | 'train_villager' | 'train_military' | 'advance_age' | 'upgrade_building';

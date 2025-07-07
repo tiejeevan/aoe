@@ -1,6 +1,7 @@
 
 
 
+
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
@@ -139,7 +140,21 @@ const GamePage: React.FC = () => {
             const defaultAge = allAgeConfigs[0]?.name || INITIAL_AGES[0].name;
             for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
                 const existingItem = buildingMap.get(pItem.id);
-                const newItem: BuildingConfig = { ...(existingItem || {}), ...pItem, id: pItem.id, isPredefined: true, unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge), isActive: existingItem?.isActive ?? true, order: existingItem?.order ?? index, populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity };
+                 const newItem: BuildingConfig = {
+                    ...(pItem as any), // Base predefined values
+                    ...(existingItem || {}), // Overwrite with saved values
+                    id: pItem.id,
+                    isPredefined: true,
+                    unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge),
+                    isActive: existingItem?.isActive ?? true,
+                    order: existingItem?.order ?? index,
+                    treeId: existingItem?.treeId || `tree-predefined-${pItem.id}`,
+                    populationCapacity: existingItem?.populationCapacity ?? pItem.populationCapacity,
+                    generatesResource: existingItem?.generatesResource ?? pItem.generatesResource,
+                    generationRate: existingItem?.generationRate ?? pItem.generationRate,
+                    maintenanceCost: existingItem?.maintenanceCost ?? pItem.maintenanceCost,
+                };
+
                 if (JSON.stringify(existingItem) !== JSON.stringify(newItem)) {
                     await saveBuildingConfig(newItem);
                     buildingsNeedUpdate = true;
@@ -384,7 +399,7 @@ const GamePage: React.FC = () => {
                     if (!node || villagerCount === 0) {
                         completedTasks.push(task); return null; 
                     }
-                    const baseRatePerSecond = GATHER_INFO[node.type].rate;
+                    const baseRatePerSecond = GATHER_INFO[node.type].rate * (node.richness || 1);
                     let civBonusMultiplier = 1;
                     if (civilization?.bonus.toLowerCase().includes(node.type.toLowerCase())) {
                         const match = civilization.bonus.match(/(\d+)%/);
@@ -407,8 +422,8 @@ const GamePage: React.FC = () => {
                         const taskId = `gather-${node.id}`;
                         const task = tasksInProgress.find(t => t.id === taskId);
                         if(task) {
-                            addToLog(`${task.payload?.villagerIds?.length || 0} villager(s) depleted a ${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
-                            setActivityStatus(`A ${node.type} source has been fully depleted.`);
+                            addToLog(`${task.payload?.villagerIds?.length || 0} villager(s) depleted a ${node.richness ? 'rich ' : ''}${node.type} source, gaining ${Math.floor(node.amount)} ${node.type}.`, node.type);
+                            setActivityStatus(`A ${node.richness ? 'rich ' : ''}${node.type} source has been fully depleted.`);
                             completedTasks.push(task);
                         }
                         return null;
@@ -439,17 +454,56 @@ const GamePage: React.FC = () => {
         eventTimerRef.current = setTimeout(() => handleNewEvent(), (10 + Math.random() * 15) * 1000);
     }, [handleNewEvent]);
 
-    const generateResourceNodes = (existingPositions: Set<string>): ResourceNode[] => {
+    const generateResourceNodes = (startPosition: { x: number, y: number }): ResourceNode[] => {
         const nodes: ResourceNode[] = [];
-        const types: ResourceNodeType[] = ['food', 'wood', 'gold', 'stone'];
-        const numNodes = 20 + Math.floor(Math.random() * 10);
-        for (let i = 0; i < numNodes; i++) {
-            let pos: {x: number, y: number};
-            do { pos = { x: Math.floor(Math.random() * MAP_DIMENSIONS.width), y: Math.floor(Math.random() * MAP_DIMENSIONS.height) } } while (existingPositions.has(`${pos.x},${pos.y}`));
-            existingPositions.add(`${pos.x},${pos.y}`);
-            const type = types[Math.floor(Math.random() * types.length)];
-            nodes.push({ id: `${Date.now()}-node-${i}`, type, position: pos, amount: Math.floor(Math.random() * 2001) + 500 });
+        const occupiedCells = new Set<string>([`${startPosition.x},${startPosition.y}`]);
+        const SAFE_RADIUS = 5;
+        const RICH_CHANCE = 0.15; // 15% chance for a node to be rich
+
+        const placeNode = (type: ResourceNodeType, amount: number, richness?: number, preferContested = false) => {
+            let placed = false;
+            for (let i = 0; i < 100; i++) { // Max 100 attempts to place a node
+                const angle = Math.random() * 2 * Math.PI;
+                const distance = preferContested 
+                    ? SAFE_RADIUS + Math.random() * (Math.min(MAP_DIMENSIONS.width, MAP_DIMENSIONS.height) / 2 - SAFE_RADIUS)
+                    : Math.random() * SAFE_RADIUS;
+                
+                const x = Math.round(startPosition.x + Math.cos(angle) * distance);
+                const y = Math.round(startPosition.y + Math.sin(angle) * distance);
+
+                if (x >= 0 && x < MAP_DIMENSIONS.width && y >= 0 && y < MAP_DIMENSIONS.height && !occupiedCells.has(`${x},${y}`)) {
+                    nodes.push({ id: `${Date.now()}-node-${nodes.length}`, type, position: {x,y}, amount, richness });
+                    occupiedCells.add(`${x},${y}`);
+                    placed = true;
+                    break;
+                }
+            }
+            return placed;
         }
+
+        // Guaranteed starting resources
+        placeNode('food', 1000);
+        placeNode('food', 1000);
+        placeNode('wood', 1500);
+        placeNode('wood', 1500);
+        placeNode('wood', 1500);
+        placeNode('stone', 800);
+
+        // Contested resources
+        placeNode('gold', 1200, Math.random() < RICH_CHANCE ? 2 : 1, true);
+        placeNode('gold', 1200, Math.random() < RICH_CHANCE ? 2 : 1, true);
+        placeNode('stone', 1000, Math.random() < RICH_CHANCE ? 2 : 1, true);
+        placeNode('stone', 1000, Math.random() < RICH_CHANCE ? 2 : 1, true);
+
+        // Random filler nodes
+        const totalNodes = 18 + Math.floor(Math.random() * 5);
+        const types: ResourceNodeType[] = ['food', 'wood', 'gold', 'stone'];
+        while (nodes.length < totalNodes) {
+            const type = types[Math.floor(Math.random() * types.length)];
+            const isContested = type === 'gold' || type === 'stone' || Math.random() > 0.5;
+            placeNode(type, 800 + Math.random() * 1000, Math.random() < RICH_CHANCE ? 1.5 : 1, isContested);
+        }
+
         return nodes;
     };
 
@@ -471,7 +525,7 @@ const GamePage: React.FC = () => {
         const tcInfo = configs.allBuildingConfigs.find(b => b.id === 'townCenter')!;
         const initialTC = { id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp };
         setBuildings({...initialBuildingsState, townCenter: [initialTC]});
-        setResourceNodes(generateResourceNodes(new Set([`${tcPosition.x},${tcPosition.y}`])));
+        setResourceNodes(generateResourceNodes(tcPosition));
         setCurrentAge(localAgeProgressionList[0]?.name || INITIAL_AGES[0].name);
         setGameLog([]); setCurrentEvent(null); setUnlimitedResources(false); setActiveTasks([]); setInventory([]); setActiveBuffs({ resourceBoost: [] });
         addToLog(`${civ.name} has been founded!`, 'system');
@@ -512,15 +566,18 @@ const GamePage: React.FC = () => {
                 const info = configs.allBuildingConfigs.find(b => b.id === bType);
                 if(info) finalBuildings[bType] = finalBuildings[bType].map(b => ({ ...b, currentHp: b.currentHp === undefined ? info.hp : b.currentHp }));
             });
+            let tcPosition = { x: 10, y: 5 };
             if (!finalBuildings.townCenter || finalBuildings.townCenter.length === 0) {
-                let tcPos = { x: 10, y: 5 }; while (occupiedCells.has(`${tcPos.x},${tcPos.y}`)) { tcPos.x++; }
+                 while (occupiedCells.has(`${tcPosition.x},${tcPosition.y}`)) { tcPosition.x++; }
                 const tcInfo = configs.allBuildingConfigs.find(b => b.id === 'townCenter')!;
-                finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPos, currentHp: tcInfo.hp }];
-                occupiedCells.add(`${tcPos.x},${tcPos.y}`);
+                finalBuildings.townCenter = [{ id: `${Date.now()}-tc`, name: getRandomNames('building', 1)[0], position: tcPosition, currentHp: tcInfo.hp }];
+                occupiedCells.add(`${tcPosition.x},${tcPosition.y}`);
+            } else {
+                tcPosition = finalBuildings.townCenter[0].position;
             }
             setBuildings(finalBuildings);
 
-            setResourceNodes((savedState.resourceNodes || []).length === 0 ? generateResourceNodes(occupiedCells) : (savedState.resourceNodes || []));
+            setResourceNodes((savedState.resourceNodes || []).length === 0 ? generateResourceNodes(tcPosition) : (savedState.resourceNodes || []));
             setCurrentAge(savedState.currentAge); setGameLog(savedState.gameLog); setActiveTasks(migratedTasks);
             setInventory(savedState.inventory || []); setActiveBuffs(savedState.activeBuffs || { resourceBoost: [] });
             setCurrentEvent(null); setActivityStatus('Welcome back to your saga.');
@@ -657,7 +714,7 @@ const GamePage: React.FC = () => {
         const buildingInstance = buildings[type as string].find(b => b.id === id);
         if (!buildingInfo || !buildingInstance) return;
         
-        const capacityWithoutThisBuilding = population.capacity - (buildingInfo.populationCapacity || 0);
+        const capacityWithoutThisBuilding = populationCapacity - (buildingInfo.populationCapacity || 0);
         if ((buildingInfo.populationCapacity || 0) > 0 && population.current > capacityWithoutThisBuilding) {
              addNotification("Cannot demolish this building, your people would be homeless."); return;
         }
@@ -1005,4 +1062,5 @@ const GamePage: React.FC = () => {
 };
 
 export default GamePage;
+
 

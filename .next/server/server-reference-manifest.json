@@ -1,38 +1,5 @@
 {
-  "node": {
-    "1e9c324bd16218aa569a89d4b53c8443c8fd04e4": {
-      "workers": {
-        "app/admin/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2Fhome%2Fuser%2Fstudio%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%22generateResourcesAction%22%2C%22generateTechnologyAction%22%2C%22suggestPaletteAction%22%2C%22generateAgesAction%22%5D%5D%5D&__client_imported__=true!"
-      },
-      "layer": {
-        "app/admin/page": "action-browser"
-      }
-    },
-    "7543afb14720fbbd02f3c2fc0b85af03f713fc2c": {
-      "workers": {
-        "app/admin/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2Fhome%2Fuser%2Fstudio%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%22generateResourcesAction%22%2C%22generateTechnologyAction%22%2C%22suggestPaletteAction%22%2C%22generateAgesAction%22%5D%5D%5D&__client_imported__=true!"
-      },
-      "layer": {
-        "app/admin/page": "action-browser"
-      }
-    },
-    "bc0138bbf50446cf4d08af48732eecab42d7d3b3": {
-      "workers": {
-        "app/admin/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2Fhome%2Fuser%2Fstudio%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%22generateResourcesAction%22%2C%22generateTechnologyAction%22%2C%22suggestPaletteAction%22%2C%22generateAgesAction%22%5D%5D%5D&__client_imported__=true!"
-      },
-      "layer": {
-        "app/admin/page": "action-browser"
-      }
-    },
-    "e2e4829febe391947251afd7b51804e2b5914418": {
-      "workers": {
-        "app/admin/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2Fhome%2Fuser%2Fstudio%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%22generateResourcesAction%22%2C%22generateTechnologyAction%22%2C%22suggestPaletteAction%22%2C%22generateAgesAction%22%5D%5D%5D&__client_imported__=true!"
-      },
-      "layer": {
-        "app/admin/page": "action-browser"
-      }
-    }
-  },
+  "node": {},
   "edge": {},
-  "encryptionKey": "O17F7a9Bac83LObu0TeBV2/pK/YWLx5fRnLUZ8X0Sr0="
+  "encryptionKey": "zy6msCG0bJFwbX+mPBe0Jg5wwy1xwYmULD5+OZn1FaI="
 }

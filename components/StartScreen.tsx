@@ -111,9 +111,14 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                                : "Lead your people from a nomadic tribe to a thriving empire. Every game is a unique story."
                            }
                         </p>
-                         <button onClick={() => router.push('/admin')} className="text-xs text-brand-blue hover:underline">
-                            admin?
-                        </button>
+                         <div className="flex justify-center items-center gap-4">
+                            <button onClick={() => router.push('/admin')} className="text-xs text-brand-blue hover:underline">
+                                admin?
+                            </button>
+                            <button onClick={() => router.push('/proxy-map')} className="text-xs text-brand-gold hover:underline">
+                                Proxy Map
+                            </button>
+                         </div>
                     </div>
                 </>
             )}

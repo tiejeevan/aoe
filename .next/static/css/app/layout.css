@@ -843,6 +843,9 @@ video {
 .h-\[1px\] {
   height: 1px;
 }
+.h-\[60vh\] {
+  height: 60vh;
+}
 .h-\[90vh\] {
   height: 90vh;
 }
@@ -1019,6 +1022,9 @@ video {
 }
 .max-w-2xl {
   max-width: 42rem;
+}
+.max-w-4xl {
+  max-width: 56rem;
 }
 .max-w-6xl {
   max-width: 72rem;

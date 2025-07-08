@@ -11,10 +11,11 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/admin/page": [
+    "/proxy-map/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/admin/page.js"
+      "static/chunks/app/proxy-map/page.js",
+      "static/css/app/proxy-map/page.css"
     ]
   }
 }

@@ -1166,6 +1166,12 @@ video {
 .cursor-pointer {
   cursor: pointer;
 }
+.cursor-copy {
+  cursor: copy;
+}
+.cursor-move {
+  cursor: move;
+}
 .touch-none {
   touch-action: none;
 }

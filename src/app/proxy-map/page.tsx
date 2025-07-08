@@ -1,17 +1,21 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { MapContainer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { loadGameState, getAllSaveNames, getAllBuildingConfigs, getAllResourceConfigs } from '../../../services/dbService';
-import type { FullGameState, BuildingConfig, ResourceConfig, BuildingInstance, ResourceNode } from '../../../types';
+import type { FullGameState, BuildingConfig, ResourceConfig, BuildingInstance, ResourceNode, Villager } from '../../../types';
 
 // Define the grid dimensions of our game map
 const MAP_DIMENSIONS = { width: 25, height: 18 };
+
+interface MappedVillager extends Villager {
+    position: L.LatLngTuple;
+}
 
 const ProxyMapPage = () => {
     // State to hold all game data
@@ -20,6 +24,7 @@ const ProxyMapPage = () => {
     const [gameState, setGameState] = useState<FullGameState | null>(null);
     const [allBuildingConfigs, setAllBuildingConfigs] = useState<BuildingConfig[]>([]);
     const [allResourceConfigs, setAllResourceConfigs] = useState<ResourceConfig[]>([]);
+    const [villagers, setVillagers] = useState<MappedVillager[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     // Fetch initial data (list of saves and all configs)
@@ -54,11 +59,22 @@ const ProxyMapPage = () => {
                 const state = await loadGameState(selectedSave);
                 if (state) {
                     setGameState(state);
+                    
+                    const tcPosition = state.buildings.townCenter?.[0]?.position || { x: MAP_DIMENSIONS.width / 2, y: MAP_DIMENSIONS.height / 2 };
+                    const mappedVillagers = state.units.villagers.map(v => ({
+                        ...v,
+                        position: [
+                            -(tcPosition.y - MAP_DIMENSIONS.height / 2 + (Math.random() - 0.5) * 4),
+                            tcPosition.x - MAP_DIMENSIONS.width / 2 + (Math.random() - 0.5) * 4
+                        ] as L.LatLngTuple
+                    }));
+                    setVillagers(mappedVillagers);
                 }
             };
             fetchGameState();
         } else {
             setGameState(null);
+            setVillagers([]);
         }
     }, [selectedSave]);
 
@@ -70,6 +86,8 @@ const ProxyMapPage = () => {
              return L.icon({
                 iconUrl: `https://placehold.co/${size}x${size}/${bgColor}/${fgColor}?text=${text.substring(0,2).toUpperCase()}`,
                 iconSize: [size, size],
+                iconAnchor: [size / 2, size / 2],
+                popupAnchor: [0, -size / 2],
             });
         }
         
@@ -85,6 +103,7 @@ const ProxyMapPage = () => {
             cache[config.id] = createIcon(config.name, 28, color, '3c3836');
         });
         
+        cache.villager = createIcon('V', 20, '83a598', 'fdf6e3');
         cache.defaultBuilding = createIcon('?', 40, 'a89984', '3c3836');
         cache.defaultResource = createIcon('?', 28, 'f59e0b', '3c3836');
 
@@ -94,6 +113,22 @@ const ProxyMapPage = () => {
     const getIconForGameObject = (type: string, isBuilding: boolean): L.Icon => {
         return iconCache[type] || (isBuilding ? iconCache.defaultBuilding : iconCache.defaultResource);
     };
+
+    const handleVillagerClick = useCallback((villagerId: string) => {
+        setVillagers(currentVillagers => 
+            currentVillagers.map(v => {
+                if (v.id === villagerId) {
+                    const [currentY, currentX] = v.position;
+                    const newPosition: L.LatLngTuple = [
+                        currentY + (Math.random() - 0.5) * 3,
+                        currentX + (Math.random() - 0.5) * 3
+                    ];
+                    return { ...v, position: newPosition };
+                }
+                return v;
+            })
+        );
+    }, []);
 
     const renderMapContent = () => {
         if (isLoading) {
@@ -134,6 +169,20 @@ const ProxyMapPage = () => {
                 {gameState.resourceNodes.map((node: ResourceNode) => (
                     <Marker key={node.id} position={transformCoords(node.position)} icon={getIconForGameObject(node.type, false)}>
                         <Popup>{node.type} Node (Amount: {Math.floor(node.amount)})</Popup>
+                    </Marker>
+                ))}
+
+                {/* Render Villagers */}
+                {villagers.map((villager) => (
+                    <Marker 
+                        key={villager.id} 
+                        position={villager.position} 
+                        icon={iconCache.villager}
+                        eventHandlers={{
+                            click: () => handleVillagerClick(villager.id),
+                        }}
+                    >
+                        <Popup>{villager.name}</Popup>
                     </Marker>
                 ))}
             </MapContainer>

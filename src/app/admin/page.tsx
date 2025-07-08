@@ -731,23 +731,32 @@ const AdminPage: React.FC = () => {
     // Buildings State
     const [buildings, setBuildings] = useState<BuildingConfig[]>([]);
     const [isBuildingsLoading, setIsBuildingsLoading] = useState(true);
-    const [editingBuilding, setEditingBuilding] = useState<BuildingConfig | null>(null);
 
     // Units State
     const [units, setUnits] = useState<UnitConfig[]>([]);
     const [isUnitsLoading, setIsUnitsLoading] = useState(true);
-    const [editingUnit, setEditingUnit] = useState<UnitConfig | null>(null);
     
     // Resources State
     const [resources, setResources] = useState<ResourceConfig[]>([]);
     const [isResourcesLoading, setIsResourcesLoading] = useState(true);
-    const [editingResource, setEditingResource] = useState<ResourceConfig | null>(null);
-    const [resourceToDelete, setResourceToDelete] = useState<ResourceConfig | null>(null);
     
     // Research State
     const [research, setResearch] = useState<ResearchConfig[]>([]);
     const [isResearchLoading, setIsResearchLoading] = useState(true);
+    
+    // States for editing forms
+    const [editingBuilding, setEditingBuilding] = useState<BuildingConfig | null>(null);
+    const [editingUnit, setEditingUnit] = useState<UnitConfig | null>(null);
+    const [editingResource, setEditingResource] = useState<ResourceConfig | null>(null);
     const [editingResearch, setEditingResearch] = useState<ResearchConfig | null>(null);
+
+    // States for deletion confirmation dialogs
+    const [resourceToDelete, setResourceToDelete] = useState<ResourceConfig | null>(null);
+    const [ageToDelete, setAgeToDelete] = useState<AgeConfig | null>(null);
+    const [buildingToDelete, setBuildingToDelete] = useState<BuildingConfig | null>(null);
+    const [unitToDelete, setUnitToDelete] = useState<UnitConfig | null>(null);
+    const [researchToDelete, setResearchToDelete] = useState<ResearchConfig | null>(null);
+
 
     // --- Data Fetching and Seeding ---
     const loadAllData = useCallback(async () => {
@@ -894,9 +903,15 @@ const AdminPage: React.FC = () => {
         await saveAgeConfig(newAge);
         setNewAgeName(''); setNewAgeDescription(''); await loadAllData();
     };
-    const handleDeleteAge = async (ageToDelete: AgeConfig) => {
-        if (buildings.some(b => b.unlockedInAge === ageToDelete.name)) { alert(`Cannot delete "${ageToDelete.name}". One or more buildings are assigned to this age.`); return; }
-        if (window.confirm(`Are you sure you want to delete the custom age "${ageToDelete.name}"?`)) { await deleteAgeConfig(ageToDelete.id); await loadAllData(); }
+    const handleDeleteAge = (age: AgeConfig) => {
+        if (buildings.some(b => b.unlockedInAge === age.name)) { alert(`Cannot delete "${age.name}". One or more buildings are assigned to this age.`); return; }
+        setAgeToDelete(age);
+    };
+    const confirmDeleteAge = async () => {
+        if (!ageToDelete) return;
+        await deleteAgeConfig(ageToDelete.id);
+        setAgeToDelete(null);
+        await loadAllData();
     };
     const handleToggleAgeActive = async (age: AgeConfig) => { await saveAgeConfig({ ...age, isActive: !age.isActive }); await loadAllData(); };
     const handleMoveAge = async (index: number, direction: 'up' | 'down') => {
@@ -915,10 +930,16 @@ const AdminPage: React.FC = () => {
         const newBuilding: BuildingConfig = { id: `custom-bld-${Date.now()}`, treeId: `tree-${Date.now()}`, name: 'New Building', description: 'A new custom building.', cost: {}, isUnique: false, buildLimit: 0, buildTime: 30, hp: 1000, unlockedInAge: ages.find(a => a.isActive)?.name || 'Nomadic Age', iconId: 'default', isActive: true, isPredefined: false, order: buildings.length > 0 ? Math.max(...buildings.map(b => b.order)) + 1 : 0, canTrainUnits: false, };
         setEditingBuilding(newBuilding);
     };
-    const handleDeleteBuilding = async (buildingToDelete: BuildingConfig) => {
-        if (buildings.some(b => b.upgradesTo?.some(u => u.id === buildingToDelete.id))) { alert(`Cannot delete "${buildingToDelete.name}". It is an upgrade target.`); return; }
-        if (units.some(u => u.requiredBuilding === buildingToDelete.id || u.requiredBuildingIds?.includes(buildingToDelete.id))) { alert(`Cannot delete "${buildingToDelete.name}". A unit requires it.`); return; }
-        if (window.confirm(`Are you sure you want to delete "${buildingToDelete.name}"?`)) { await deleteBuildingConfig(buildingToDelete.id); await loadAllData(); }
+    const handleDeleteBuilding = (building: BuildingConfig) => {
+        if (buildings.some(b => b.upgradesTo?.some(u => u.id === building.id))) { alert(`Cannot delete "${building.name}". It is an upgrade target.`); return; }
+        if (units.some(u => u.requiredBuilding === building.id || u.requiredBuildingIds?.includes(building.id))) { alert(`Cannot delete "${building.name}". A unit requires it.`); return; }
+        setBuildingToDelete(building);
+    };
+    const confirmDeleteBuilding = async () => {
+        if (!buildingToDelete) return;
+        await deleteBuildingConfig(buildingToDelete.id);
+        setBuildingToDelete(null);
+        await loadAllData();
     };
     const handleToggleBuildingActive = async (building: BuildingConfig) => { await saveBuildingConfig({ ...building, isActive: !building.isActive }); await loadAllData(); };
     const handleSaveBuilding = async (buildingToSave: BuildingConfig) => { await saveBuildingConfig(buildingToSave); setEditingBuilding(null); await loadAllData(); };
@@ -931,9 +952,15 @@ const AdminPage: React.FC = () => {
         setEditingUnit(newUnit);
     };
      const handleSaveUnit = async (unitToSave: UnitConfig) => { await saveUnitConfig(unitToSave); setEditingUnit(null); await loadAllData(); };
-    const handleDeleteUnit = async (id: string) => {
-        if (units.some(u => u.upgradesTo?.some(path => path.targetUnitId === id))) { alert(`Cannot delete. This unit is an upgrade target.`); return; }
-        if (window.confirm('Are you sure you want to delete this custom unit?')) { await deleteUnitConfig(id); await loadAllData(); }
+    const handleDeleteUnit = (unit: UnitConfig) => {
+        if (units.some(u => u.upgradesTo?.some(path => path.targetUnitId === unit.id))) { alert(`Cannot delete. This unit is an upgrade target.`); return; }
+        setUnitToDelete(unit);
+    };
+    const confirmDeleteUnit = async () => {
+        if (!unitToDelete) return;
+        await deleteUnitConfig(unitToDelete.id);
+        setUnitToDelete(null);
+        await loadAllData();
     };
      const handleToggleUnitActive = async (unit: UnitConfig) => { await saveUnitConfig({ ...unit, isActive: !unit.isActive }); await loadAllData(); };
      
@@ -970,9 +997,15 @@ const AdminPage: React.FC = () => {
     };
     const handleSaveResearch = async (researchToSave: ResearchConfig) => { await saveResearchConfig(researchToSave); setEditingResearch(null); await loadAllData(); };
     const handleToggleResearchActive = async (researchItem: ResearchConfig) => { await saveResearchConfig({ ...researchItem, isActive: !researchItem.isActive }); await loadAllData(); };
-    const handleDeleteResearch = async (researchItem: ResearchConfig) => {
+    const handleDeleteResearch = (researchItem: ResearchConfig) => {
         if (research.some(r => r.prerequisites?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
-        if (window.confirm(`Are you sure you want to delete "${researchItem.name}"?`)) { await deleteResearchConfig(researchItem.id); await loadAllData(); }
+        setResearchToDelete(researchItem);
+    };
+    const confirmDeleteResearch = async () => {
+        if (!researchToDelete) return;
+        await deleteResearchConfig(researchToDelete.id);
+        setResearchToDelete(null);
+        await loadAllData();
     };
     
     return (
@@ -992,6 +1025,66 @@ const AdminPage: React.FC = () => {
                         <AlertDialogAction onClick={confirmDeleteResource} className="sci-fi-button !text-base bg-brand-red hover:bg-red-700/80">
                             Yes, delete resource
                         </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!ageToDelete} onOpenChange={(isOpen) => !isOpen && setAgeToDelete(null)}>
+                <AlertDialogContent className="sci-fi-panel-popup sci-fi-grid">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                        <AlertDialogDescription className="text-parchment-dark">
+                            Permanently delete the custom age <span className="font-bold text-brand-gold">{ageToDelete?.name}</span>? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setAgeToDelete(null)} className="sci-fi-button !text-base">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteAge} className="sci-fi-button !text-base bg-brand-red hover:bg-red-700/80">Delete Age</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            
+            <AlertDialog open={!!buildingToDelete} onOpenChange={(isOpen) => !isOpen && setBuildingToDelete(null)}>
+                <AlertDialogContent className="sci-fi-panel-popup sci-fi-grid">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                        <AlertDialogDescription className="text-parchment-dark">
+                             Permanently delete the building <span className="font-bold text-brand-gold">{buildingToDelete?.name}</span>? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setBuildingToDelete(null)} className="sci-fi-button !text-base">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteBuilding} className="sci-fi-button !text-base bg-brand-red hover:bg-red-700/80">Delete Building</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!unitToDelete} onOpenChange={(isOpen) => !isOpen && setUnitToDelete(null)}>
+                <AlertDialogContent className="sci-fi-panel-popup sci-fi-grid">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                        <AlertDialogDescription className="text-parchment-dark">
+                             Permanently delete the unit <span className="font-bold text-brand-gold">{unitToDelete?.name}</span>? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setUnitToDelete(null)} className="sci-fi-button !text-base">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteUnit} className="sci-fi-button !text-base bg-brand-red hover:bg-red-700/80">Delete Unit</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            
+            <AlertDialog open={!!researchToDelete} onOpenChange={(isOpen) => !isOpen && setResearchToDelete(null)}>
+                <AlertDialogContent className="sci-fi-panel-popup sci-fi-grid">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                        <AlertDialogDescription className="text-parchment-dark">
+                             Permanently delete the technology <span className="font-bold text-brand-gold">{researchToDelete?.name}</span>? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setResearchToDelete(null)} className="sci-fi-button !text-base">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteResearch} className="sci-fi-button !text-base bg-brand-red hover:bg-red-700/80">Delete Technology</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -1100,7 +1193,7 @@ const AdminPage: React.FC = () => {
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex items-center space-x-2"><Label htmlFor={`active-unit-${u.id}`} className="text-xs">Active</Label><Switch id={`active-unit-${u.id}`} checked={u.isActive} onCheckedChange={() => handleToggleUnitActive(u)} /></div>
                                                         <Button variant="ghost" size="icon" onClick={() => setEditingUnit(u)} className="text-parchment-dark/70 hover:text-brand-blue" disabled={!!editingUnit}><Edit className="w-4 h-4"/></Button>
-                                                        {!u.isPredefined && <button onClick={() => handleDeleteUnit(u.id)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
+                                                        {!u.isPredefined && <button onClick={() => handleDeleteUnit(u)} className="p-1 text-parchment-dark/60 hover:text-brand-red rounded-full"><Trash2 className="w-5 h-5" /></button>}
                                                     </div>
                                                 </div>
                                             ))}

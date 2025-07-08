@@ -14,8 +14,8 @@
     "/proxy-map/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/proxy-map/page.js",
-      "static/css/app/proxy-map/page.css"
+      "static/css/app/proxy-map/page.css",
+      "static/chunks/app/proxy-map/page.js"
     ]
   }
 }

@@ -843,8 +843,8 @@ video {
 .h-\[1px\] {
   height: 1px;
 }
-.h-\[60vh\] {
-  height: 60vh;
+.h-\[80vh\] {
+  height: 80vh;
 }
 .h-\[90vh\] {
   height: 90vh;
@@ -860,6 +860,9 @@ video {
 }
 .h-px {
   height: 1px;
+}
+.h-screen {
+  height: 100vh;
 }
 .h-svh {
   height: 100svh;
@@ -1165,12 +1168,6 @@ video {
 }
 .cursor-pointer {
   cursor: pointer;
-}
-.cursor-copy {
-  cursor: copy;
-}
-.cursor-move {
-  cursor: move;
 }
 .touch-none {
   touch-action: none;
@@ -2926,6 +2923,14 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
     display: flex;
   }
 
+  .sm\:h-7 {
+    height: 1.75rem;
+  }
+
+  .sm\:w-7 {
+    width: 1.75rem;
+  }
+
   .sm\:max-w-sm {
     max-width: 24rem;
   }
@@ -2950,6 +2955,14 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
     justify-content: flex-end;
   }
 
+  .sm\:gap-3 {
+    gap: 0.75rem;
+  }
+
+  .sm\:gap-4 {
+    gap: 1rem;
+  }
+
   .sm\:space-x-2 > :not([hidden]) ~ :not([hidden]) {
     --tw-space-x-reverse: 0;
     margin-right: calc(0.5rem * var(--tw-space-x-reverse));
@@ -2968,6 +2981,12 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
     margin-bottom: calc(0px * var(--tw-space-y-reverse));
   }
 
+  .sm\:space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(1rem * var(--tw-space-y-reverse));
+  }
+
   .sm\:self-center {
     align-self: center;
   }
@@ -2976,12 +2995,36 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
     border-radius: 0.5rem;
   }
 
+  .sm\:p-4 {
+    padding: 1rem;
+  }
+
   .sm\:p-8 {
     padding: 2rem;
   }
 
+  .sm\:px-4 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .sm\:py-2 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
   .sm\:text-left {
     text-align: left;
+  }
+
+  .sm\:text-2xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .sm\:text-xl {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
   }
 
   .data-\[state\=open\]\:sm\:slide-in-from-bottom-full[data-state="open"] {

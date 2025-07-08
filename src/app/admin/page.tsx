@@ -756,6 +756,9 @@ const AdminPage: React.FC = () => {
     const [buildingToDelete, setBuildingToDelete] = useState<BuildingConfig | null>(null);
     const [unitToDelete, setUnitToDelete] = useState<UnitConfig | null>(null);
     const [researchToDelete, setResearchToDelete] = useState<ResearchConfig | null>(null);
+    
+    const [activeTab, setActiveTab] = useState('ages');
+    const [dependencyError, setDependencyError] = useState<{ message: string; targetTab: string; } | null>(null);
 
 
     // --- Data Fetching and Seeding ---
@@ -898,13 +901,20 @@ const AdminPage: React.FC = () => {
 
     // --- Ages Handlers ---
     const handleAddAge = async () => {
-        if (!newAgeName.trim() || !newAgeDescription.trim()) return alert('Age name and description cannot be empty.');
+        if (!newAgeName.trim() || !newAgeDescription.trim()) return;
         const newAge: AgeConfig = { id: `custom-${Date.now()}`, name: newAgeName, description: newAgeDescription, isActive: true, isPredefined: false, order: ages.length > 0 ? Math.max(...ages.map(a => a.order)) + 1 : 0, };
         await saveAgeConfig(newAge);
         setNewAgeName(''); setNewAgeDescription(''); await loadAllData();
     };
     const handleDeleteAge = (age: AgeConfig) => {
-        if (buildings.some(b => b.unlockedInAge === age.name)) { alert(`Cannot delete "${age.name}". One or more buildings are assigned to this age.`); return; }
+        const requiringBuilding = buildings.find(b => b.unlockedInAge === age.name);
+        if (requiringBuilding) { 
+            setDependencyError({
+                message: `Cannot delete "${age.name}". The building "${requiringBuilding.name}" unlocks in this age. Please change the building's unlock age first.`,
+                targetTab: 'buildings'
+            });
+            return;
+        }
         setAgeToDelete(age);
     };
     const confirmDeleteAge = async () => {
@@ -931,8 +941,21 @@ const AdminPage: React.FC = () => {
         setEditingBuilding(newBuilding);
     };
     const handleDeleteBuilding = (building: BuildingConfig) => {
-        if (buildings.some(b => b.upgradesTo?.some(u => u.id === building.id))) { alert(`Cannot delete "${building.name}". It is an upgrade target.`); return; }
-        if (units.some(u => u.requiredBuilding === building.id || u.requiredBuildingIds?.includes(building.id))) { alert(`Cannot delete "${building.name}". A unit requires it.`); return; }
+        if (buildings.some(b => b.upgradesTo?.some(u => u.id === building.id))) {
+            setDependencyError({
+                message: `Cannot delete "${building.name}". It is an upgrade target for another building. Check other buildings in the same tree first.`,
+                targetTab: 'buildings'
+            });
+            return;
+        }
+        const requiringUnit = units.find(u => u.requiredBuilding === building.id || u.requiredBuildingIds?.includes(building.id));
+        if (requiringUnit) {
+            setDependencyError({
+                message: `Cannot delete "${building.name}". The unit "${requiringUnit.name}" requires it. Please edit the unit's requirements first.`,
+                targetTab: 'units'
+            });
+            return;
+        }
         setBuildingToDelete(building);
     };
     const confirmDeleteBuilding = async () => {
@@ -947,13 +970,25 @@ const AdminPage: React.FC = () => {
     // --- Units Handlers ---
      const handleShowAddUnit = () => {
         const trainingBuildings = buildings.filter(b => b.canTrainUnits && b.isActive);
-        if (trainingBuildings.length === 0) { alert("Please create/activate a building with 'Can Train Units' enabled."); return; }
+        if (trainingBuildings.length === 0) { 
+            setDependencyError({
+                message: "Cannot create a new unit because no buildings are set to 'Can Train Units'. Please enable this on a building first.",
+                targetTab: 'buildings'
+            });
+            return;
+        }
         const newUnit: UnitConfig = { id: `custom-unit-${Date.now()}`, treeId: `utree-${Date.now()}`, name: 'New Unit', description: 'A new custom unit.', cost: {}, trainTime: 20, hp: 50, attack: 5, iconId: 'default', isActive: true, isPredefined: false, order: units.length > 0 ? Math.max(...units.map(u => u.order)) + 1 : 0, requiredBuilding: trainingBuildings[0].id, populationCost: 1, attackRate: 1, movementSpeed: 1, unitType: 'infantry', upgradesTo: [], armorValues: [], attackBonuses: [], damageTypes: [], terrainModifiers: [], requiredBuildingIds: [], prerequisites: [] };
         setEditingUnit(newUnit);
     };
      const handleSaveUnit = async (unitToSave: UnitConfig) => { await saveUnitConfig(unitToSave); setEditingUnit(null); await loadAllData(); };
     const handleDeleteUnit = (unit: UnitConfig) => {
-        if (units.some(u => u.upgradesTo?.some(path => path.targetUnitId === unit.id))) { alert(`Cannot delete. This unit is an upgrade target.`); return; }
+        if (units.some(u => u.upgradesTo?.some(path => path.targetUnitId === unit.id))) {
+            setDependencyError({
+                message: `Cannot delete "${unit.name}". It is an upgrade target for another unit. Please modify the other unit's upgrade path first.`,
+                targetTab: 'units'
+            });
+            return;
+        }
         setUnitToDelete(unit);
     };
     const confirmDeleteUnit = async () => {
@@ -973,9 +1008,13 @@ const AdminPage: React.FC = () => {
     const handleSaveResource = async (resourceToSave: ResourceConfig) => { await saveResourceConfig(resourceToSave); setEditingResource(null); await loadAllData(); };
     const handleToggleResourceActive = async (resource: ResourceConfig) => { await saveResourceConfig({ ...resource, isActive: !resource.isActive }); await loadAllData(); };
     const handleDeleteResource = (resource: ResourceConfig) => {
-        const isUsedInCost = [...buildings, ...units, ...research].some(item => (item.cost as any)[resource.id] > 0);
-        if (isUsedInCost) {
-            alert(`Cannot delete "${resource.name}". It is used as a cost for a building, unit, or research item.`);
+        const usingItem = [...buildings, ...units, ...research].find(item => Object.keys(item.cost || {}).includes(resource.id));
+        if (usingItem) {
+            const itemType = buildings.includes(usingItem as any) ? 'buildings' : units.includes(usingItem as any) ? 'units' : 'research';
+            setDependencyError({
+                message: `Cannot delete "${resource.name}". It is used as a cost for "${usingItem.name}". Please remove the cost first.`,
+                targetTab: itemType
+            });
             return;
         }
         setResourceToDelete(resource);
@@ -991,14 +1030,27 @@ const AdminPage: React.FC = () => {
     // --- Research Handlers ---
     const handleShowAddResearch = () => {
         const researchBuildings = buildings.filter(b => b.canResearch && b.isActive);
-        if (researchBuildings.length === 0) { alert("Please create/activate a building with 'Can Research' enabled."); return; }
+        if (researchBuildings.length === 0) {
+            setDependencyError({
+                message: "Cannot create a new technology because no buildings are set to 'Can Research'. Please enable this on a building first.",
+                targetTab: 'buildings'
+            });
+            return;
+        }
         const newResearch: ResearchConfig = { id: `custom-tech-${Date.now()}`, name: 'New Technology', description: '', iconId: 'beaker', cost: {}, researchTime: 60, requiredBuildingId: researchBuildings[0].id, ageRequirement: ages[0]?.name || '', effects: [], prerequisites: [], isActive: true, isPredefined: false, order: research.length > 0 ? Math.max(...research.map(r => r.order)) + 1 : 0, treeId: 'custom_tree', treeName: 'Custom' };
         setEditingResearch(newResearch);
     };
     const handleSaveResearch = async (researchToSave: ResearchConfig) => { await saveResearchConfig(researchToSave); setEditingResearch(null); await loadAllData(); };
     const handleToggleResearchActive = async (researchItem: ResearchConfig) => { await saveResearchConfig({ ...researchItem, isActive: !researchItem.isActive }); await loadAllData(); };
     const handleDeleteResearch = (researchItem: ResearchConfig) => {
-        if (research.some(r => r.prerequisites?.includes(researchItem.id))) { alert(`Cannot delete "${researchItem.name}". It is a prerequisite for another technology.`); return; }
+        if (research.some(r => r.prerequisites?.includes(researchItem.id))) {
+            const requiringTech = research.find(r => r.prerequisites?.includes(researchItem.id));
+            setDependencyError({
+                message: `Cannot delete "${researchItem.name}". It is a prerequisite for "${requiringTech?.name}". Please remove it from the prerequisites first.`,
+                targetTab: 'research'
+            });
+            return;
+        }
         setResearchToDelete(researchItem);
     };
     const confirmDeleteResearch = async () => {
@@ -1089,13 +1141,35 @@ const AdminPage: React.FC = () => {
                 </AlertDialogContent>
             </AlertDialog>
 
+             <AlertDialog open={!!dependencyError} onOpenChange={(isOpen) => !isOpen && setDependencyError(null)}>
+                <AlertDialogContent className="sci-fi-panel-popup sci-fi-grid">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-brand-red">Deletion Blocked</AlertDialogTitle>
+                        <AlertDialogDescription className="text-parchment-dark">
+                            {dependencyError?.message}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDependencyError(null)} className="sci-fi-button !text-base">OK</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => {
+                            if (dependencyError) {
+                                setActiveTab(dependencyError.targetTab);
+                            }
+                            setDependencyError(null);
+                        }} className="sci-fi-button !text-base bg-brand-blue hover:bg-brand-blue/80">
+                            Go to {dependencyError?.targetTab && dependencyError.targetTab.charAt(0).toUpperCase() + dependencyError.targetTab.slice(1)}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <div className="w-full max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-4xl font-serif text-parchment-light">Admin Panel</h1>
                     <Link href="/" className="text-brand-blue hover:underline font-sans">Back to Game</Link>
                 </div>
 
-                <Tabs defaultValue="ages" className="w-full">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-6 bg-stone-dark/80 border border-stone-light/20">
                         <TabsTrigger value="ages">Ages</TabsTrigger>
                         <TabsTrigger value="buildings">Buildings</TabsTrigger>

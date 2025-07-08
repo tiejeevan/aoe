@@ -2320,6 +2320,10 @@ input[type=range].sci-fi-slider::-moz-range-thumb { width: 16px; height: 16px; b
   background-color: rgb(255 255 255 / 0.2);
 }
 
+.hover\:bg-red-700\/80:hover {
+  background-color: rgb(185 28 28 / 0.8);
+}
+
 .hover\:text-brand-blue:hover {
   --tw-text-opacity: 1;
   color: rgb(69 133 136 / var(--tw-text-opacity, 1));

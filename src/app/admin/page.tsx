@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import DataGenerator from './components/DataGenerator';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 
 import { INITIAL_BUILDINGS } from '../../../data/buildingInfo';
@@ -741,6 +742,7 @@ const AdminPage: React.FC = () => {
     const [resources, setResources] = useState<ResourceConfig[]>([]);
     const [isResourcesLoading, setIsResourcesLoading] = useState(true);
     const [editingResource, setEditingResource] = useState<ResourceConfig | null>(null);
+    const [resourceToDelete, setResourceToDelete] = useState<ResourceConfig | null>(null);
     
     // Research State
     const [research, setResearch] = useState<ResearchConfig[]>([]);
@@ -794,8 +796,8 @@ const AdminPage: React.FC = () => {
         for (const [index, pItem] of INITIAL_BUILDINGS.entries()) {
             const existingItem = buildingMap.get(pItem.id);
              const newItem: BuildingConfig = {
-                ...(pItem as any),
-                ...(existingItem || {}),
+                ...(pItem as any), // Base predefined values
+                ...(existingItem || {}), // Overwrite with saved values
                 id: pItem.id,
                 isPredefined: true,
                 unlockedInAge: existingItem?.unlockedInAge || (pItem.id === 'townCenter' ? INITIAL_AGES[0].name : defaultAge),
@@ -822,8 +824,8 @@ const AdminPage: React.FC = () => {
         for (const [index, pItem] of initialUnitsWithIds.entries()) {
             const existingItem = unitMap.get(pItem.id);
             const newItem: UnitConfig = {
-                ...(pItem as any),
-                ...(existingItem || {}),
+                ...(pItem as any), // Base predefined values
+                ...(existingItem || {}), // Overwrite with saved values
                 id: pItem.id,
                 isPredefined: true,
                 isActive: existingItem?.isActive ?? true,
@@ -943,11 +945,21 @@ const AdminPage: React.FC = () => {
     };
     const handleSaveResource = async (resourceToSave: ResourceConfig) => { await saveResourceConfig(resourceToSave); setEditingResource(null); await loadAllData(); };
     const handleToggleResourceActive = async (resource: ResourceConfig) => { await saveResourceConfig({ ...resource, isActive: !resource.isActive }); await loadAllData(); };
-    const handleDeleteResource = async (resourceToDelete: ResourceConfig) => {
-        const isUsedInCost = [...buildings, ...units, ...research].some(item => (item.cost as any)[resourceToDelete.id] > 0);
-        if (isUsedInCost) { alert(`Cannot delete "${resourceToDelete.name}". It is used as a cost for a building, unit, or research item.`); return; }
-        if (window.confirm(`Are you sure you want to delete "${resourceToDelete.name}"?`)) { await deleteResourceConfig(resourceToDelete.id); await loadAllData(); }
+    const handleDeleteResource = (resource: ResourceConfig) => {
+        const isUsedInCost = [...buildings, ...units, ...research].some(item => (item.cost as any)[resource.id] > 0);
+        if (isUsedInCost) {
+            alert(`Cannot delete "${resource.name}". It is used as a cost for a building, unit, or research item.`);
+            return;
+        }
+        setResourceToDelete(resource);
     };
+    const confirmDeleteResource = async () => {
+        if (!resourceToDelete) return;
+        await deleteResourceConfig(resourceToDelete.id);
+        setResourceToDelete(null);
+        await loadAllData();
+    };
+
 
     // --- Research Handlers ---
     const handleShowAddResearch = () => {
@@ -965,6 +977,25 @@ const AdminPage: React.FC = () => {
     
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light p-4 sm:p-8">
+            <AlertDialog open={!!resourceToDelete} onOpenChange={(isOpen) => !isOpen && setResourceToDelete(null)}>
+                <AlertDialogContent className="sci-fi-panel-popup sci-fi-grid">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-parchment-dark">
+                            This action cannot be undone. This will permanently delete the
+                            <span className="font-bold text-brand-gold"> {resourceToDelete?.name} </span>
+                            resource from the database.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setResourceToDelete(null)} className="sci-fi-button !text-base">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeleteResource} className="sci-fi-button !text-base bg-brand-red hover:bg-red-700/80">
+                            Yes, delete resource
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <div className="w-full max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-4xl font-serif text-parchment-light">Admin Panel</h1>

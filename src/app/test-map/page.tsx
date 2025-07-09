@@ -220,23 +220,22 @@ const TestMapPage = () => {
         return () => clearInterval(gameTick);
     }, [isClient]);
 
-    // Visual Animation Loop
+    // Visual Animation Trigger
     useEffect(() => {
         if (!isClient) return;
-        const layer = layerRef.current;
-        if (!layer) return;
 
-        const anim = new Konva.Animation(() => {
-            villagers.forEach(villagerData => {
-                const villagerNode = villagerRefs.current[villagerData.id];
-                if (!villagerNode) return;
-                // Smoothly animate towards the state position
-                villagerNode.to({ x: villagerData.x, y: villagerData.y, duration: 0.25, easing: Konva.Easings.EaseInOut });
+        villagers.forEach(villagerData => {
+            const villagerNode = villagerRefs.current[villagerData.id];
+            if (!villagerNode) return;
+
+            // Animate to new position
+            villagerNode.to({
+                x: villagerData.x,
+                y: villagerData.y,
+                duration: 0.25, // duration of movement between ticks
+                easing: Konva.Easings.EaseInOut,
             });
-        }, layer);
-        
-        anim.start();
-        return () => anim.stop();
+        });
     }, [isClient, villagers]);
 
     const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -323,7 +322,7 @@ const TestMapPage = () => {
         const currentlySelected = new Set(selectedVillagerIds);
         if (e.evt.shiftKey) { if (currentlySelected.has(villagerId)) currentlySelected.delete(villagerId); else currentlySelected.add(villagerId); } 
         else { currentlySelected.clear(); currentlySelected.add(villagerId); }
-        setSelectedVillagerIds(currentlySelected); setTooltipMineId(null);
+        setTooltipMineId(null);
     };
 
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {

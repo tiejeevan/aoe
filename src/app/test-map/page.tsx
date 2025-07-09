@@ -69,7 +69,7 @@ const TestMapPage = () => {
     useEffect(() => {
         const gameLoop = () => {
             setVillagers(currentVillagers => {
-                let villagersToUpdate = JSON.parse(JSON.stringify(currentVillagers));
+                let villagersToUpdate = JSON.parse(JSON.stringify(currentVillagers)) as Villager[];
                 const now = Date.now();
 
                 const damageMap = new Map<string, number>();
@@ -212,11 +212,13 @@ const TestMapPage = () => {
         const pos = getStagePointerPosition();
         if (!pos) return;
         
-        if (e.target.hasName('villager')) {
+        const isClickOnVillager = e.target.hasName('villager');
+        if (isClickOnVillager) {
             const clickedId = e.target.id();
+            const isShiftPressed = e.evt.shiftKey;
              setVillagers(v => v.map(villager => ({
                 ...villager,
-                isSelected: villager.id === clickedId
+                isSelected: isShiftPressed ? (villager.id === clickedId ? !villager.isSelected : villager.isSelected) : villager.id === clickedId
             })));
             return;
         }
@@ -275,7 +277,7 @@ const TestMapPage = () => {
             <Rect 
                 key={i} 
                 x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} 
-                y={Math.floor(i / MAP_HEIGHT_CELLS) * GRID_SIZE} 
+                y={Math.floor(i / MAP_WIDTH_CELLS) * GRID_SIZE} 
                 width={GRID_SIZE} 
                 height={GRID_SIZE} 
                 fill="#504945" 
@@ -300,7 +302,7 @@ const TestMapPage = () => {
                 <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
                 <p className="text-parchment-dark mb-4 text-sm">Drag to select. Right-click on ground to move, right-click on another villager to attack.</p>
             </div>
-            <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
+            <div className={`flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                  <Stage 
                     ref={stageRef} 
                     width={MAP_WIDTH_CELLS * GRID_SIZE} 

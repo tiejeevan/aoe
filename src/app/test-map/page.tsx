@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Text, Group } from 'react-konva';
+import { Stage, Layer, Rect, Text, Group, Circle } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import TownCenter from '../../../components/TownCenter';
@@ -28,13 +28,20 @@ const BUILD_TIME = 10000; // 10 seconds in ms
 
 type BuildingType = 'hut' | 'barracks' | 'castle' | 'workshop' | 'researchLab';
 
-const buildingTypes: {id: BuildingType, name: string}[] = [
-    { id: 'hut', name: 'Hut' },
-    { id: 'barracks', name: 'Barracks' },
-    { id: 'castle', name: 'Castle' },
-    { id: 'workshop', name: 'Workshop' },
-    { id: 'researchLab', name: 'Research Lab' },
-];
+type Resources = {
+    wood: number;
+    gold: number;
+    stone: number;
+};
+
+const buildingStats: Record<BuildingType, { name: string; cost: Partial<Resources>; hp: number }> = {
+    hut: { name: 'Hut', cost: { wood: 50 }, hp: 250 },
+    barracks: { name: 'Barracks', cost: { wood: 100, stone: 25 }, hp: 600 },
+    castle: { name: 'Castle', cost: { stone: 250 }, hp: 2000 },
+    workshop: { name: 'Workshop', cost: { wood: 125 }, hp: 400 },
+    researchLab: { name: 'Research Lab', cost: { wood: 75, gold: 100 }, hp: 350 },
+};
+
 
 interface Villager {
     id: string;
@@ -66,6 +73,7 @@ interface ConstructionSite {
     progress: number; // 0-100
     builderId: string | null;
     startTime: number;
+    cost: Partial<Resources>;
 }
 
 interface Building {
@@ -73,6 +81,8 @@ interface Building {
     x: number;
     y: number;
     type: BuildingType;
+    hp: number;
+    maxHp: number;
 }
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
@@ -108,6 +118,17 @@ const getConstructionSiteNode = (node: Konva.Node | null): Konva.Group | null =>
     return null;
 };
 
+const getBuildingNode = (node: Konva.Node | null): Konva.Group | null => {
+    if (!node) return null;
+    if (node.name() === 'building' && node instanceof Konva.Group) {
+        return node;
+    }
+    if (node.getParent()) {
+        return getBuildingNode(node.getParent());
+    }
+    return null;
+}
+
 const isClickOnPopup = (node: Konva.Node | null): boolean => {
     if (!node) return false;
     if (node.getAttr('isPopup')) return true;
@@ -122,6 +143,7 @@ const TestMapPage = () => {
     const [constructionSites, setConstructionSites] = useState<ConstructionSite[]>([]);
     const [buildings, setBuildings] = useState<Building[]>([]);
     const [log, setLog] = useState<string[]>([]);
+    const [resources, setResources] = useState<Resources>({ wood: 500, gold: 200, stone: 300 });
     
     // State for panning and zooming
     const [stageScale, setStageScale] = useState(1);
@@ -136,6 +158,7 @@ const TestMapPage = () => {
     
     // State for UI panels
     const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; showBuildMenu: boolean; } | null>(null);
+    const [buildingPopup, setBuildingPopup] = useState<{ visible: boolean; x: number; y: number; buildingId: string; } | null>(null);
     const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; buildingType: BuildingType | null } | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
@@ -174,6 +197,10 @@ const TestMapPage = () => {
         setGoldMines([{ id: 'gold-mine-1', x: 8 * GRID_SIZE, y: 12 * GRID_SIZE }]);
     }, []);
 
+    const addToLog = useCallback((message: string) => {
+        setLog(prevLog => [message, ...prevLog.slice(0, 4)]);
+    }, []);
+
     // Game Loop
     useEffect(() => {
         if (!isClient) return;
@@ -191,10 +218,23 @@ const TestMapPage = () => {
                 for (const villager of nextVillagers) {
                      if (villager.task === 'dead') continue;
                     if (villager.task === 'attacking' && villager.targetId) {
-                        const target = nextVillagers.find(v => v.id === villager.targetId);
-                        if (target && target.task !== 'dead') {
-                             const dx = target.x - villager.x;
-                             const dy = target.y - villager.y;
+                        const targetVillager = nextVillagers.find(v => v.id === villager.targetId);
+                        const targetBuilding = buildings.find(b => b.id === villager.targetId);
+
+                        if (targetVillager && targetVillager.task !== 'dead') {
+                             const dx = targetVillager.x - villager.x;
+                             const dy = targetVillager.y - villager.y;
+                             const distance = Math.sqrt(dx * dx + dy * dy);
+                             if (distance > ATTACK_RANGE) {
+                                villager.task = 'moving'; // Re-engage
+                                const ratio = (distance - ATTACK_DISTANCE) / distance;
+                                villager.targetX = villager.x + dx * ratio;
+                                villager.targetY = villager.y + dy * ratio;
+                                villagersNeedUpdate = true;
+                             }
+                        } else if (targetBuilding && targetBuilding.hp > 0) {
+                             const dx = targetBuilding.x - villager.x;
+                             const dy = targetBuilding.y - villager.y;
                              const distance = Math.sqrt(dx * dx + dy * dy);
                              if (distance > ATTACK_RANGE) {
                                 villager.task = 'moving'; // Re-engage
@@ -207,17 +247,22 @@ const TestMapPage = () => {
                     }
 
                     if (villager.task === 'attacking' && villager.targetId) {
-                        const target = nextVillagers.find(v => v.id === villager.targetId);
-                        if (target && target.task !== 'dead') {
-                            if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
-                                const currentDamage = damageMap.get(target.id) || 0;
-                                damageMap.set(target.id, currentDamage + villager.attack);
+                         if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
+                            const targetVillager = nextVillagers.find(v => v.id === villager.targetId);
+                            const targetBuilding = buildings.find(b => b.id === villager.targetId);
+                            if (targetVillager && targetVillager.task !== 'dead') {
+                                const currentDamage = damageMap.get(targetVillager.id) || 0;
+                                damageMap.set(targetVillager.id, currentDamage + villager.attack);
                                 villager.attackLastTime = now;
+                            } else if (targetBuilding && targetBuilding.hp > 0) {
+                                const currentDamage = damageMap.get(targetBuilding.id) || 0;
+                                damageMap.set(targetBuilding.id, currentDamage + villager.attack);
+                                villager.attackLastTime = now;
+                            } else {
+                                villager.task = 'idle';
+                                villager.targetId = null;
+                                villagersNeedUpdate = true;
                             }
-                        } else {
-                            villager.task = 'idle';
-                            villager.targetId = null;
-                            villagersNeedUpdate = true;
                         }
                     }
                 }
@@ -237,6 +282,17 @@ const TestMapPage = () => {
                             }
                         }
                     }
+                    setBuildings(currentBuildings => currentBuildings.map(b => {
+                        if (damageMap.has(b.id)) {
+                            const newHp = b.hp - (damageMap.get(b.id) || 0);
+                            if (newHp <= 0) {
+                                addToLog(`${b.type} at (${Math.round(b.x)}, ${Math.round(b.y)}) has been destroyed!`);
+                                return null;
+                            }
+                            return { ...b, hp: newHp };
+                        }
+                        return b;
+                    }).filter(Boolean) as Building[]);
                 }
                 
                 // Third pass: remove vanished villagers
@@ -257,15 +313,15 @@ const TestMapPage = () => {
                         if (builder && builder.task === 'building') {
                             const newProgress = site.progress + (100 / (BUILD_TIME / 16)); // ~60fps
                             if (newProgress >= 100) {
-                                setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type }]);
+                                const stats = buildingStats[site.type];
+                                setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type, hp: stats.hp, maxHp: stats.hp }]);
                                 setVillagers(vs => vs.map(v => v.id === site.builderId ? { ...v, task: 'idle', targetId: null } : v));
                                 
                                 const endTime = Date.now();
                                 const timeTaken = ((endTime - site.startTime) / 1000).toFixed(1);
                                 const builderName = builder ? builder.name : 'A villager';
-                                const buildingName = buildingTypes.find(b => b.id === site.type)?.name || 'a building';
-                                const newLogEntry = `${builderName} built a ${buildingName} at (${Math.round(site.x)}, ${Math.round(site.y)}) in ${timeTaken} seconds.`;
-                                setLog(prevLog => [newLogEntry, ...prevLog.slice(0, 4)]);
+                                const buildingName = buildingStats[site.type].name;
+                                addToLog(`${builderName} built a ${buildingName} at (${Math.round(site.x)}, ${Math.round(site.y)}) in ${timeTaken} seconds.`);
                                 return null;
                             }
                             return { ...site, progress: newProgress };
@@ -284,7 +340,7 @@ const TestMapPage = () => {
 
         const animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isClient, villagers]);
+    }, [isClient, villagers, buildings, addToLog]);
 
 
     // Add keyboard listeners for panning
@@ -334,19 +390,23 @@ const TestMapPage = () => {
         const targetVillagerNode = getVillagerNode(e.target);
         const targetMineNode = getMineNode(e.target);
         const targetSiteNode = getConstructionSiteNode(e.target);
+        const targetBuildingNode = getBuildingNode(e.target);
 
         const targetVillagerId = targetVillagerNode ? targetVillagerNode.id() : null;
         const targetMineId = targetMineNode ? targetMineNode.id() : null;
         const targetSiteId = targetSiteNode ? targetSiteNode.id() : null;
+        const targetBuildingId = targetBuildingNode ? targetBuildingNode.id() : null;
 
         const targetVillager = villagers.find(v => v.id === targetVillagerId);
         const targetMine = goldMines.find(m => m.id === targetMineId);
         const targetSite = constructionSites.find(s => s.id === targetSiteId);
+        const targetBuilding = buildings.find(b => b.id === targetBuildingId);
         
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
                 if (v.isSelected && v.task !== 'dead') {
                     setPopup(null);
+                    setBuildingPopup(null);
                     if (targetMine) {
                         const dx = targetMine.x - v.x;
                         const dy = targetMine.y - v.y;
@@ -366,7 +426,7 @@ const TestMapPage = () => {
                          const targetY = v.y + dy * ratio;
                          return { ...v, task: 'moving', targetX, targetY, targetId: targetSiteId };
                     } else if (targetVillager && targetVillager.id !== v.id) {
-                        // Attack command
+                        // Attack villager command
                         const dx = targetVillager.x - v.x;
                         const dy = targetVillager.y - v.y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -378,6 +438,19 @@ const TestMapPage = () => {
                             finalTargetY = v.y + dy * ratio;
                         }
                         return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetVillagerId };
+                    } else if (targetBuilding) {
+                         // Attack building command
+                        const dx = targetBuilding.x - v.x;
+                        const dy = targetBuilding.y - v.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        let finalTargetX = targetBuilding.x;
+                        let finalTargetY = targetBuilding.y;
+                        if (distance > ATTACK_DISTANCE) {
+                            const ratio = (distance - ATTACK_DISTANCE) / distance;
+                            finalTargetX = v.x + dx * ratio;
+                            finalTargetY = v.y + dy * ratio;
+                        }
+                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetBuildingId };
                     } else {
                          // Move command
                         return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
@@ -389,7 +462,7 @@ const TestMapPage = () => {
     };
 
     const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        // Handle popup clicks
+        // Handle villager popup clicks
         if (popup?.visible) {
              const name = e.target.name();
              if (name === 'build-button') {
@@ -403,10 +476,43 @@ const TestMapPage = () => {
              }
              if (name?.startsWith('build-type-')) {
                  const buildingType = name.replace('build-type-', '') as BuildingType;
-                 setPlacementMode({ active: true, initiatorId: popup.villagerId, buildingType });
-                 setPopup(null);
+                 const cost = buildingStats[buildingType].cost;
+                 const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
+                 if (canAfford) {
+                    setPlacementMode({ active: true, initiatorId: popup.villagerId, buildingType });
+                    setPopup(null);
+                 } else {
+                     addToLog("Not enough resources!");
+                 }
                  return;
              }
+        }
+        // Handle building popup clicks
+        if (buildingPopup?.visible) {
+            const name = e.target.name();
+            if (name === 'demolish-button') {
+                const building = buildings.find(b => b.id === buildingPopup.buildingId);
+                if (building) {
+                    const cost = buildingStats[building.type].cost;
+                    const refund = Object.entries(cost).reduce((acc, [res, amount]) => {
+                        acc[res as keyof Resources] = Math.floor((amount || 0) / 2);
+                        return acc;
+                    }, {} as Partial<Resources>);
+                    
+                    setResources(prev => {
+                        const newRes = { ...prev };
+                        for (const key in refund) {
+                            newRes[key as keyof Resources] += refund[key as keyof Resources] || 0;
+                        }
+                        return newRes;
+                    });
+                    
+                    setBuildings(bs => bs.filter(b => b.id !== building.id));
+                    addToLog(`Demolished ${building.type}. Refunded ${Object.entries(refund).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
+                }
+                setBuildingPopup(null);
+                return;
+            }
         }
     };
 
@@ -419,22 +525,40 @@ const TestMapPage = () => {
         
         // If in placement mode, place the object
         if (placementMode?.active && placementMode.buildingType) {
-            const siteId = `site-${Date.now()}`;
-            setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, progress: 0, builderId: null, startTime: Date.now() }]);
-            
-            // Auto-assign the initiator to build
-             if (placementMode.initiatorId) {
-                const siteX = pos.x, siteY = pos.y;
-                setVillagers(vs => vs.map(v => {
-                    if (v.id === placementMode.initiatorId) {
-                        const dx = siteX - v.x; const dy = siteY - v.y;
-                        const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
-                        const ratio = dist > standoff ? (dist - standoff)/dist : 0;
-                        return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+            const stats = buildingStats[placementMode.buildingType];
+            const cost = stats.cost;
+
+            const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
+
+            if (canAfford) {
+                setResources(prev => {
+                    const newRes = { ...prev };
+                    for (const key in cost) {
+                        newRes[key as keyof Resources] -= cost[key as keyof Resources] || 0;
                     }
-                    return v;
-                }));
-             }
+                    return newRes;
+                });
+
+                const siteId = `site-${Date.now()}`;
+                setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, progress: 0, builderId: null, startTime: Date.now(), cost }]);
+                
+                // Auto-assign the initiator to build
+                if (placementMode.initiatorId) {
+                    const siteX = pos.x, siteY = pos.y;
+                    setVillagers(vs => vs.map(v => {
+                        if (v.id === placementMode.initiatorId) {
+                            const dx = siteX - v.x; const dy = siteY - v.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
+                            const ratio = dist > standoff ? (dist - standoff)/dist : 0;
+                            return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+                        }
+                        return v;
+                    }));
+                }
+                addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}`);
+            } else {
+                 addToLog("Not enough resources to build!");
+            }
              setPlacementMode({ active: false, initiatorId: null, buildingType: null });
             return;
         }
@@ -462,10 +586,12 @@ const TestMapPage = () => {
         // If it was a small drag, treat as a click
         if (dragDistance < 5) {
             const clickedVillagerNode = getVillagerNode(e.target);
-            const clickedId = clickedVillagerNode?.id();
+            const clickedBuildingNode = getBuildingNode(e.target);
+            const clickedId = clickedVillagerNode?.id() || clickedBuildingNode?.id();
 
             // Clicked on a villager
             if (clickedVillagerNode && clickedId) {
+                setBuildingPopup(null);
                 setVillagers(v => v.map(villager => {
                     if (isShiftPressed) {
                         return villager.id === clickedId ? { ...villager, isSelected: !villager.isSelected } : villager;
@@ -478,17 +604,26 @@ const TestMapPage = () => {
                 } else {
                     setPopup(null);
                 }
+            } else if (clickedBuildingNode && clickedId) {
+                 // Clicked on a building
+                 setPopup(null);
+                 setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
+                 if (pos) {
+                    setBuildingPopup({ visible: true, x: pos.x, y: pos.y - 40, buildingId: clickedId });
+                 }
             } else {
-                // Clicked on empty space, deselect all and hide popup
+                // Clicked on empty space, deselect all and hide popups
                 const clickedOnPopup = isClickOnPopup(e.target);
                 if (!isShiftPressed && !clickedOnPopup) {
                     setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
                     setPopup(null);
+                    setBuildingPopup(null);
                 }
             }
         } else {
             // It was a drag selection
             setPopup(null);
+            setBuildingPopup(null);
             const x1 = Math.min(selX1, selX2);
             const y1 = Math.min(selY1, selY2);
             const x2 = Math.max(selX1, selX2);
@@ -518,18 +653,19 @@ const TestMapPage = () => {
                 const targetIsVillager = currentVillagers.some(tv => tv.id === v.targetId);
                 const targetIsMine = goldMines.some(m => m.id === v.targetId);
                 const targetIsSite = constructionSites.some(s => s.id === v.targetId);
+                const targetIsBuilding = buildings.some(b => b.id === v.targetId);
                 
-                if (targetIsVillager) newTask = 'attacking';
+                if (targetIsVillager || targetIsBuilding) newTask = 'attacking';
                 else if (targetIsMine) newTask = 'mining';
                 else if (targetIsSite) {
                     newTask = 'building';
-                    setConstructionSites(cs => cs.map(s => s.id === v.targetId ? { ...s, builderId: v.id } : s));
+                    setConstructionSites(cs => cs.map(s => s.id === v.targetId ? { ...s, builderId: v.id, startTime: s.startTime || Date.now() } : s));
                 }
 
                 return { ...v, task: newTask, x: newPosition.x, y: newPosition.y };
             })
         );
-    }, [goldMines, constructionSites]);
+    }, [goldMines, constructionSites, buildings]);
 
     const handleMouseEnterEnemy = (isEnemy: boolean) => setIsHoveringEnemy(isEnemy);
     
@@ -563,7 +699,7 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
-                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
+                <h1 className="text-3xl font-serif text-brand-gold">Resource & HP Test Map</h1>
                 <p className="text-parchment-dark mb-4 text-sm">Click villager for options. Drag to select. Right-click to move/attack/build.</p>
             </div>
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
@@ -572,6 +708,12 @@ const TestMapPage = () => {
                     {log.map((entry, i) => (
                         <p key={i} className="truncate">{entry}</p>
                     ))}
+                </div>
+                 <div className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-lg text-sm z-10 font-mono">
+                    <h3 className="font-bold border-b mb-1">Resources</h3>
+                    <p>Wood: {resources.wood}</p>
+                    <p>Gold: {resources.gold}</p>
+                    <p>Stone: {resources.stone}</p>
                 </div>
                  <Stage 
                     ref={stageRef} width={MAP_WIDTH_CELLS * GRID_SIZE} height={MAP_HEIGHT_CELLS * GRID_SIZE} className="mx-auto" 
@@ -592,7 +734,17 @@ const TestMapPage = () => {
                         {goldMines.map(mine => <AnimatedGoldMine key={mine.id} id={mine.id} name="gold-mine" x={mine.x} y={mine.y} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} /> )}
                         {buildings.map(building => {
                             const BuildingComponent = BuildingComponents[building.type];
-                            return <BuildingComponent key={building.id} x={building.x} y={building.y} />
+                            return (
+                                <Group key={building.id} id={building.id} name="building" x={building.x} y={building.y} onMouseEnter={() => handleMouseEnterEnemy(true)} onMouseLeave={() => handleMouseEnterEnemy(false)}>
+                                    <BuildingComponent />
+                                    {building.hp < building.maxHp && (
+                                        <Group y={-60}>
+                                            <Rect x={-30} y={0} width={60} height={8} fill="#3c3836" />
+                                            <Rect x={-30} y={0} width={60 * (building.hp / building.maxHp)} height={8} fill="#fb4934" />
+                                        </Group>
+                                    )}
+                                </Group>
+                            );
                         })}
                         {constructionSites.map(site => {
                             const BuildingComponent = BuildingComponents[site.type];
@@ -617,13 +769,18 @@ const TestMapPage = () => {
                          {popup?.visible && (
                             popup.showBuildMenu ? (
                                 <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
-                                    <Rect width={100} height={buildingTypes.length * 22 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
-                                    {buildingTypes.map((building, index) => (
-                                        <Group key={building.id} y={index * 22 + 5}>
-                                            <Rect name={`build-type-${building.id}`} x={5} y={0} width={90} height={20} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
-                                            <Text text={building.name} x={10} y={3} fill="#fbf1c7" listening={false} fontSize={12} />
-                                        </Group>
-                                    ))}
+                                     <Rect width={150} height={Object.keys(buildingStats).length * 28 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                     {Object.entries(buildingStats).map(([type, stats], index) => {
+                                        const canAfford = Object.entries(stats.cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
+                                        const costString = Object.entries(stats.cost).map(([res,amt]) => `${amt}${res.substring(0,1)}`).join(' ');
+                                        return (
+                                            <Group key={type} y={index * 28 + 5}>
+                                                <Rect name={`build-type-${type}`} x={5} y={0} width={140} height={26} fill={canAfford ? "#504945" : "#282828"} cornerRadius={3} onMouseEnter={() => canAfford && handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                                <Text text={`${stats.name}`} x={10} y={2} fill={canAfford ? "#fbf1c7" : "#928374"} listening={false} fontSize={12} />
+                                                <Text text={costString} x={10} y={14} fill={canAfford ? "#bdae93" : "#665c54"} listening={false} fontSize={10} />
+                                            </Group>
+                                        )
+                                     })}
                                 </Group>
                             ) : (
                                 <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
@@ -635,6 +792,19 @@ const TestMapPage = () => {
                                 </Group>
                             )
                          )}
+                         {buildingPopup?.visible && (() => {
+                            const building = buildings.find(b => b.id === buildingPopup.buildingId);
+                            if (!building) return null;
+                            return (
+                                <Group x={buildingPopup.x} y={buildingPopup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
+                                    <Rect width={100} height={60} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                    <Text text={`${buildingStats[building.type].name}`} x={10} y={8} fill="#fbf1c7" fontSize={12} fontStyle="bold" />
+                                    <Text text={`HP: ${building.hp}/${building.maxHp}`} x={10} y={22} fill="#ebdbb2" fontSize={10} />
+                                    <Rect name="demolish-button" x={5} y={38} width={90} height={18} fill="#7c1e19" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Demolish" x={25} y={41} fill="#fbf1c7" fontSize={10} listening={false}/>
+                                </Group>
+                            );
+                         })()}
                     </Layer>
                 </Stage>
             </div>
@@ -644,3 +814,5 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
+
+    

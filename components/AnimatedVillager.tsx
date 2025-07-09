@@ -43,13 +43,13 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     useEffect(() => {
         const node = mainGroupRef.current;
         if (!node) return;
-        let isCancelled = false;
 
-        // Stop any previous tween
+        // Clean up any existing tween before starting a new one.
         if (movementTweenRef.current) {
             movementTweenRef.current.destroy();
+            movementTweenRef.current = null;
         }
-        
+
         if (task === 'moving') {
             const currentPos = node.position();
             const distance = Math.sqrt(Math.pow(targetX - currentPos.x, 2) + Math.pow(targetY - currentPos.y, 2));
@@ -61,9 +61,8 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                     x: targetX,
                     y: targetY,
                     onFinish: () => {
-                        if (!isCancelled) {
-                            onMoveEnd({ x: targetX, y: targetY });
-                        }
+                        movementTweenRef.current = null; // Null it out when finished
+                        onMoveEnd({ x: targetX, y: targetY });
                     },
                 });
                 movementTweenRef.current.play();
@@ -71,14 +70,16 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                  onMoveEnd({ x: targetX, y: targetY });
             }
         } else {
+             // If not moving, ensure position is correct and no tween is running.
              node.x(targetX);
              node.y(targetY);
         }
 
         return () => {
-            isCancelled = true;
+            // Cleanup on unmount or before next effect run
             if (movementTweenRef.current) {
                 movementTweenRef.current.destroy();
+                movementTweenRef.current = null;
             }
         };
 
@@ -169,7 +170,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           leftArmRef={leftArmRef}
           rightArmRef={rightArmRef}
           leftLegRef={leftLegRef}
-          rightLegRef={rightLegRef}
+          rightLegRef={rightLeggRef}
         />
       </Group>
     );

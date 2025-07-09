@@ -170,7 +170,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           leftArmRef={leftArmRef}
           rightArmRef={rightArmRef}
           leftLegRef={leftLegRef}
-          rightLegRef={rightLeggRef}
+          rightLegRef={rightLegRef}
         />
       </Group>
     );

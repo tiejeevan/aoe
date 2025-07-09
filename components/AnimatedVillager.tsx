@@ -1,7 +1,7 @@
 'use client';
 
 import React, { forwardRef, useEffect, useRef } from 'react';
-import { Group, Rect, Circle, Line } from 'react-konva';
+import { Group, Rect, Circle, Line, Ellipse } from 'react-konva';
 import Konva from 'konva';
 
 const scale = 0.07;
@@ -12,10 +12,11 @@ function easeInOutQuad(t: number) {
 
 interface AnimatedVillagerProps extends Konva.GroupConfig {
   isMoving: boolean;
+  isSelected: boolean;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ isMoving, ...groupProps }, ref) => {
+  ({ isMoving, isSelected, ...groupProps }, ref) => {
     const leftUpperArm = useRef<Konva.Rect>(null);
     const leftLowerArm = useRef<Konva.Rect>(null);
     const rightUpperArm = useRef<Konva.Rect>(null);
@@ -96,6 +97,18 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
 
     return (
       <Group ref={ref} {...groupProps}>
+        {/* Selection Indicator */}
+        {isSelected && (
+            <Ellipse
+                y={100 * scale}
+                radiusX={60 * scale}
+                radiusY={20 * scale}
+                stroke="#d79921"
+                strokeWidth={2}
+                dash={[10, 5]}
+            />
+        )}
+        
         {/* Torso */}
         <Rect
           ref={torso}

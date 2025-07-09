@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Circle, Group } from 'react-konva';
+import { Stage, Layer, Rect, Group } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 
@@ -30,19 +30,13 @@ const TestMapPage = () => {
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
     const [buildingPanelPosition, setBuildingPanelPosition] = useState<{ x: number, y: number } | null>(null);
     
-    // --- Unit State ---
     const [isUnitSelected, setIsUnitSelected] = useState(false);
     const [unitActionPanel, setUnitActionPanel] = useState<{ x: number, y: number } | null>(null);
     const [isMoveMode, setIsMoveMode] = useState(false);
     const [isMoving, setIsMoving] = useState(false);
 
-    // --- Konva Refs ---
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRef = useRef<Konva.Group>(null);
-    const leftLegRef = useRef<Konva.Rect>(null);
-    const rightLegRef = useRef<Konva.Rect>(null);
-    const leftArmRef = useRef<Konva.Rect>(null);
-    const rightArmRef = useRef<Konva.Rect>(null);
     const animationRef = useRef<Konva.Animation | null>(null);
 
     useEffect(() => {
@@ -53,22 +47,13 @@ const TestMapPage = () => {
         if (!isClient || !villagerRef.current) return;
 
         const villagerNode = villagerRef.current;
-        const leftLeg = leftLegRef.current;
-        const rightLeg = rightLegRef.current;
-        const leftArm = leftArmRef.current;
-        const rightArm = rightArmRef.current;
         const layer = villagerNode.getLayer();
         if (!layer) return;
-
-        const scale = 0.1;
-        const walkAmplitude = 5 * scale;
-        const walkPeriod = 400; // ms for a full step cycle
-        const armAmplitude = 25; // degrees
 
         if (animationRef.current) animationRef.current.stop();
         
         animationRef.current = new Konva.Animation((frame) => {
-            if (!frame || !villagerNode || !leftLeg || !rightLeg || !leftArm || !rightArm) return;
+            if (!frame || !villagerNode) return;
 
             const targetX = targetPosition.x * GRID_SIZE + GRID_SIZE / 2;
             const targetY = targetPosition.y * GRID_SIZE + GRID_SIZE / 2;
@@ -82,10 +67,6 @@ const TestMapPage = () => {
             if (distance < 5) {
                 if (isMoving) {
                     setIsMoving(false);
-                    leftLeg.y(20 * scale);
-                    rightLeg.y(20 * scale);
-                    leftArm.rotation(0);
-                    rightArm.rotation(0);
                 }
                 return;
             } 
@@ -95,12 +76,6 @@ const TestMapPage = () => {
             const moveDistance = UNIT_SPEED * (frame.timeDiff / 1000);
             const ratio = Math.min(1, moveDistance / distance);
             villagerNode.position({ x: currentX + dx * ratio, y: currentY + dy * ratio });
-
-            const angle = (frame.time / walkPeriod) * 2 * Math.PI;
-            leftLeg.y((20 * scale) + Math.sin(angle) * walkAmplitude);
-            rightLeg.y((20 * scale) - Math.sin(angle) * walkAmplitude);
-            leftArm.rotation(Math.sin(angle) * armAmplitude * -1);
-            rightArm.rotation(Math.sin(angle) * armAmplitude);
 
         }, layer);
 
@@ -137,7 +112,7 @@ const TestMapPage = () => {
             const stagePos = stage.container().getBoundingClientRect();
             setUnitActionPanel({ 
                 x: pos.x + stagePos.left, 
-                y: pos.y + stagePos.top - (110) // Position above the villager
+                y: pos.y + stagePos.top - (60)
             });
         }
     };
@@ -176,10 +151,15 @@ const TestMapPage = () => {
                     <Layer>
                         <Rect x={0} y={0} width={MAP_WIDTH_CELLS*GRID_SIZE} height={MAP_HEIGHT_CELLS*GRID_SIZE} name="grid-background" listening={true}/>
                         {renderGrid()}
-                        {buildings.map(building => <Rect key={building.id} x={building.x*GRID_SIZE} y={building.y*GRID_SIZE} width={building.width*GRID_SIZE} height={building.height*GRID_SIZE} fill="#a89984" stroke="#fbf1c7" strokeWidth={2} shadowBlur={10} shadowColor="black" draggable onDragEnd={(e)=>{const newX=Math.round(e.target.x()/GRID_SIZE);const newY=Math.round(e.target.y()/GRID_SIZE);e.target.position({x:newX*GRID_SIZE,y:newY*GRID_SIZE});setBuildings(p=>p.map(b=>b.id===building.id?{...b,x:newX,y:newY}:b));}} onMouseEnter={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='grab';}} onMouseLeave={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='default';}} onClick={(e)=>handleBuildingClick(building,e)} onTap={(e)=>handleBuildingClick(building,e)} listening={true}/>)}
-                        <Group x={5*GRID_SIZE+GRID_SIZE/2} y={5*GRID_SIZE+GRID_SIZE/2} onClick={handleUnitClick} onTap={handleUnitClick} listening={true} draggable={true} onDragEnd={(e)=>{const nX=Math.round(e.target.x()/GRID_SIZE);const nY=Math.round(e.target.y()/GRID_SIZE);setTargetPosition({x:nX,y:nY});e.target.position({x:nX*GRID_SIZE+GRID_SIZE/2,y:nY*GRID_SIZE+GRID_SIZE/2});}}>
-                            <AnimatedVillager ref={villagerRef} isSelected={isUnitSelected} leftLegRef={leftLegRef} rightLegRef={rightLegRef} leftArmRef={leftArmRef} rightArmRef={rightArmRef}/>
-                        </Group>
+                        {buildings.map(building => <Rect key={building.id} x={building.x*GRID_SIZE} y={y*GRID_SIZE} width={building.width*GRID_SIZE} height={building.height*GRID_SIZE} fill="#a89984" stroke="#fbf1c7" strokeWidth={2} shadowBlur={10} shadowColor="black" draggable onDragEnd={(e)=>{const newX=Math.round(e.target.x()/GRID_SIZE);const newY=Math.round(e.target.y()/GRID_SIZE);e.target.position({x:newX*GRID_SIZE,y:newY*GRID_SIZE});setBuildings(p=>p.map(b=>b.id===building.id?{...b,x:newX,y:newY}:b));}} onMouseEnter={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='grab';}} onMouseLeave={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='default';}} onClick={(e)=>handleBuildingClick(building,e)} onTap={(e)=>handleBuildingClick(building,e)} listening={true}/>)}
+                        <AnimatedVillager
+                            ref={villagerRef}
+                            isMoving={isMoving}
+                            x={5 * GRID_SIZE + GRID_SIZE / 2}
+                            y={5 * GRID_SIZE + GRID_SIZE / 2}
+                            onClick={handleUnitClick}
+                            onTap={handleUnitClick}
+                        />
                     </Layer>
                 </Stage>
                  {selectedBuilding && buildingPanelPosition && (

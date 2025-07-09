@@ -96,7 +96,7 @@ const TestMapPage = () => {
     }, [isClient, villagers, updateVillagersMovingState]);
 
     const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        // Ignore if not left-clicking on the background
+        // Only start selection on left-click on the stage background
         if (e.evt.button !== 0 || e.target !== stageRef.current) return;
 
         isSelecting.current = true;
@@ -120,29 +120,40 @@ const TestMapPage = () => {
 
     const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
         isSelecting.current = false;
-        if (e.evt.button !== 0 || !selectionRect) {
-            setSelectionRect(null);
+        const selectionBox = selectionRectRef.current?.getClientRect();
+        setSelectionRect(null); // Hide rect immediately
+
+        if (e.evt.button !== 0 || !selectionBox) {
             return;
         }
 
-        setTimeout(() => { // Timeout to allow click handlers to fire first
-            const selectionBox = selectionRectRef.current?.getClientRect();
-            if (!selectionBox || (Math.abs(selectionBox.width) < 5 && Math.abs(selectionBox.height) < 5)) {
-                setSelectedVillagerIds(new Set());
-                setSelectionRect(null);
-                return;
-            }
+        const isDrag = Math.abs(selectionBox.width) > 5 || Math.abs(selectionBox.height) > 5;
 
+        if (isDrag) {
             const newSelectedIds = new Set<string>();
             Object.values(villagerRefs.current).forEach(node => {
                 if (node && Konva.Util.haveIntersection(selectionBox, node.getClientRect())) {
                     newSelectedIds.add(node.id());
                 }
             });
-            setSelectedVillagerIds(newSelectedIds);
-            setSelectionRect(null);
-        }, 50);
+
+            if (e.evt.shiftKey) {
+                setSelectedVillagerIds(prev => {
+                    const combined = new Set(prev);
+                    newSelectedIds.forEach(id => combined.add(id));
+                    return combined;
+                });
+            } else {
+                setSelectedVillagerIds(newSelectedIds);
+            }
+        } else {
+            // This is a click, not a drag. Deselect if clicking on background.
+            if (e.target === stageRef.current) {
+                setSelectedVillagerIds(new Set());
+            }
+        }
     };
+
 
     const handleUnitClick = (e: Konva.KonvaEventObject<MouseEvent>, villagerId: string) => {
         e.evt.stopPropagation();

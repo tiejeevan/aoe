@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Group } from 'react-konva';
+import { Stage, Layer, Rect, Group, Label, Tag, Text } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import AnimatedGoldMine from '../../../components/AnimatedGoldMine';
@@ -23,6 +23,13 @@ interface Villager {
     targetMineId: string | null;
 }
 
+interface GoldMineData {
+    id: string;
+    x: number;
+    y: number;
+    amount: number;
+}
+
 const PickaxeIcon = React.forwardRef<Konva.Group, Konva.GroupConfig>((props, ref) => (
     <Group {...props} ref={ref} listening={false} opacity={0.8}>
       <Rect x={-12} y={-12} width={24} height={24} fill="#201c1a" cornerRadius={4} />
@@ -38,10 +45,11 @@ PickaxeIcon.displayName = 'PickaxeIcon';
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
     const [villagers, setVillagers] = useState<Villager[]>([]);
-    const [goldMines, setGoldMines] = useState<{ id: string; x: number; y: number }[]>([]);
+    const [goldMines, setGoldMines] = useState<GoldMineData[]>([]);
     const [selectedVillagerIds, setSelectedVillagerIds] = useState<Set<string>>(new Set());
     const [selectionRect, setSelectionRect] = useState<{ x: number, y: number, width: number, height: number, visible: boolean } | null>(null);
     const [hoveredMineId, setHoveredMineId] =useState<string|null>(null);
+    const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, text: '' });
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Record<string, Konva.Group>>({});
@@ -63,7 +71,7 @@ const TestMapPage = () => {
         setVillagers(initialVillagers);
         
         // Initialize gold mines
-        setGoldMines([{ id: 'gold-mine-1', x: 25 * GRID_SIZE, y: 12 * GRID_SIZE }]);
+        setGoldMines([{ id: 'gold-mine-1', x: 25 * GRID_SIZE, y: 12 * GRID_SIZE, amount: 5000 }]);
     }, []);
 
     const updateVillagersState = useCallback(() => {
@@ -119,6 +127,37 @@ const TestMapPage = () => {
                 const ratio = Math.min(1, moveDistance / distance);
                 villagerNode.position({ x: currentX + dx * ratio, y: currentY + dy * ratio });
             });
+
+             const minersPerMine: Record<string, number> = {};
+             villagers.forEach(v => {
+                 if (v.task === 'mining' && v.targetMineId) {
+                     minersPerMine[v.targetMineId] = (minersPerMine[v.targetMineId] || 0) + 1;
+                 }
+             });
+
+             if (Object.keys(minersPerMine).length > 0) {
+                 const MINE_RATE_PER_VILLAGER = 5; // Gold per second per villager
+                 setGoldMines(currentMines =>
+                     currentMines.map(mine => {
+                         const miners = minersPerMine[mine.id] || 0;
+                         if (miners === 0 || mine.amount <= 0) return mine;
+
+                         const minedAmount = miners * MINE_RATE_PER_VILLAGER * (frame.timeDiff / 1000);
+                         const newAmount = mine.amount - minedAmount;
+                         
+                         if (newAmount <= 0) {
+                             setVillagers(currentVillagers =>
+                                 currentVillagers.map(v => v.targetMineId === mine.id ? { ...v, task: 'idle', targetMineId: null } : v)
+                             );
+                             setTooltip(prev => ({...prev, visible: false})); // Hide tooltip when mine is depleted
+                         }
+
+                         return { ...mine, amount: Math.max(0, newAmount) };
+                     })
+                 );
+             }
+
+
             updateVillagersState();
 
         }, layer);
@@ -128,8 +167,25 @@ const TestMapPage = () => {
 
     }, [isClient, villagers, updateVillagersState]);
 
+    const handleMineClick = (mine: GoldMineData, e: Konva.KonvaEventObject<MouseEvent>) => {
+        e.evt.stopPropagation();
+        setTooltip({
+            visible: true,
+            x: mine.x,
+            y: mine.y - 90, // Position above the mine
+            text: `Gold: ${Math.floor(mine.amount)}`
+        });
+    };
+
     const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (e.evt.button !== 0 || e.target !== stageRef.current) return;
+        if (e.evt.button !== 0) return;
+        
+        // Hide tooltip on any click that isn't the tooltip itself
+        if (!(e.target instanceof Konva.Tag) && !(e.target instanceof Konva.Text)) {
+            setTooltip({ ...tooltip, visible: false });
+        }
+
+        if (e.target !== stageRef.current) return;
 
         isSelecting.current = true;
         const pos = stageRef.current.getPointerPosition();
@@ -194,6 +250,7 @@ const TestMapPage = () => {
             currentlySelected.add(villagerId);
         }
         setSelectedVillagerIds(currentlySelected);
+        setTooltip({ ...tooltip, visible: false });
     };
 
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
@@ -212,6 +269,11 @@ const TestMapPage = () => {
 
         if (mineGroup) {
             targetMineId = mineGroup.id();
+            const mineData = goldMines.find(m => m.id === targetMineId);
+            if (mineData && mineData.amount <= 0) {
+                 // Don't assign to depleted mine
+                 return;
+            }
             targetX = mineGroup.x();
             targetY = mineGroup.y();
             targetRadius = 50; 
@@ -237,7 +299,7 @@ const TestMapPage = () => {
 
     const renderGrid = () => Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => {
         const x = i % MAP_WIDTH_CELLS;
-        const y = Math.floor(i / MAP_WIDTH_CELLS);
+        const y = Math.floor(i / MAP_HEIGHT_CELLS);
         return <Rect key={`${x}-${y}`} x={x*GRID_SIZE} y={y*GRID_SIZE} width={GRID_SIZE} height={GRID_SIZE} fill="#504945" stroke="#665c54" strokeWidth={1} listening={false}/>
     });
     
@@ -246,7 +308,7 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">Resource Interaction Test Map</h1>
-            <p className="text-parchment-dark mb-4 text-sm">Drag to select. Right-click to move or target the mine.</p>
+            <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move. Click mine for info.</p>
             <div className="w-full max-w-5xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
                     ref={stageRef} 
@@ -268,6 +330,8 @@ const TestMapPage = () => {
                                 ref={node => { if(node) goldMineRefs.current[mine.id] = node; }}
                                 x={mine.x}
                                 y={mine.y}
+                                onClick={(e) => handleMineClick(mine, e)}
+                                onTap={(e) => handleMineClick(mine, e as any)}
                                 onMouseEnter={() => {if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id)}}
                                 onMouseLeave={() => setHoveredMineId(null)}
                             />
@@ -311,6 +375,12 @@ const TestMapPage = () => {
                                 x={goldMines.find(m => m.id === hoveredMineId)!.x}
                                 y={goldMines.find(m => m.id === hoveredMineId)!.y - 60}
                             />
+                        )}
+                         {tooltip.visible && (
+                            <Label x={tooltip.x} y={tooltip.y} opacity={0.9} listening={false} >
+                                <Tag fill='#201c1a' pointerDirection='down' pointerWidth={10} pointerHeight={10} lineJoin='round' cornerRadius={5} shadowColor='black' shadowBlur={5} shadowOpacity={0.4} />
+                                <Text text={tooltip.text} fontFamily='Quattrocento Sans, sans-serif' fontSize={16} padding={8} fill='#fbf1c7' />
+                            </Label>
                         )}
                     </Layer>
                 </Stage>

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Circle } from 'react-konva';
+import { Stage, Layer, Rect, Image } from 'react-konva';
 import Konva from 'konva';
 
 const GRID_SIZE = 30;
@@ -29,13 +29,23 @@ const TestMapPage = () => {
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
     const [panelPosition, setPanelPosition] = useState<{ x: number, y: number } | null>(null);
     const [isUnitSelected, setIsUnitSelected] = useState(false);
+    const [villagerImage, setVillagerImage] = useState<HTMLImageElement | null>(null);
     
     const stageRef = useRef<Konva.Stage>(null);
-    const unitRef = useRef<Konva.Circle>(null);
+    const unitRef = useRef<Konva.Image>(null);
     const animationRef = useRef<Konva.Animation | null>(null);
 
     useEffect(() => {
         setIsClient(true);
+        
+        // Create Villager Icon from SVG
+        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#83a598" width="24" height="24"><path d="M12 5.5a2.5 2.5 0 010 5 2.5 2.5 0 010-5zM12 15c-3.87 0-7 1.57-7 3.5V20h14v-1.5c0-1.93-3.13-3.5-7-3.5z"/></svg>`;
+        const image = new window.Image();
+        image.src = `data:image/svg+xml;base64,${window.btoa(svgString)}`;
+        image.onload = () => {
+            setVillagerImage(image);
+        };
+
     }, []);
 
     useEffect(() => {
@@ -150,11 +160,13 @@ const TestMapPage = () => {
         )
     }
 
+    const iconSize = GRID_SIZE * 0.8;
+
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">High-Performance RTS Map</h1>
             <p className="text-parchment-dark mb-4 text-sm">
-                Click a unit to select it, then click a tile to move. Click a building for actions.
+                Click the villager to select it, then click a tile to move. Click a building for actions.
             </p>
             <div className="w-full max-w-4xl aspect-[3/2] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage
@@ -187,22 +199,27 @@ const TestMapPage = () => {
                                 shadowColor="black"
                                 onClick={(e) => handleBuildingClick(building, e)}
                                 onTap={(e) => handleBuildingClick(building, e)}
+                                listening={true}
                             />
                         ))}
                         
-                        <Circle
+                        <Image
                             ref={unitRef}
+                            image={villagerImage}
                             x={5 * GRID_SIZE + GRID_SIZE / 2}
                             y={5 * GRID_SIZE + GRID_SIZE / 2}
-                            radius={GRID_SIZE / 3}
-                            fill="#83a598"
-                            stroke={isUnitSelected ? '#d79921' : '#fdf6e3'}
-                            strokeWidth={isUnitSelected ? 3 : 2}
-                            shadowBlur={isUnitSelected ? 10 : 5}
+                            width={iconSize}
+                            height={iconSize}
+                            offsetX={iconSize / 2}
+                            offsetY={iconSize / 2}
+                            stroke={isUnitSelected ? '#d79921' : undefined}
+                            strokeWidth={isUnitSelected ? 2 : 0}
                             shadowColor={isUnitSelected ? '#d79921' : '#458588'}
+                            shadowBlur={isUnitSelected ? 10 : 5}
+                            shadowOpacity={0.7}
                             onClick={handleUnitClick}
                             onTap={handleUnitClick}
-                            listening={true} 
+                            listening={true}
                         />
                     </Layer>
                 </Stage>

@@ -25,8 +25,9 @@ const ATTACK_RANGE = 40;    // They can attack from this far away
 const ATTACK_COOLDOWN = 1000; // ms
 const DEATH_DURATION = 10000; // 10 seconds
 const BUILD_TIME = 10000; // 10 seconds in ms
+const TRAIN_VILLAGER_TIME = 30000; // 30 seconds in ms
 
-type BuildingType = 'hut' | 'barracks' | 'castle' | 'workshop' | 'researchLab';
+type BuildingType = 'hut' | 'barracks' | 'castle' | 'workshop' | 'researchLab' | 'townCenter';
 
 type Resources = {
     wood: number;
@@ -40,6 +41,7 @@ const buildingStats: Record<BuildingType, { name: string; cost: Partial<Resource
     castle: { name: 'Castle', cost: { stone: 250 }, hp: 2000 },
     workshop: { name: 'Workshop', cost: { wood: 125 }, hp: 400 },
     researchLab: { name: 'Research Lab', cost: { wood: 75, gold: 100 }, hp: 350 },
+    townCenter: { name: 'Town Center', cost: {}, hp: 5000, providesCapacity: 10 },
 };
 
 
@@ -82,6 +84,7 @@ interface Building {
     type: BuildingType;
     hp: number;
     maxHp: number;
+    training?: { startTime: number; duration: number } | null;
 }
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
@@ -162,6 +165,7 @@ const TestMapPage = () => {
     const [placementMode, setPlacementMode] = useState<{ active: boolean; type: 'build' | 'move'; initiatorId: string | null; buildingType: BuildingType | null; buildingId?: string; } | null>(null);
     const [previewPos, setPreviewPos] = useState<{x: number, y: number} | null>(null);
     const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; siteId: string; } | null>(null);
+    const [hoveredBuildingId, setHoveredBuildingId] = useState<string | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
     const lastTickRef = useRef<number>(Date.now());
@@ -173,6 +177,7 @@ const TestMapPage = () => {
         castle: Castle,
         workshop: Workshop,
         researchLab: ResearchLab,
+        townCenter: TownCenter,
     };
 
     // Initial setup on component mount
@@ -197,6 +202,19 @@ const TestMapPage = () => {
             };
         });
         setVillagers(initialVillagers);
+        
+        const tcStats = buildingStats.townCenter;
+        const initialTC: Building = {
+            id: 'town-center-1',
+            x: (MAP_WIDTH_CELLS * GRID_SIZE / 2),
+            y: (MAP_HEIGHT_CELLS * GRID_SIZE / 2),
+            type: 'townCenter',
+            hp: tcStats.hp,
+            maxHp: tcStats.hp,
+            training: null,
+        };
+        setBuildings([initialTC]);
+
         setGoldMines([{ id: 'gold-mine-1', x: 8 * GRID_SIZE, y: 12 * GRID_SIZE }]);
     }, []);
 
@@ -207,7 +225,7 @@ const TestMapPage = () => {
     
     // Recalculate population and capacity whenever villagers or buildings change
     useEffect(() => {
-        const newCapacity = 10 + buildings.reduce((acc, building) => {
+        const newCapacity = buildings.reduce((acc, building) => {
             return acc + (buildingStats[building.type].providesCapacity || 0);
         }, 0);
         
@@ -215,6 +233,25 @@ const TestMapPage = () => {
 
         setPopulation({ current: currentPop, capacity: newCapacity });
     }, [villagers, buildings]);
+
+    const handleCreateVillager = useCallback(() => {
+        if (villagers.filter(v => v.task !== 'dead').length >= population.capacity) {
+            addToLog("Not enough population capacity. Build more huts!");
+            return;
+        }
+
+        setVillagers(current => {
+            const newId = current.length > 0 ? Math.max(...current.map(v => parseInt(v.id.split('-')[1]))) + 1 : 1;
+            const newVillagerId = `villager-${newId}`;
+            const townCenter = buildings.find(b => b.type === 'townCenter');
+            const spawnX = (townCenter?.x || (MAP_WIDTH_CELLS * GRID_SIZE / 2)) + (Math.random() - 0.5) * 50;
+            const spawnY = (townCenter?.y || (MAP_HEIGHT_CELLS * GRID_SIZE / 2)) + 100;
+            const newVillager: Villager = { id: newVillagerId, name: `Villager ${newId}`, x: spawnX, y: spawnY, targetX: spawnX, targetY: spawnY, hp: MAX_HP, attack: ATTACK_POWER, targetId: null, attackLastTime: 0, task: 'idle', isSelected: false };
+            addToLog("A new villager has been trained!");
+            return [...current, newVillager];
+        });
+    }, [villagers, population.capacity, addToLog, buildings]);
+
 
     // Game Loop
     useEffect(() => {
@@ -330,6 +367,7 @@ const TestMapPage = () => {
                 const newSites = currentSites.map(site => {
                     if (site.builderIds.length > 0) {
                         siteUpdated = true;
+                        const workPerMs = 1 / BUILD_TIME;
                         const workThisTick = deltaTime * site.builderIds.length;
                         const newWorkApplied = site.workApplied + workThisTick;
 
@@ -347,17 +385,29 @@ const TestMapPage = () => {
                     return site;
                 }).filter(Boolean) as ConstructionSite[];
                 
-                if (siteUpdated) {
-                    return newSites;
-                }
-                return currentSites;
+                return siteUpdated ? newSites : currentSites;
             });
+            
+            // --- Training ---
+            setBuildings(currentBuildings => {
+                let buildingUpdated = false;
+                const newBuildings = currentBuildings.map(b => {
+                    if (b.training && now >= b.training.startTime + b.training.duration) {
+                        buildingUpdated = true;
+                        handleCreateVillager();
+                        return { ...b, training: null };
+                    }
+                    return b;
+                });
+                return buildingUpdated ? newBuildings : currentBuildings;
+            });
+
             requestAnimationFrame(gameLoop);
         };
 
         const animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isClient, villagers, buildings, addToLog]);
+    }, [isClient, villagers, buildings, addToLog, handleCreateVillager]);
 
 
     // Add keyboard listeners for panning
@@ -533,37 +583,52 @@ const TestMapPage = () => {
         // Handle building popup clicks
         if (buildingPopup?.visible) {
             const name = e.target.name();
+            const building = buildings.find(b => b.id === buildingPopup.buildingId);
+            if (!building) return;
+
             if (name === 'move-button') {
-                const building = buildings.find(b => b.id === buildingPopup.buildingId);
-                if (building) {
-                    setPlacementMode({ active: true, type: 'move', initiatorId: null, buildingType: building.type, buildingId: building.id });
-                    setBuildingPopup(null);
-                    addToLog(`Moving ${buildingStats[building.type].name}. Click to place.`);
-                }
+                setPlacementMode({ active: true, type: 'move', initiatorId: null, buildingType: building.type, buildingId: building.id });
+                setBuildingPopup(null);
+                addToLog(`Moving ${buildingStats[building.type].name}. Click to place.`);
                 return;
             }
             if (name === 'demolish-button') {
-                const building = buildings.find(b => b.id === buildingPopup.buildingId);
-                if (building) {
-                    const cost = buildingStats[building.type].cost;
-                    const refund = Object.entries(cost).reduce((acc, [res, amount]) => {
-                        acc[res as keyof Resources] = Math.floor((amount || 0) / 2);
-                        return acc;
-                    }, {} as Partial<Resources>);
-                    
-                    setResources(prev => {
-                        const newRes = { ...prev };
-                        for (const key in refund) {
-                            newRes[key as keyof Resources] += refund[key as keyof Resources] || 0;
-                        }
-                        return newRes;
-                    });
-                    
-                    setBuildings(bs => bs.filter(b => b.id !== building.id));
-                    addToLog(`Demolished ${building.type}. Refunded ${Object.entries(refund).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
+                if (building.type === 'townCenter') {
+                    addToLog("The Town Center cannot be demolished.");
+                    return;
                 }
+                const cost = buildingStats[building.type].cost;
+                const refund = Object.entries(cost).reduce((acc, [res, amount]) => {
+                    acc[res as keyof Resources] = Math.floor((amount || 0) / 2);
+                    return acc;
+                }, {} as Partial<Resources>);
+                
+                setResources(prev => {
+                    const newRes = { ...prev };
+                    for (const key in refund) {
+                        newRes[key as keyof Resources] += refund[key as keyof Resources] || 0;
+                    }
+                    return newRes;
+                });
+                
+                setBuildings(bs => bs.filter(b => b.id !== building.id));
+                addToLog(`Demolished ${buildingStats[building.type].name}. Refunded ${Object.entries(refund).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
                 setBuildingPopup(null);
                 return;
+            }
+            if (name === 'train-villager-button') {
+                 if (population.current >= population.capacity) {
+                    addToLog("Not enough population capacity. Build more huts!");
+                    return;
+                }
+                 if (building.training) {
+                     addToLog("Town Center is already training a villager.");
+                     return;
+                 }
+                 setBuildings(bs => bs.map(b => b.id === building.id ? {...b, training: { startTime: Date.now(), duration: TRAIN_VILLAGER_TIME }} : b));
+                 addToLog(`The Town Center has begun training a new villager. (${TRAIN_VILLAGER_TIME / 1000}s)`);
+                 setBuildingPopup(null);
+                 return;
             }
         }
     };
@@ -756,22 +821,6 @@ const TestMapPage = () => {
 
     const handleMouseEnterEnemy = (isEnemy: boolean) => setIsHoveringEnemy(isEnemy);
     
-    const handleCreateVillager = useCallback(() => {
-        if (villagers.filter(v => v.task !== 'dead').length >= population.capacity) {
-            addToLog("Not enough population capacity. Build more huts!");
-            return;
-        }
-
-        setVillagers(current => {
-            const newId = current.length > 0 ? Math.max(...current.map(v => parseInt(v.id.split('-')[1]))) + 1 : 1;
-            const newVillagerId = `villager-${newId}`;
-            const spawnX = (MAP_WIDTH_CELLS * GRID_SIZE / 2) + (Math.random() - 0.5) * 50;
-            const spawnY = (MAP_HEIGHT_CELLS * GRID_SIZE / 2) + 100;
-            const newVillager: Villager = { id: newVillagerId, name: `Villager ${newId}`, x: spawnX, y: spawnY, targetX: spawnX, targetY: spawnY, hp: MAX_HP, attack: ATTACK_POWER, targetId: null, attackLastTime: 0, task: 'idle', isSelected: false };
-            addToLog("A new villager has arrived!");
-            return [...current, newVillager];
-        });
-    }, [villagers, population.capacity, addToLog]);
     
     const handleMouseEnterClickable = (isClickable: boolean) => setIsHoveringClickable(isClickable);
 
@@ -816,7 +865,7 @@ const TestMapPage = () => {
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <div className="absolute top-2 left-2 bg-black/50 text-white p-2 rounded-lg text-xs w-96 z-10 font-mono">
                     <h3 className="font-bold border-b mb-1 text-base">Activity Log</h3>
-                    <div className="max-h-28 overflow-y-auto pr-2">
+                    <div className="h-28 overflow-y-auto pr-2">
                         {log.length === 0 ? (
                             <p className="text-gray-400 italic">No activity yet.</p>
                         ) : (
@@ -849,17 +898,22 @@ const TestMapPage = () => {
                 >
                     <Layer>
                         {renderGrid()}
-                        <TownCenter onClick={handleCreateVillager} onTap={handleCreateVillager} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
                         {goldMines.map(mine => <AnimatedGoldMine key={mine.id} id={mine.id} name="gold-mine" x={mine.x} y={mine.y} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} /> )}
                         {buildings.map(building => {
                             const BuildingComponent = BuildingComponents[building.type];
                             return (
-                                <Group key={building.id} id={building.id} name="building" x={building.x} y={building.y} onMouseEnter={() => handleMouseEnterEnemy(true)} onMouseLeave={() => handleMouseEnterEnemy(false)}>
+                                <Group key={building.id} id={building.id} name="building" x={building.x} y={building.y} onMouseEnter={() => { handleMouseEnterEnemy(true); setHoveredBuildingId(building.id); }} onMouseLeave={() => { handleMouseEnterEnemy(false); setHoveredBuildingId(null); }}>
                                     <BuildingComponent />
                                     {building.hp < building.maxHp && (
                                         <Group y={-60}>
                                             <Rect x={-30} y={0} width={60} height={8} fill="#3c3836" />
                                             <Rect x={-30} y={0} width={60 * (building.hp / building.maxHp)} height={8} fill="#fb4934" />
+                                        </Group>
+                                    )}
+                                    {building.training && hoveredBuildingId === building.id && (
+                                        <Group y={-70}>
+                                            <Rect x={-50} y={0} width={100} height={10} fill="#282828" stroke="#fbf1c7" strokeWidth={1} />
+                                            <Rect x={-50} y={0} width={100 * ((Date.now() - building.training.startTime) / building.training.duration)} height={10} fill="#458588" />
                                         </Group>
                                     )}
                                 </Group>
@@ -933,8 +987,8 @@ const TestMapPage = () => {
                          {popup?.visible && (
                             popup.showBuildMenu ? (
                                 <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
-                                     <Rect width={150} height={Object.keys(buildingStats).length * 28 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
-                                     {Object.entries(buildingStats).map(([type, stats], index) => {
+                                     <Rect width={150} height={Object.keys(buildingStats).filter(b => b !== 'townCenter').length * 28 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                     {Object.entries(buildingStats).filter(([type]) => type !== 'townCenter').map(([type, stats], index) => {
                                         const canAfford = Object.entries(stats.cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
                                         const costString = Object.entries(stats.cost).map(([res,amt]) => `${amt}${res.substring(0,1)}`).join(' ');
                                         return (
@@ -959,15 +1013,24 @@ const TestMapPage = () => {
                          {buildingPopup?.visible && (() => {
                             const building = buildings.find(b => b.id === buildingPopup.buildingId);
                             if (!building) return null;
+                            const isTownCenter = building.type === 'townCenter';
+                            const popupHeight = isTownCenter ? 100 : 80;
+
                             return (
-                                <Group x={buildingPopup.x} y={buildingPopup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
-                                    <Rect width={100} height={80} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                <Group x={buildingPopup.x} y={buildingPopup.y - (popupHeight/2)} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
+                                    <Rect width={100} height={popupHeight} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
                                     <Text text={`${buildingStats[building.type].name}`} x={10} y={8} fill="#fbf1c7" fontSize={12} fontStyle="bold" />
                                     <Text text={`HP: ${building.hp}/${building.maxHp}`} x={10} y={22} fill="#ebdbb2" fontSize={10} />
-                                    <Rect name="move-button" x={5} y={38} width={90} height={18} fill="#458588" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
-                                    <Text text="Move Building" x={15} y={41} fill="#fbf1c7" fontSize={10} listening={false}/>
-                                    <Rect name="demolish-button" x={5} y={58} width={90} height={18} fill="#7c1e19" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
-                                    <Text text="Demolish" x={25} y={61} fill="#fbf1c7" fontSize={10} listening={false}/>
+                                    {isTownCenter && (
+                                        <>
+                                            <Rect name="train-villager-button" x={5} y={38} width={90} height={18} fill="#458588" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                            <Text text="Train Villager" x={12} y={41} fill="#fbf1c7" fontSize={10} listening={false}/>
+                                        </>
+                                    )}
+                                    <Rect name="move-button" x={5} y={isTownCenter ? 58 : 38} width={90} height={18} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Move Building" x={15} y={isTownCenter ? 61 : 41} fill="#fbf1c7" fontSize={10} listening={false}/>
+                                    <Rect name="demolish-button" x={5} y={isTownCenter ? 78 : 58} width={90} height={18} fill={isTownCenter ? "#282828" : "#7c1e19"} cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Demolish" x={25} y={isTownCenter ? 81 : 61} fill={isTownCenter ? "#928374" : "#fbf1c7"} fontSize={10} listening={false}/>
                                 </Group>
                             );
                          })()}

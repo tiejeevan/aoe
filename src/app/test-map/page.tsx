@@ -65,6 +65,20 @@ const TestMapPage = () => {
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, []);
 
+    // Helper function to get the correct pointer position on the stage
+    const getStagePointerPosition = (): { x: number; y: number } | null => {
+        const stage = stageRef.current;
+        if (!stage) return null;
+        const pointer = stage.getPointerPosition();
+        if (!pointer) return null;
+
+        // Apply inverse transform to get the correct world coordinates
+        return {
+            x: (pointer.x - stage.x()) / stage.scaleX(),
+            y: (pointer.y - stage.y()) / stage.scaleY(),
+        };
+    };
+
     // Handle stage zoom
     const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
         e.evt.preventDefault();
@@ -86,9 +100,7 @@ const TestMapPage = () => {
     // Move selected villagers on right click
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
         e.evt.preventDefault();
-        const stage = stageRef.current;
-        if (!stage) return;
-        const pointerPos = stage.getPointerPosition();
+        const pointerPos = getStagePointerPosition();
         if (!pointerPos) return;
 
         setVillagers(currentVillagers =>
@@ -108,9 +120,7 @@ const TestMapPage = () => {
 
     const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (e.evt.button === 2) return; // Ignore right-click
-        const stage = stageRef.current;
-        if (!stage) return;
-        const pos = stage.getPointerPosition();
+        const pos = getStagePointerPosition();
         if (!pos) return;
         
         // If clicking on a villager, select just that one.
@@ -130,21 +140,20 @@ const TestMapPage = () => {
 
     const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (!selectionBox.visible || !mouseDownPos) return;
-        const stage = stageRef.current;
-        if (!stage) return;
-        const pos = stage.getPointerPosition();
+        const pos = getStagePointerPosition();
         if (!pos) return;
         setSelectionBox(prev => ({ ...prev, x2: pos.x, y2: pos.y }));
     };
 
     const handleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (mouseDownPos) { // This means a drag was started on the background
-            const x1 = Math.min(selectionBox.x1, selectionBox.x2);
-            const y1 = Math.min(selectionBox.y1, selectionBox.y2);
-            const x2 = Math.max(selectionBox.x1, selectionBox.x2);
-            const y2 = Math.max(selectionBox.y1, selectionBox.y2);
+            const { x1: selX1, y1: selY1, x2: selX2, y2: selY2 } = selectionBox;
+            const x1 = Math.min(selX1, selX2);
+            const y1 = Math.min(selY1, selY2);
+            const x2 = Math.max(selX1, selX2);
+            const y2 = Math.max(selY1, selY2);
             
-            const dragDistance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+            const dragDistance = Math.sqrt(Math.pow(selX2 - selX1, 2) + Math.pow(selY2 - selY1, 2));
 
             if (dragDistance < 5) { // It's a click on the background
                 setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
@@ -161,7 +170,6 @@ const TestMapPage = () => {
         setMouseDownPos(null);
         setSelectionBox({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
     };
-
 
     const handleVillagerMoveEnd = (villagerId: string) => {
         setVillagers(currentVillagers => 
@@ -221,6 +229,7 @@ const TestMapPage = () => {
                     scaleY={stageScale} 
                     x={stagePos.x} 
                     y={stagePos.y}
+                    onDragEnd={(e) => setStagePos(e.target.position())}
                 >
                     <Layer>
                         {renderGrid()}
@@ -246,7 +255,7 @@ const TestMapPage = () => {
                             height={Math.abs(selectionBox.y1 - selectionBox.y2)}
                             fill="rgba(131, 165, 152, 0.3)"
                             stroke="#83a598"
-                            strokeWidth={1}
+                            strokeWidth={1 / stageScale}
                             visible={selectionBox.visible}
                             listening={false}
                         />

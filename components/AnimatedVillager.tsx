@@ -89,6 +89,13 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
             animRef.current = null;
         }
 
+        const resetToIdle = () => {
+            if (leftArmRef.current) leftArmRef.current.rotation(0);
+            if (rightArmRef.current) rightArmRef.current.rotation(0);
+            if (leftLegRef.current) leftLegRef.current.rotation(0);
+            if (rightLegRef.current) rightLegRef.current.rotation(0);
+        };
+
         // Handle death separately with a precise tween
         if (task === 'dead') {
              // Stop any other animations
@@ -105,13 +112,6 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
 
         // Reset opacity if it's not dead
         node.opacity(1);
-
-        const resetToIdle = () => {
-            if (leftArmRef.current) leftArmRef.current.rotation(0);
-            if (rightArmRef.current) rightArmRef.current.rotation(0);
-            if (leftLegRef.current) leftLegRef.current.rotation(0);
-            if (rightLegRef.current) rightLegRef.current.rotation(0);
-        };
 
         animRef.current = new Konva.Animation((frame) => {
             if (!frame || !node) return;

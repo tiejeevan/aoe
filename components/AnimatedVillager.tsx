@@ -15,10 +15,11 @@ interface AnimatedVillagerProps extends Konva.GroupConfig {
   isMoving: boolean;
   isSelected: boolean;
   isMining: boolean;
+  isDead?: boolean;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ isMoving, isSelected, isMining, ...groupProps }, ref) => {
+  ({ isMoving, isSelected, isMining, isDead, ...groupProps }, ref) => {
     const leftUpperArm = useRef<Konva.Rect>(null);
     const leftLowerArm = useRef<Konva.Rect>(null);
     const rightUpperArm = useRef<Konva.Rect>(null);
@@ -51,6 +52,25 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     };
 
     useEffect(() => {
+      const node = (ref as React.RefObject<Konva.Group>)?.current;
+      if (!node) return;
+
+      if (isDead) {
+          if (animationRequestRef.current) cancelAnimationFrame(animationRequestRef.current);
+          resetToIdle();
+          node.rotation(90);
+          node.opacity(0.6);
+          node.filters([Konva.Filters.Grayscale]);
+          node.cache();
+          return;
+      }
+      
+      // If not dead, reset the main group's state
+      node.rotation(0);
+      node.opacity(1);
+      node.filters([]);
+      node.cache();
+
       if (isMoving) {
         if (pickaxeRef.current) pickaxeRef.current.visible(false);
         const animate = () => {
@@ -110,12 +130,12 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
       return () => {
         if (animationRequestRef.current) cancelAnimationFrame(animationRequestRef.current);
       };
-    }, [isMoving, isMining]);
+    }, [isMoving, isMining, isDead, ref]);
 
     return (
       <Group ref={ref} {...groupProps}>
         {/* Selection Indicator */}
-        {isSelected && (
+        {isSelected && !isDead && (
             <Ellipse
                 y={100 * scale}
                 radiusX={60 * scale}

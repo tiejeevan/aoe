@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect } from 'react-konva';
+import { Stage, Layer, Rect, Text, Group } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import TownCenter from '../../../components/TownCenter';
@@ -19,6 +19,7 @@ const ATTACK_DISTANCE = 35; // Villagers will stop this far away to attack
 const ATTACK_RANGE = 40;    // They can attack from this far away
 const ATTACK_COOLDOWN = 1000; // ms
 const DEATH_DURATION = 10000; // 10 seconds
+const BUILD_TIME = 10000; // 10 seconds in ms
 
 interface Villager {
     id: string;
@@ -36,6 +37,20 @@ interface Villager {
 }
 
 interface GoldMine {
+    id: string;
+    x: number;
+    y: number;
+}
+
+interface ConstructionSite {
+    id: string;
+    x: number;
+    y: number;
+    progress: number; // 0-100
+    builderId: string | null;
+}
+
+interface Hut {
     id: string;
     x: number;
     y: number;
@@ -63,11 +78,24 @@ const getMineNode = (node: Konva.Node | null): Konva.Group | null => {
     return null;
 };
 
+const getConstructionSiteNode = (node: Konva.Node | null): Konva.Group | null => {
+    if (!node) return null;
+    if (node.name() === 'construction-site' && node instanceof Konva.Group) {
+        return node;
+    }
+    if (node.getParent()) {
+        return getConstructionSiteNode(node.getParent());
+    }
+    return null;
+};
+
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
     const [villagers, setVillagers] = useState<Villager[]>([]);
     const [goldMines, setGoldMines] = useState<GoldMine[]>([]);
+    const [constructionSites, setConstructionSites] = useState<ConstructionSite[]>([]);
+    const [huts, setHuts] = useState<Hut[]>([]);
     
     // State for panning and zooming
     const [stageScale, setStageScale] = useState(1);
@@ -79,6 +107,11 @@ const TestMapPage = () => {
     const [mouseDownPos, setMouseDownPos] = useState<{x: number, y: number} | null>(null);
     const [isHoveringEnemy, setIsHoveringEnemy] = useState(false);
     const [isHoveringClickable, setIsHoveringClickable] = useState(false);
+    
+    // State for UI panels
+    const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; } | null>(null);
+    const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; } | null>(null);
+
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
@@ -107,11 +140,12 @@ const TestMapPage = () => {
         setGoldMines([{ id: 'gold-mine-1', x: 8 * GRID_SIZE, y: 12 * GRID_SIZE }]);
     }, []);
 
-    // Game Loop for Combat and State Updates
+    // Game Loop
     useEffect(() => {
         if (!isClient) return;
         
         const gameLoop = () => {
+             // --- Combat and Death ---
              setVillagers(currentVillagers => {
                 const now = Date.now();
                 const damageMap = new Map<string, number>();
@@ -122,8 +156,6 @@ const TestMapPage = () => {
                 // First pass: determine attacks and build damage map
                 for (const villager of nextVillagers) {
                      if (villager.task === 'dead') continue;
-
-                    // If an attacking villager's target moves out of range, re-engage
                     if (villager.task === 'attacking' && villager.targetId) {
                         const target = nextVillagers.find(v => v.id === villager.targetId);
                         if (target && target.task !== 'dead') {
@@ -182,12 +214,33 @@ const TestMapPage = () => {
 
                 return villagersNeedUpdate ? nextVillagers : currentVillagers;
             });
+
+             // --- Construction ---
+            setConstructionSites(currentSites => {
+                const newSites = currentSites.map(site => {
+                    if (site.builderId) {
+                        const builder = villagers.find(v => v.id === site.builderId);
+                        if (builder && builder.task === 'building') {
+                            const newProgress = site.progress + (100 / (BUILD_TIME / 16)); // ~60fps
+                            if (newProgress >= 100) {
+                                setHuts(h => [...h, { id: `hut-${site.id}`, x: site.x, y: site.y }]);
+                                setVillagers(vs => vs.map(v => v.id === site.builderId ? { ...v, task: 'idle', targetId: null } : v));
+                                return null;
+                            }
+                            return { ...site, progress: newProgress };
+                        }
+                    }
+                    return site;
+                }).filter(Boolean) as ConstructionSite[];
+
+                return newSites.length !== currentSites.length ? newSites : currentSites;
+            });
             requestAnimationFrame(gameLoop);
         };
 
         const animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isClient]);
+    }, [isClient, villagers]); // villagers is a key dependency now
 
 
     // Add keyboard listeners for panning
@@ -236,16 +289,20 @@ const TestMapPage = () => {
 
         const targetVillagerNode = getVillagerNode(e.target);
         const targetMineNode = getMineNode(e.target);
+        const targetSiteNode = getConstructionSiteNode(e.target);
 
         const targetVillagerId = targetVillagerNode ? targetVillagerNode.id() : null;
         const targetMineId = targetMineNode ? targetMineNode.id() : null;
-        
+        const targetSiteId = targetSiteNode ? targetSiteNode.id() : null;
+
         const targetVillager = villagers.find(v => v.id === targetVillagerId);
         const targetMine = goldMines.find(m => m.id === targetMineId);
+        const targetSite = constructionSites.find(s => s.id === targetSiteId);
         
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
                 if (v.isSelected && v.task !== 'dead') {
+                    setPopup(null);
                     if (targetMine) {
                         const dx = targetMine.x - v.x;
                         const dy = targetMine.y - v.y;
@@ -255,6 +312,15 @@ const TestMapPage = () => {
                         const targetX = v.x + dx * ratio;
                         const targetY = v.y + dy * ratio;
                         return { ...v, task: 'moving', targetX, targetY, targetId: targetMineId };
+                    } else if (targetSite) {
+                         const dx = targetSite.x - v.x;
+                         const dy = targetSite.y - v.y;
+                         const distance = Math.sqrt(dx * dx + dy * dy);
+                         const standoff = 30;
+                         const ratio = distance > standoff ? (distance - standoff) / distance : 0;
+                         const targetX = v.x + dx * ratio;
+                         const targetY = v.y + dy * ratio;
+                         return { ...v, task: 'moving', targetX, targetY, targetId: targetSiteId };
                     } else if (targetVillager && targetVillager.id !== v.id) {
                         // Attack command
                         const dx = targetVillager.x - v.x;
@@ -278,19 +344,57 @@ const TestMapPage = () => {
         );
     };
 
+    const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        // Handle popup clicks
+        if (popup?.visible) {
+             const name = e.target.name();
+             if (name === 'build-button') {
+                 setPlacementMode({ active: true, initiatorId: popup.villagerId });
+                 setPopup(null);
+                 return;
+             }
+             if (name === 'dismiss-button') {
+                 setVillagers(vs => vs.filter(v => v.id !== popup.villagerId));
+                 setPopup(null);
+                 return;
+             }
+        }
+    };
+
+
     const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (e.evt.button !== 0 || isSpacebarPressed) return;
         
         const pos = getStagePointerPosition();
         if (!pos) return;
-
+        
+        // If in placement mode, place the object
+        if (placementMode?.active) {
+            setConstructionSites(cs => [...cs, { id: `site-${Date.now()}`, x: pos.x, y: pos.y, progress: 0, builderId: null }]);
+            setPlacementMode({ active: false, initiatorId: null });
+            // Auto-assign the initiator to build
+             if (placementMode.initiatorId) {
+                const siteX = pos.x, siteY = pos.y;
+                setVillagers(vs => vs.map(v => {
+                    if (v.id === placementMode.initiatorId) {
+                        const dx = siteX - v.x; const dy = siteY - v.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
+                        const ratio = dist > standoff ? (dist - standoff)/dist : 0;
+                        return { ...v, task: 'moving', targetId: `site-${Date.now()}`, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+                    }
+                    return v;
+                }));
+             }
+            return;
+        }
+        
+        // Handle selection box start
         setMouseDownPos(pos);
         setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, visible: true });
     };
 
     const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (!mouseDownPos) return;
-        
         const pos = getStagePointerPosition();
         if (!pos) return;
         setSelectionBox(prev => ({ ...prev, x2: pos.x, y2: pos.y }));
@@ -301,21 +405,38 @@ const TestMapPage = () => {
 
         const { x1: selX1, y1: selY1, x2: selX2, y2: selY2 } = selectionBox;
         const dragDistance = Math.sqrt(Math.pow(selX2 - selX1, 2) + Math.pow(selY2 - selY1, 2));
-
         const isShiftPressed = e.evt.shiftKey;
 
+        // If it was a small drag, treat as a click
         if (dragDistance < 5) {
             const clickedVillagerNode = getVillagerNode(e.target);
             const clickedId = clickedVillagerNode?.id();
 
-            setVillagers(v => v.map(villager => {
-                 if (isShiftPressed) {
-                     return villager.id === clickedId ? { ...villager, isSelected: !villager.isSelected } : villager;
-                 }
-                 return { ...villager, isSelected: villager.id === clickedId };
-            }));
-
+            // Clicked on a villager
+            if (clickedVillagerNode && clickedId) {
+                setVillagers(v => v.map(villager => {
+                    if (isShiftPressed) {
+                        return villager.id === clickedId ? { ...villager, isSelected: !villager.isSelected } : villager;
+                    }
+                    return { ...villager, isSelected: villager.id === clickedId };
+                }));
+                // Show popup for single selection
+                if (!isShiftPressed) {
+                    const pos = clickedVillagerNode.position();
+                    setPopup({ visible: true, x: pos.x, y: pos.y - 60, villagerId: clickedId });
+                } else {
+                    setPopup(null);
+                }
+            } else {
+                // Clicked on empty space, deselect all and hide popup
+                if (!isShiftPressed) {
+                    setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
+                    setPopup(null);
+                }
+            }
         } else {
+            // It was a drag selection
+            setPopup(null);
             const x1 = Math.min(selX1, selX2);
             const y1 = Math.min(selY1, selY2);
             const x2 = Math.max(selX1, selX2);
@@ -344,168 +465,92 @@ const TestMapPage = () => {
                 let newTask: Villager['task'] = 'idle';
                 const targetIsVillager = currentVillagers.some(tv => tv.id === v.targetId);
                 const targetIsMine = goldMines.some(m => m.id === v.targetId);
-
-                if (targetIsVillager) {
-                    newTask = 'attacking';
-                } else if (targetIsMine) {
-                    newTask = 'mining';
+                const targetIsSite = constructionSites.some(s => s.id === v.targetId);
+                
+                if (targetIsVillager) newTask = 'attacking';
+                else if (targetIsMine) newTask = 'mining';
+                else if (targetIsSite) {
+                    newTask = 'building';
+                    setConstructionSites(cs => cs.map(s => s.id === v.targetId ? { ...s, builderId: v.id } : s));
                 }
 
                 return { ...v, task: newTask, x: newPosition.x, y: newPosition.y };
             })
         );
-    }, [goldMines]);
+    }, [goldMines, constructionSites]);
 
-    const handleMouseEnterEnemy = (isEnemy: boolean) => {
-        setIsHoveringEnemy(isEnemy);
-    };
+    const handleMouseEnterEnemy = (isEnemy: boolean) => setIsHoveringEnemy(isEnemy);
     
     const handleCreateVillager = useCallback(() => {
         setVillagers(current => {
             const newVillagerId = `villager-${Date.now()}`;
             const spawnX = (MAP_WIDTH_CELLS * GRID_SIZE / 2) + (Math.random() - 0.5) * 50;
             const spawnY = (MAP_HEIGHT_CELLS * GRID_SIZE / 2) + 100;
-
-            const newVillager: Villager = {
-                id: newVillagerId,
-                x: spawnX,
-                y: spawnY,
-                targetX: spawnX,
-                targetY: spawnY,
-                hp: MAX_HP,
-                attack: ATTACK_POWER,
-                targetId: null,
-                attackLastTime: 0,
-                task: 'idle',
-                isSelected: false,
-            };
+            const newVillager: Villager = { id: newVillagerId, x: spawnX, y: spawnY, targetX: spawnX, targetY: spawnY, hp: MAX_HP, attack: ATTACK_POWER, targetId: null, attackLastTime: 0, task: 'idle', isSelected: false };
             return [...current, newVillager];
         });
     }, []);
     
-    const handleMouseEnterClickable = (isClickable: boolean) => {
-        setIsHoveringClickable(isClickable);
-    };
+    const handleMouseEnterClickable = (isClickable: boolean) => setIsHoveringClickable(isClickable);
 
-    const renderGrid = () => {
-        return Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => (
-            <Rect 
-                key={i} 
-                x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} 
-                y={Math.floor(i / MAP_WIDTH_CELLS) * GRID_SIZE} 
-                width={GRID_SIZE} 
-                height={GRID_SIZE} 
-                fill="#504945" 
-                stroke="#665c54" 
-                strokeWidth={1} 
-                listening={false}
-            />
-        ));
-    };
+    const renderGrid = () => Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => ( <Rect key={i} x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} y={Math.floor(i / MAP_WIDTH_CELLS) * GRID_SIZE} width={GRID_SIZE} height={GRID_SIZE} fill="#504945" stroke="#665c54" strokeWidth={1} listening={false} /> ));
 
     const hasSelection = villagers.some(v => v.isSelected);
     const attackCursorUrl = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23fb4934" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 9.5l-5-5-5 5 5 5 5-5z"/><path d="M9.5 14.5l5 5 5-5-5-5-5 5z"/><path d="M2.5 12l9 9"/><path d="M12.5 2.5l9 9"/></svg>'), auto`;
+    const buildCursorUrl = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="%2398971a" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>'), auto`;
     let stageCursor = 'default';
     if (isSpacebarPressed) stageCursor = 'grab';
+    else if (placementMode?.active) stageCursor = buildCursorUrl;
     else if (hasSelection && isHoveringEnemy) stageCursor = attackCursorUrl;
     else if (isHoveringClickable) stageCursor = 'pointer';
 
     
-    if (!isClient) {
-        return (
-            <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-8">
-                <h1 className="text-4xl font-serif text-brand-gold mb-4">Loading Map Engine...</h1>
-            </div>
-        );
-    }
+    if (!isClient) return <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-8"><h1 className="text-4xl font-serif text-brand-gold mb-4">Loading Map Engine...</h1></div>;
 
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
                 <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Click the Town Center to create villagers. Drag to select. Right-click on ground to move, right-click on another villager to attack, or right-click the Gold Mine to start mining.</p>
+                <p className="text-parchment-dark mb-4 text-sm">Click villager for options. Drag to select. Right-click to move/attack/build.</p>
             </div>
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
-                    ref={stageRef} 
-                    width={MAP_WIDTH_CELLS * GRID_SIZE} 
-                    height={MAP_HEIGHT_CELLS * GRID_SIZE} 
-                    className="mx-auto" 
+                    ref={stageRef} width={MAP_WIDTH_CELLS * GRID_SIZE} height={MAP_HEIGHT_CELLS * GRID_SIZE} className="mx-auto" 
                     style={{ cursor: stageCursor }}
                     onWheel={handleWheel}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
+                    onClick={handleStageClick}
                     onContextMenu={handleStageContextMenu}
                     draggable={isSpacebarPressed} 
-                    scaleX={stageScale} 
-                    scaleY={stageScale} 
-                    x={stagePos.x} 
-                    y={stagePos.y}
+                    scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y}
                     onDragEnd={(e) => setStagePos(e.target.position())}
                 >
                     <Layer>
                         {renderGrid()}
-
-                        <TownCenter 
-                            x={MAP_WIDTH_CELLS * GRID_SIZE / 2} 
-                            y={MAP_HEIGHT_CELLS * GRID_SIZE / 2} 
-                            onClick={handleCreateVillager}
-                            onTap={handleCreateVillager}
-                            onMouseEnter={() => handleMouseEnterClickable(true)}
-                            onMouseLeave={() => handleMouseEnterClickable(false)}
-                        />
-
-                        {goldMines.map(mine => (
-                            <AnimatedGoldMine
-                                key={mine.id}
-                                id={mine.id}
-                                name="gold-mine"
-                                x={mine.x}
-                                y={mine.y}
-                                onMouseEnter={() => handleMouseEnterClickable(true)}
-                                onMouseLeave={() => handleMouseEnterClickable(false)}
-                            />
+                        <TownCenter onClick={handleCreateVillager} onTap={handleCreateVillager} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                        {goldMines.map(mine => <AnimatedGoldMine key={mine.id} id={mine.id} name="gold-mine" x={mine.x} y={mine.y} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} /> )}
+                        {huts.map(hut => (<Rect key={hut.id} x={hut.x - 30} y={hut.y - 30} width={60} height={60} fill="#a16207" stroke="#3c3836" strokeWidth={2} cornerRadius={5} listening={false} />))}
+                        {constructionSites.map(site => (
+                            <Group key={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)}>
+                                <Rect x={-30} y={-30} width={60} height={60} fill="#854d0e" stroke="#fbf1c7" strokeWidth={1} opacity={0.5} />
+                                <Rect x={-25} y={20} width={50} height={8} fill="#3c3836" />
+                                <Rect x={-25} y={20} width={50 * (site.progress / 100)} height={8} fill="#98971a" />
+                            </Group>
                         ))}
-                        
-                        {villagers.map(villager => (
-                            <AnimatedVillager
-                                ref={(node) => {
-                                    if (node) villagerRefs.current.set(villager.id, node);
-                                    else villagerRefs.current.delete(villager.id);
-                                }}
-                                key={villager.id}
-                                id={villager.id}
-                                name="villager"
-                                initialX={villager.x}
-                                initialY={villager.y}
-                                targetX={villager.targetX}
-                                targetY={villager.targetY}
-                                hp={villager.hp}
-                                maxHp={MAX_HP}
-                                task={villager.task}
-                                isSelected={villager.isSelected}
-                                onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)}
-                                deathTime={villager.deathTime}
-                                onMouseEnter={() => {
-                                    const anySelected = villagers.some(v => v.isSelected);
-                                    if(anySelected && !villager.isSelected) handleMouseEnterEnemy(true);
-                                }}
-                                onMouseLeave={() => handleMouseEnterEnemy(false)}
-                            />
-                        ))}
-
-                         <Rect
-                            x={Math.min(selectionBox.x1, selectionBox.x2)}
-                            y={Math.min(selectionBox.y1, selectionBox.y2)}
-                            width={Math.abs(selectionBox.x1 - selectionBox.x2)}
-                            height={Math.abs(selectionBox.y1 - selectionBox.y2)}
-                            fill="rgba(131, 165, 152, 0.3)"
-                            stroke="#83a598"
-                            strokeWidth={1 / stageScale}
-                            visible={selectionBox.visible}
-                            listening={false}
-                        />
+                        {villagers.map(villager => <AnimatedVillager ref={(node) => { if (node) villagerRefs.current.set(villager.id, node); else villagerRefs.current.delete(villager.id); }} key={villager.id} id={villager.id} initialX={villager.x} initialY={villager.y} targetX={villager.targetX} targetY={villager.targetY} hp={villager.hp} maxHp={MAX_HP} task={villager.task} isSelected={villager.isSelected} onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)} deathTime={villager.deathTime} onMouseEnter={() => { if(villagers.some(v => v.isSelected) && !villager.isSelected) handleMouseEnterEnemy(true); }} onMouseLeave={() => handleMouseEnterEnemy(false)} /> )}
+                        {placementMode?.active && (<Rect x={getStagePointerPosition()?.x} y={getStagePointerPosition()?.y} width={60} height={60} fill="rgba(152, 151, 26, 0.5)" stroke="#d4be98" strokeWidth={2} listening={false} />)}
+                         <Rect x={Math.min(selectionBox.x1, selectionBox.x2)} y={Math.min(selectionBox.y1, selectionBox.y2)} width={Math.abs(selectionBox.x1 - selectionBox.x2)} height={Math.abs(selectionBox.y1 - selectionBox.y2)} fill="rgba(131, 165, 152, 0.3)" stroke="#83a598" strokeWidth={1 / stageScale} visible={selectionBox.visible} listening={false} />
+                         {popup?.visible && (
+                            <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick}>
+                                <Rect width={80} height={50} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                <Rect name="build-button" x={5} y={5} width={70} height={20} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                <Text text="Build" x={25} y={8} fill="#fbf1c7" listening={false} />
+                                <Rect name="dismiss-button" x={5} y={27} width={70} height={18} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                <Text text="Dismiss" x={18} y={30} fill="#fbf1c7" fontSize={10} listening={false} />
+                            </Group>
+                         )}
                     </Layer>
                 </Stage>
             </div>
@@ -515,3 +560,5 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
+
+    

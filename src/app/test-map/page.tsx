@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -14,11 +15,13 @@ interface Villager {
     id: string;
     x: number;
     y: number;
+    targetX: number;
+    targetY: number;
+    task: 'idle' | 'moving';
 }
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
-    // Villagers are now in state to allow for updates
     const [villagers, setVillagers] = useState<Villager[]>([]);
     
     // State for panning and zooming
@@ -31,11 +34,16 @@ const TestMapPage = () => {
     // Initial setup on component mount
     useEffect(() => {
         setIsClient(true);
+        const initialX = 10 * GRID_SIZE;
+        const initialY = 10 * GRID_SIZE;
         // Create one villager at a fixed position
         setVillagers([{
             id: 'villager-1',
-            x: 10 * GRID_SIZE,
-            y: 10 * GRID_SIZE,
+            x: initialX,
+            y: initialY,
+            targetX: initialX,
+            targetY: initialY,
+            task: 'idle',
         }]);
     }, []);
 
@@ -74,14 +82,31 @@ const TestMapPage = () => {
         const pointerPos = stage.getPointerPosition();
         if (!pointerPos) return;
 
-        // For now, move the first villager
+        // Move the first villager
         if (villagers.length > 0) {
             setVillagers(currentVillagers => {
                 const newVillagers = [...currentVillagers];
-                newVillagers[0] = { ...newVillagers[0], x: pointerPos.x, y: pointerPos.y };
+                const villager = newVillagers[0];
+                newVillagers[0] = { 
+                    ...villager, 
+                    targetX: pointerPos.x, 
+                    targetY: pointerPos.y,
+                    task: 'moving'
+                };
                 return newVillagers;
             });
         }
+    };
+
+    const handleVillagerMoveEnd = (villagerId: string) => {
+        setVillagers(currentVillagers => 
+            currentVillagers.map(v => {
+                if (v.id === villagerId) {
+                    return { ...v, task: 'idle', x: v.targetX, y: v.targetY };
+                }
+                return v;
+            })
+        );
     };
 
     // Render the background grid
@@ -112,8 +137,8 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
-                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map - Step 2: Basic Movement</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Right-click on the map to move the villager. It will teleport instantly. This confirms the movement logic before we add smoothing.</p>
+                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map - Step 3: Smooth Movement</h1>
+                <p className="text-parchment-dark mb-4 text-sm">Right-click on the map to move the villager. It should now glide smoothly with a walking animation.</p>
             </div>
             <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                  <Stage 
@@ -136,8 +161,12 @@ const TestMapPage = () => {
                             <AnimatedVillager
                                 key={villager.id}
                                 id={villager.id}
-                                x={villager.x}
-                                y={villager.y}
+                                x={villager.x} // Initial X
+                                y={villager.y} // Initial Y
+                                targetX={villager.targetX}
+                                targetY={villager.targetY}
+                                task={villager.task}
+                                onMoveEnd={() => handleVillagerMoveEnd(villager.id)}
                             />
                         ))}
 

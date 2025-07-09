@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -29,6 +30,7 @@ const TestMapPage = () => {
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
     const [panelPosition, setPanelPosition] = useState<{ x: number, y: number } | null>(null);
     const stageRef = useRef<Konva.Stage>(null);
+    const [isUnitSelected, setIsUnitSelected] = useState(false);
 
 
     useEffect(() => {
@@ -51,17 +53,26 @@ const TestMapPage = () => {
         if (e.target.hasName('grid-background')) {
             setSelectedBuilding(null);
             const pos = e.target.getStage()?.getPointerPosition();
-            if (pos) {
+            if (pos && isUnitSelected) {
                  setTargetPosition({
                     x: Math.floor(pos.x / GRID_SIZE),
                     y: Math.floor(pos.y / GRID_SIZE),
                 });
+                setIsUnitSelected(false); // Deselect after issuing move command
+            } else {
+                 setIsUnitSelected(false); // Deselect if clicking elsewhere
             }
         }
+    };
+    
+    const handleUnitClick = () => {
+        setIsUnitSelected(true);
+        setSelectedBuilding(null); // Deselect any building
     };
 
     const handleBuildingClick = (building: Building, e: Konva.KonvaEventObject<MouseEvent>) => {
         setSelectedBuilding(building);
+        setIsUnitSelected(false); // A building was selected, so deselect the unit
         const stage = stageRef.current;
         if (stage) {
             const rect = e.target.getClientRect();
@@ -108,7 +119,7 @@ const TestMapPage = () => {
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">High-Performance RTS Map</h1>
             <p className="text-parchment-dark mb-4 text-sm">
-                Click a tile to move the unit. Click a building to see actions.
+                Click a unit to select it, then click a tile to move. Click a building for actions.
             </p>
             <div className="w-full max-w-4xl aspect-[3/2] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage
@@ -151,10 +162,12 @@ const TestMapPage = () => {
                             y={targetPosition.y * GRID_SIZE + GRID_SIZE / 2}
                             radius={GRID_SIZE / 3}
                             fill="#83a598"
-                            stroke="#fdf6e3"
-                            strokeWidth={2}
-                            shadowBlur={5}
-                            shadowColor="#458588"
+                            stroke={isUnitSelected ? '#d79921' : '#fdf6e3'}
+                            strokeWidth={isUnitSelected ? 3 : 2}
+                            shadowBlur={isUnitSelected ? 10 : 5}
+                            shadowColor={isUnitSelected ? '#d79921' : '#458588'}
+                            onClick={handleUnitClick}
+                            onTap={handleUnitClick}
                         />
                     </Layer>
                 </Stage>

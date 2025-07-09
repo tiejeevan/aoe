@@ -34,8 +34,8 @@ type Resources = {
     stone: number;
 };
 
-const buildingStats: Record<BuildingType, { name: string; cost: Partial<Resources>; hp: number }> = {
-    hut: { name: 'Hut', cost: { wood: 50 }, hp: 250 },
+const buildingStats: Record<BuildingType, { name: string; cost: Partial<Resources>; hp: number; providesCapacity?: number }> = {
+    hut: { name: 'Hut', cost: { wood: 50 }, hp: 250, providesCapacity: 5 },
     barracks: { name: 'Barracks', cost: { wood: 100, stone: 25 }, hp: 600 },
     castle: { name: 'Castle', cost: { stone: 250 }, hp: 2000 },
     workshop: { name: 'Workshop', cost: { wood: 125 }, hp: 400 },
@@ -144,6 +144,7 @@ const TestMapPage = () => {
     const [buildings, setBuildings] = useState<Building[]>([]);
     const [log, setLog] = useState<string[]>([]);
     const [resources, setResources] = useState<Resources>({ wood: 500, gold: 200, stone: 300 });
+    const [population, setPopulation] = useState({ current: 5, capacity: 10 });
     
     // State for panning and zooming
     const [stageScale, setStageScale] = useState(1);
@@ -200,6 +201,17 @@ const TestMapPage = () => {
     const addToLog = useCallback((message: string) => {
         setLog(prevLog => [message, ...prevLog.slice(0, 4)]);
     }, []);
+    
+    // Recalculate population and capacity whenever villagers or buildings change
+    useEffect(() => {
+        const newCapacity = 10 + buildings.reduce((acc, building) => {
+            return acc + (buildingStats[building.type].providesCapacity || 0);
+        }, 0);
+        
+        const currentPop = villagers.length;
+
+        setPopulation({ current: currentPop, capacity: newCapacity });
+    }, [villagers.length, buildings]);
 
     // Game Loop
     useEffect(() => {
@@ -670,15 +682,21 @@ const TestMapPage = () => {
     const handleMouseEnterEnemy = (isEnemy: boolean) => setIsHoveringEnemy(isEnemy);
     
     const handleCreateVillager = useCallback(() => {
+        if (villagers.length >= population.capacity) {
+            addToLog("Not enough population capacity. Build more huts!");
+            return;
+        }
+
         setVillagers(current => {
             const newId = current.length > 0 ? Math.max(...current.map(v => parseInt(v.id.split('-')[1]))) + 1 : 1;
             const newVillagerId = `villager-${newId}`;
             const spawnX = (MAP_WIDTH_CELLS * GRID_SIZE / 2) + (Math.random() - 0.5) * 50;
             const spawnY = (MAP_HEIGHT_CELLS * GRID_SIZE / 2) + 100;
             const newVillager: Villager = { id: newVillagerId, name: `Villager ${newId}`, x: spawnX, y: spawnY, targetX: spawnX, targetY: spawnY, hp: MAX_HP, attack: ATTACK_POWER, targetId: null, attackLastTime: 0, task: 'idle', isSelected: false };
+            addToLog("A new villager has arrived!");
             return [...current, newVillager];
         });
-    }, []);
+    }, [villagers.length, population.capacity, addToLog]);
     
     const handleMouseEnterClickable = (isClickable: boolean) => setIsHoveringClickable(isClickable);
 
@@ -714,6 +732,8 @@ const TestMapPage = () => {
                     <p>Wood: {resources.wood}</p>
                     <p>Gold: {resources.gold}</p>
                     <p>Stone: {resources.stone}</p>
+                     <h3 className="font-bold border-b mb-1 mt-2">Status</h3>
+                    <p>Population: {population.current} / {population.capacity}</p>
                 </div>
                  <Stage 
                     ref={stageRef} width={MAP_WIDTH_CELLS * GRID_SIZE} height={MAP_HEIGHT_CELLS * GRID_SIZE} className="mx-auto" 

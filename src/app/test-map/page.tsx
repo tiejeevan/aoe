@@ -47,7 +47,7 @@ const TestMapPage = () => {
     const [villagers, setVillagers] = useState<Villager[]>([]);
     const [goldMines, setGoldMines] = useState<GoldMineData[]>([]);
     const [selectedVillagerIds, setSelectedVillagerIds] = useState<Set<string>>(new Set());
-    const [selectionRect, setSelectionRect] = useState<{ x: number, y: number, width: number, height: number, visible: boolean } | null>(null);
+    const [selectionRect, setSelectionRect] = useState<{ x1: number, y1: number, x2: number, y2: number, visible: boolean } | null>(null);
     const [hoveredMineId, setHoveredMineId] =useState<string|null>(null);
     const [tooltipMineId, setTooltipMineId] = useState<string | null>(null);
     const [stageScale, setStageScale] = useState(1);
@@ -59,8 +59,6 @@ const TestMapPage = () => {
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Record<string, Konva.Group>>({});
     const goldMineRefs = useRef<Record<string, Konva.Group>>({});
-    const selectionRectRef = useRef<Konva.Rect>(null);
-    const layerRef = useRef<Konva.Layer>(null);
     const isSelecting = useRef(false);
 
     useEffect(() => {
@@ -124,8 +122,9 @@ const TestMapPage = () => {
     }, []);
 
     useEffect(() => {
-        if (!isClient || !layerRef.current) return;
+        if (!isClient) return;
         const layer = layerRef.current;
+        if (!layer) return;
 
         const anim = new Konva.Animation(frame => {
             if (!frame) return;
@@ -230,46 +229,63 @@ const TestMapPage = () => {
     };
 
     const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        // If space is pressed, we're in pan mode, so do nothing for selection.
         if (isSpacebarPressed || e.evt.button !== 0 || e.evt.altKey || e.evt.ctrlKey) return;
 
         if (e.target === stageRef.current) {
             setTooltipMineId(null);
             isSelecting.current = true;
-            const pos = stageRef.current.getPointerPosition();
+            const stage = stageRef.current;
+            const pos = stage.getPointerPosition();
             if (!pos) return;
-            setSelectionRect({ x: pos.x, y: pos.y, width: 0, height: 0, visible: true });
+
+            const x1 = (pos.x - stage.x()) / stage.scaleX();
+            const y1 = (pos.y - stage.y()) / stage.scaleY();
+
+            setSelectionRect({ x1, y1, x2: x1, y2: y1, visible: true });
         }
     };
 
     const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (!isSelecting.current) return;
-        
-        const pos = stageRef.current?.getPointerPosition();
-        if (!pos || !selectionRect) return;
+        if (!isSelecting.current || !selectionRect) return;
 
-        setSelectionRect({
-            ...selectionRect,
-            width: pos.x - selectionRect.x,
-            height: pos.y - selectionRect.y
-        });
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pos = stage.getPointerPosition();
+        if (!pos) return;
+
+        const x2 = (pos.x - stage.x()) / stage.scaleX();
+        const y2 = (pos.y - stage.y()) / stage.scaleY();
+
+        setSelectionRect({ ...selectionRect, x2, y2 });
     };
 
     const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
         isSelecting.current = false;
         if (!selectionRect) return;
 
-        const selectionBox = selectionRectRef.current?.getClientRect();
+        const stage = stageRef.current;
+        if (!stage) {
+            setSelectionRect(null);
+            return;
+        }
+
+        const { x1, y1, x2, y2 } = selectionRect;
+        const isDrag = Math.abs(x1 - x2) > 5 || Math.abs(y1 - y2) > 5;
+        
         setSelectionRect(null);
-
-        if (e.evt.button !== 0 || !selectionBox) return;
-
-        const isDrag = Math.abs(selectionBox.width) > 5 || Math.abs(selectionBox.height) > 5;
+        
+        if (e.evt.button !== 0) return;
 
         if (isDrag) {
+            const selectionBox = {
+                x: Math.min(x1, x2),
+                y: Math.min(y1, y2),
+                width: Math.abs(x1 - x2),
+                height: Math.abs(y1 - y2)
+            };
             const newSelectedIds = new Set<string>();
             Object.values(villagerRefs.current).forEach(node => {
-                if (node && Konva.Util.haveIntersection(selectionBox, node.getClientRect())) {
+                if (node && Konva.Util.haveIntersection(selectionBox, node.getClientRect({ relativeTo: stage }))) {
                     newSelectedIds.add(node.id());
                 }
             });
@@ -308,11 +324,13 @@ const TestMapPage = () => {
         e.evt.preventDefault();
         if (selectedVillagerIds.size === 0) return;
 
-        const pos = stageRef.current?.getPointerPosition();
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pos = stage.getPointerPosition();
         if (!pos) return;
 
-        let targetX = pos.x;
-        let targetY = pos.y;
+        let targetX = (pos.x - stage.x()) / stage.scaleX();
+        let targetY = (pos.y - stage.y()) / stage.scaleY();
         let targetRadius = 15;
         let targetMineId: string | null = null;
         
@@ -424,18 +442,18 @@ const TestMapPage = () => {
                                 />
                              )
                         })}
-                        {selectionRect?.visible &&
+                        {selectionRect?.visible && (
                             <Rect
-                                ref={selectionRectRef}
-                                x={selectionRect.x}
-                                y={selectionRect.y}
-                                width={selectionRect.width}
-                                height={selectionRect.height}
+                                x={Math.min(selectionRect.x1, selectionRect.x2)}
+                                y={Math.min(selectionRect.y1, selectionRect.y2)}
+                                width={Math.abs(selectionRect.x1 - selectionRect.x2)}
+                                height={Math.abs(selectionRect.y1 - selectionRect.y2)}
                                 fill="rgba(131, 165, 152, 0.3)"
                                 stroke="#83a598"
-                                strokeWidth={1}
+                                strokeWidth={1 / stageScale}
+                                listening={false}
                             />
-                        }
+                        )}
                         {hoveredMineId && goldMines.find(m => m.id === hoveredMineId) && (
                             <PickaxeIcon
                                 x={goldMines.find(m => m.id === hoveredMineId)!.x}

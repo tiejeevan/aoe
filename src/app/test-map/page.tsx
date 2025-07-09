@@ -59,6 +59,7 @@ const TestMapPage = () => {
     const [selectionBox, setSelectionBox] = useState({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
     const [mouseDownPos, setMouseDownPos] = useState<{x: number, y: number} | null>(null);
     const [isHoveringEnemy, setIsHoveringEnemy] = useState(false);
+    const [isHoveringClickable, setIsHoveringClickable] = useState(false);
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
@@ -306,7 +307,6 @@ const TestMapPage = () => {
             currentVillagers.map(v => {
                 if (v.id !== villagerId) return v;
                 
-                // If it was moving to a target, it's now attacking. Otherwise, idle.
                 const task = v.targetId ? 'attacking' : 'idle';
 
                 return { ...v, task, x: newPosition.x, y: newPosition.y };
@@ -325,6 +325,33 @@ const TestMapPage = () => {
     const handleMouseLeaveEnemy = () => {
         setIsHoveringEnemy(false);
          setVillagers(v => v.map(vill => ({...vill, showAttackPreview: false})));
+    };
+    
+    const handleCreateVillager = useCallback(() => {
+        setVillagers(current => {
+            const newVillagerId = `villager-${Date.now()}`;
+            const spawnX = (MAP_WIDTH_CELLS * GRID_SIZE / 2) + (Math.random() - 0.5) * 50;
+            const spawnY = (MAP_HEIGHT_CELLS * GRID_SIZE / 2) + 100;
+
+            const newVillager: Villager = {
+                id: newVillagerId,
+                x: spawnX,
+                y: spawnY,
+                targetX: spawnX,
+                targetY: spawnY,
+                hp: MAX_HP,
+                attack: ATTACK_POWER,
+                targetId: null,
+                attackLastTime: 0,
+                task: 'idle',
+                isSelected: false,
+            };
+            return [...current, newVillager];
+        });
+    }, []);
+    
+    const handleMouseEnterClickable = (isClickable: boolean) => {
+        setIsHoveringClickable(isClickable);
     };
 
     const renderGrid = () => {
@@ -345,7 +372,11 @@ const TestMapPage = () => {
 
     const hasSelection = villagers.some(v => v.isSelected);
     const attackCursorUrl = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23fb4934" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 9.5l-5-5-5 5 5 5 5-5z"/><path d="M9.5 14.5l5 5 5-5-5-5-5 5z"/><path d="M2.5 12l9 9"/><path d="M12.5 2.5l9 9"/></svg>'), auto`;
-    const stageCursor = isSpacebarPressed ? 'grab' : hasSelection && isHoveringEnemy ? attackCursorUrl : 'default';
+    let stageCursor = 'default';
+    if (isSpacebarPressed) stageCursor = 'grab';
+    else if (hasSelection && isHoveringEnemy) stageCursor = attackCursorUrl;
+    else if (isHoveringClickable) stageCursor = 'pointer';
+
     
     if (!isClient) {
         return (
@@ -359,7 +390,7 @@ const TestMapPage = () => {
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
                 <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Drag to select. Right-click on ground to move, right-click on another villager to attack.</p>
+                <p className="text-parchment-dark mb-4 text-sm">Click the Town Center to create villagers. Drag to select. Right-click on ground to move, right-click on another villager to attack.</p>
             </div>
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
@@ -383,7 +414,14 @@ const TestMapPage = () => {
                     <Layer>
                         {renderGrid()}
 
-                        <TownCenter x={MAP_WIDTH_CELLS * GRID_SIZE / 2} y={MAP_HEIGHT_CELLS * GRID_SIZE / 2} />
+                        <TownCenter 
+                            x={MAP_WIDTH_CELLS * GRID_SIZE / 2} 
+                            y={MAP_HEIGHT_CELLS * GRID_SIZE / 2} 
+                            onClick={handleCreateVillager}
+                            onTap={handleCreateVillager}
+                            onMouseEnter={() => handleMouseEnterClickable(true)}
+                            onMouseLeave={() => handleMouseEnterClickable(false)}
+                        />
                         
                         {villagers.map(villager => (
                             <AnimatedVillager
@@ -433,3 +471,5 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
+
+    

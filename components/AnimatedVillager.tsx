@@ -59,30 +59,25 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           const cycle = elapsed % 2;
           const progress = cycle / 2;
           const easedProgress = easeInOutQuad(progress < 0.5 ? progress * 2 : 2 - progress * 2);
-          const maxArmSwing = 30;
-          const maxLegSwing = 30;
-          const leftArmAngle = maxArmSwing * easedProgress;
-          const rightArmAngle = -maxArmSwing * easedProgress;
-          const leftLegAngle = -maxLegSwing * easedProgress;
-          const rightLegAngle = maxLegSwing * easedProgress;
+          const swing = 25;
 
-          if (leftUpperArm.current) leftUpperArm.current.rotation(leftArmAngle);
-          if (rightUpperArm.current) rightUpperArm.current.rotation(rightArmAngle);
-          if (leftUpperLeg.current) leftUpperLeg.current.rotation(leftLegAngle);
-          if (rightUpperLeg.current) rightUpperLeg.current.rotation(rightLegAngle);
+          if (leftUpperArm.current) leftUpperArm.current.rotation(swing * easedProgress);
+          if (rightUpperArm.current) rightUpperArm.current.rotation(-swing * easedProgress);
+          if (leftUpperLeg.current) leftUpperLeg.current.rotation(-swing * easedProgress);
+          if (rightUpperLeg.current) rightUpperLeg.current.rotation(swing * easedProgress);
 
-          const elbowBend = 15 * Math.sin(elapsed * 5);
-          const kneeBend = 20 * Math.sin(elapsed * 4);
+          const elbowBend = 10 * Math.sin(elapsed * 5);
+          const kneeBend = 15 * Math.sin(elapsed * 4);
 
           if (leftLowerArm.current) leftLowerArm.current.rotation(elbowBend);
           if (rightLowerArm.current) rightLowerArm.current.rotation(-elbowBend);
           if (leftLowerLeg.current) leftLowerLeg.current.rotation(kneeBend);
           if (rightLowerLeg.current) rightLowerLeg.current.rotation(-kneeBend);
 
-          if (torso.current) torso.current.y(-50 * scale + Math.sin(elapsed * 6) * 3 * scale);
+          if (torso.current) torso.current.y(-50 * scale + Math.sin(elapsed * 6) * 2 * scale);
           if (headGroup.current) {
-            headGroup.current.y(-70 * scale + Math.sin(elapsed * 6) * 3 * scale);
-            headGroup.current.rotation(Math.sin(elapsed * 3) * 5);
+            headGroup.current.y(-70 * scale + Math.sin(elapsed * 6) * 2 * scale);
+            headGroup.current.rotation(Math.sin(elapsed * 3) * 3);
           }
 
           animationRequestRef.current = requestAnimationFrame(animate);
@@ -90,20 +85,19 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         animationRequestRef.current = requestAnimationFrame(animate);
       } else if (isMining) {
          if (pickaxeRef.current) pickaxeRef.current.visible(true);
-         resetToIdle(); // Reset legs to idle before starting mine animation
+         resetToIdle();
 
          const animateMine = () => {
             const now = performance.now();
             const elapsed = (now - startTimeRef.current) / 1000;
-            const swingSpeed = 4;
-            const swingAngle = -45 + 45 * Math.sin(elapsed * swingSpeed);
+            const swing = easeInOutQuad((Math.sin(elapsed * 4) + 1) / 2) * 90 - 45;
 
-            if(rightUpperArm.current) rightUpperArm.current.rotation(swingAngle);
-            if(leftUpperArm.current) leftUpperArm.current.rotation(swingAngle);
-            if(rightLowerArm.current) rightLowerArm.current.rotation(20);
-            if(leftLowerArm.current) leftLowerArm.current.rotation(20);
+            if(rightUpperArm.current) rightUpperArm.current.rotation(swing);
+            if(leftUpperArm.current) leftUpperArm.current.rotation(swing);
+            if(rightLowerArm.current) rightLowerArm.current.rotation(15);
+            if(leftLowerArm.current) leftLowerArm.current.rotation(15);
 
-             if (torso.current) torso.current.y(-50 * scale + Math.abs(Math.sin(elapsed * swingSpeed) * 5 * scale));
+            if (torso.current) torso.current.y(-50 * scale + Math.abs(Math.sin(elapsed * 4) * 4 * scale));
             
             animationRequestRef.current = requestAnimationFrame(animateMine);
          }

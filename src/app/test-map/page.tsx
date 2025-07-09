@@ -65,12 +65,14 @@ const TestMapPage = () => {
         }
     };
     
-    const handleUnitClick = () => {
+    const handleUnitClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        e.evt.stopPropagation(); // Prevent click from bubbling to the stage
         setIsUnitSelected(true);
         setSelectedBuilding(null); // Deselect any building
     };
 
     const handleBuildingClick = (building: Building, e: Konva.KonvaEventObject<MouseEvent>) => {
+        e.evt.stopPropagation(); // Prevent click from bubbling to the stage
         setSelectedBuilding(building);
         setIsUnitSelected(false); // A building was selected, so deselect the unit
         const stage = stageRef.current;
@@ -100,6 +102,7 @@ const TestMapPage = () => {
                         fill="#504945"
                         stroke="#665c54"
                         strokeWidth={1}
+                        listening={false} // This makes the grid tiles non-interactive
                     />
                 );
             }

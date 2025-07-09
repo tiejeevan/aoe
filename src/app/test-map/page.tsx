@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -5,6 +6,7 @@ import Link from 'next/link';
 import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
+import AnimatedGoldMine from '../../../components/AnimatedGoldMine';
 
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 40;
@@ -23,11 +25,13 @@ interface Villager {
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
     const [villagers, setVillagers] = useState<Villager[]>([]);
+    const [goldMines, setGoldMines] = useState<{ id: string; x: number; y: number }[]>([]);
     const [selectedVillagerIds, setSelectedVillagerIds] = useState<Set<string>>(new Set());
     const [selectionRect, setSelectionRect] = useState<{ x: number, y: number, width: number, height: number, visible: boolean } | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Record<string, Konva.Group>>({});
+    const goldMineRefs = useRef<Record<string, Konva.Group>>({});
     const selectionRectRef = useRef<Konva.Rect>(null);
     const layerRef = useRef<Konva.Layer>(null);
     const isSelecting = useRef(false);
@@ -43,6 +47,9 @@ const TestMapPage = () => {
             initialVillagers.push({ id, x, y, targetX: x, targetY: y, isMoving: false });
         }
         setVillagers(initialVillagers);
+        
+        // Initialize gold mines
+        setGoldMines([{ id: 'gold-mine-1', x: 25 * GRID_SIZE, y: 12 * GRID_SIZE }]);
     }, []);
 
     const updateVillagersMovingState = useCallback(() => {
@@ -179,16 +186,30 @@ const TestMapPage = () => {
         const pos = stageRef.current?.getPointerPosition();
         if (!pos) return;
 
+        let targetX = pos.x;
+        let targetY = pos.y;
+        let targetRadius = 15;
+        
+        // Check if right-clicking on a mine. The name "gold-mine" is set on the Group in AnimatedGoldMine.
+        const clickedNode = e.target;
+        const mineGroup = clickedNode.getAncestors().find(ancestor => ancestor.id()?.startsWith('gold-mine'));
+
+        if (mineGroup) {
+            targetX = mineGroup.x();
+            targetY = mineGroup.y();
+            targetRadius = 50; // Scatter wider around the mine
+        }
+
         setVillagers(currentVillagers => 
             currentVillagers.map(v => {
                 if (selectedVillagerIds.has(v.id)) {
                     // Simple scatter logic
                     const angle = Math.random() * 2 * Math.PI;
-                    const radius = Math.sqrt(selectedVillagerIds.size) * 15;
+                    const radius = Math.sqrt(selectedVillagerIds.size) * targetRadius;
                     return {
                         ...v,
-                        targetX: pos.x + Math.cos(angle) * radius,
-                        targetY: pos.y + Math.sin(angle) * radius,
+                        targetX: targetX + Math.cos(angle) * radius,
+                        targetY: targetY + Math.sin(angle) * radius,
                     };
                 }
                 return v;
@@ -207,7 +228,7 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">Drag-to-Select Test Map</h1>
-            <p className="text-parchment-dark mb-4 text-sm">Drag to select villagers. Right-click to move them. Shift-click to add/remove from selection.</p>
+            <p className="text-parchment-dark mb-4 text-sm">Drag to select villagers. Right-click to move them or target the mine.</p>
             <div className="w-full max-w-5xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
                     ref={stageRef} 
@@ -221,6 +242,17 @@ const TestMapPage = () => {
                 >
                     <Layer ref={layerRef}>
                         {renderGrid()}
+
+                        {goldMines.map(mine => (
+                            <AnimatedGoldMine
+                                key={mine.id}
+                                id={mine.id}
+                                ref={node => { if(node) goldMineRefs.current[mine.id] = node; }}
+                                x={mine.x}
+                                y={mine.y}
+                            />
+                        ))}
+
                         {villagers.map(villager => 
                             <AnimatedVillager
                                 key={villager.id}

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Group, Label, Tag, Text, Circle, Line, Ellipse } from 'react-konva';
+import { Stage, Layer, Rect, Group, Label, Tag, Text, Circle, Line, Ellipse, Star } from 'react-konva';
 import Konva from 'konva';
 
 const GRID_SIZE = 30;

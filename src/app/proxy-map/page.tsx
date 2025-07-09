@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { MapContainer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Popup, useMapEvents, ImageOverlay } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import FullScreen from 'react-fullscreen-crossbrowser';
@@ -82,7 +82,7 @@ const ProxyMapPage = () => {
         return {
             population: { current: currentPop, capacity: capacity },
             currentAge: gameState.currentAge,
-            inventory: gameState.inventory,
+            inventory: gameState.inventory || [],
             resourceDeltas: {},
             units: gameState.units,
             gameLog: gameState.gameLog,
@@ -233,6 +233,12 @@ const ProxyMapPage = () => {
     const totalBuildingsCount = buildings.length;
     const busyVillagerCount = units.villagers.filter(v => v.currentTask).length;
     const militaryUnitCounts = units.military.reduce((acc, unit) => { acc[unit.unitType] = (acc[unit.unitType] || 0) + 1; return acc; }, {} as Record<string, number>);
+    
+    // Define bounds for the image overlay
+    const imageBounds: L.LatLngBoundsExpression = [
+        [-MAP_DIMENSIONS.height, -MAP_DIMENSIONS.width], // Bottom-left corner
+        [MAP_DIMENSIONS.height, MAP_DIMENSIONS.width]    // Top-right corner
+    ];
 
     return (
         <FullScreen enabled={isFullScreen} onChange={setIsFullScreen}>
@@ -270,7 +276,8 @@ const ProxyMapPage = () => {
                             </header>
 
                             <div className="relative flex-grow">
-                                <MapContainer ref={mapRef} center={[0, 0]} zoom={5} style={{ height: '100%', width: '100%', backgroundColor: '#1d2021' }} className="rounded-lg" crs={L.CRS.Simple} maxBounds={L.latLngBounds([-50, -50], [50, 50])} minZoom={4}>
+                                <MapContainer ref={mapRef} center={[0, 0]} zoom={5} style={{ height: '100%', width: '100%', backgroundColor: '#1d2021' }} className="rounded-lg" crs={L.CRS.Simple} maxBounds={L.latLngBounds([-50, -50], [50, 50])} minZoom={4} attributionControl={false}>
+                                    <ImageOverlay url="https://i.ibb.co/L8RR28T/aoe-grass.webp" bounds={imageBounds} />
                                     <MapEventsHandler />
                                     {buildings.map((instance: BuildingInstance) => { const buildingType = allBuildingConfigs.find(conf => conf.name === instance.name.replace(/#\d+$/, '').trim())?.id || Object.keys(gameState.buildings).find(key => gameState.buildings[key].some(b => b.id === instance.id)) || 'defaultBuilding'; return <Marker key={instance.id} position={[-instance.position.y + MAP_DIMENSIONS.height/2, instance.position.x - MAP_DIMENSIONS.width/2]} icon={getIconForBuilding(buildingType as BuildingType)} eventHandlers={{click: (e) => onBuildingClick(instance, e.originalEvent)}}><Popup>{instance.name} ({buildingType})</Popup></Marker>})}
                                     {gameState.resourceNodes.map((node: ResourceNode) => <Marker key={node.id} position={[-node.position.y + MAP_DIMENSIONS.height/2, node.position.x - MAP_DIMENSIONS.width/2]} icon={getIconForResource(node.type)}><Popup>{node.type} Node (Amount: {Math.floor(node.amount)})</Popup></Marker>)}
@@ -298,7 +305,7 @@ const ProxyMapPage = () => {
                          <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={closeAllPanels} panelState={buildingManagementPanel} buildings={gameState.buildings} buildingList={allBuildingConfigs} onUpdateBuilding={dummyHandler('update building')} onDemolishBuilding={dummyHandler('demolish building')} onTrainUnits={dummyHandler('train units')} onTrainVillagers={dummyHandler('train villagers')} onUpgradeBuilding={dummyHandler('upgrade building')} resources={gameState.resources} population={population} unitList={allUnitConfigs} onAdvanceAge={dummyHandler('advance age')} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} masterResearchList={allResearchConfigs} completedResearch={completedResearch} onStartResearch={dummyHandler('start research')} currentAge={currentAge} ageProgressionList={allAgeConfigs} />
                          <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={closeAllPanels} buildingList={allBuildingConfigs} buildingCounts={Object.keys(gameState.buildings).reduce((acc, k) => ({...acc, [k]: gameState.buildings[k].length}), {})} activeTasks={activeTasks} onOpenBuildingPanel={(type, id, rect) => { closeAllPanels(); setBuildingManagementPanel({isOpen: true, type, instanceId: id, anchorRect: rect})}} anchorRect={allBuildingsPanel.anchorRect} />
                          <CivilizationPanel isOpen={civPanelState.isOpen} onClose={closeAllPanels} civilization={civilization} anchorRect={civPanelState.anchorRect} />
-                         <InventoryPanel isOpen={inventoryPanelState.isOpen} onClose={closeAllPanels} inventory={inventory} onUseItem={dummyHandler('use item')} activeTasks={activeTasks} activeBuffs={gameState.activeBuffs} anchorRect={inventoryPanelState.anchorRect} />
+                         <InventoryPanel isOpen={inventoryPanelState.isOpen} onClose={closeAllPanels} inventory={inventory} onUseItem={dummyHandler('use item')} activeTasks={activeTasks} activeBuffs={gameState.activeBuffs || {}} anchorRect={inventoryPanelState.anchorRect} />
                          <ResearchPanel isOpen={researchPanelState.isOpen} onClose={closeAllPanels} masterResearchList={allResearchConfigs} completedResearch={completedResearch} activeTasks={activeTasks} resources={gameState.resources} currentAge={currentAge} ageProgressionList={allAgeConfigs} onStartResearch={dummyHandler('start research')} />
                     </>
                 )}

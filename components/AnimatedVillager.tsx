@@ -1,11 +1,10 @@
-
 'use client';
 
 import React, { forwardRef, useEffect, useRef } from 'react';
 import { Group, Rect, Circle, Line } from 'react-konva';
 import Konva from 'konva';
 
-const scale = 0.2;
+const scale = 0.07;
 
 function easeInOutQuad(t: number) {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;

@@ -43,6 +43,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
 
         if (movementTweenRef.current) {
             movementTweenRef.current.destroy();
+            movementTweenRef.current = null;
         }
         
         if (task === 'moving') {
@@ -137,7 +138,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
          {task !== 'dead' && (
              <Group y={-80 * scale} listening={false}>
                 <Rect x={-50 * scale} y={-10 * scale} width={100 * scale} height={10 * scale} fill="#3c3836" cornerRadius={5 * scale} />
-                <Rect x={-50 * scale} y={-10 * scale} width={(100 * scale * hp) / maxHp} height={10 * scale} fill="#98971a" cornerRadius={5 * scale} />
+                <Rect x={-50 * scale} y={-10 * scale} width={(100 * scale * hp) / maxHp} height={10 * scale} fill="#fb4934" cornerRadius={5 * scale} />
             </Group>
          )}
 

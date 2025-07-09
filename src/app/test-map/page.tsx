@@ -12,8 +12,10 @@ const MAP_WIDTH_CELLS = 40;
 const MAP_HEIGHT_CELLS = 25;
 const MAX_HP = 10;
 const ATTACK_POWER = 2;
-const ATTACK_RANGE = 40;
+const ATTACK_DISTANCE = 35; // Villagers will stop this far away to attack
+const ATTACK_RANGE = 40;    // They can attack from this far away
 const ATTACK_COOLDOWN = 1000; // ms
+const DEATH_DURATION = 10000; // 10 seconds
 
 interface Villager {
     id: string;
@@ -27,6 +29,7 @@ interface Villager {
     attackLastTime: number;
     task: 'idle' | 'moving' | 'attacking' | 'dead';
     isSelected: boolean;
+    deathTime?: number;
 }
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
@@ -91,10 +94,29 @@ const TestMapPage = () => {
                 const damageMap = new Map<string, number>();
                 let hasChanged = false;
 
-                const nextVillagers = currentVillagers.map(v => ({...v})); // Create a mutable copy
+                let nextVillagers = currentVillagers.map(v => ({...v})); // Create a mutable copy
 
                 // First pass: determine attacks and build damage map
                 for (const villager of nextVillagers) {
+                     if (villager.task === 'dead') continue;
+
+                    if (villager.task === 'moving' && villager.targetId) {
+                         const target = nextVillagers.find(v => v.id === villager.targetId);
+                         if (target && target.task !== 'dead') {
+                             const dx = target.x - villager.x;
+                             const dy = target.y - villager.y;
+                             const distance = Math.sqrt(dx * dx + dy * dy);
+                             if (distance <= ATTACK_DISTANCE) {
+                                villager.task = 'attacking';
+                                hasChanged = true;
+                             }
+                         } else {
+                            villager.task = 'idle';
+                            villager.targetId = null;
+                            hasChanged = true;
+                         }
+                    }
+
                     if (villager.task === 'attacking' && villager.targetId) {
                         const target = nextVillagers.find(v => v.id === villager.targetId);
                         if (target && target.task !== 'dead') {
@@ -129,12 +151,20 @@ const TestMapPage = () => {
                             villager.hp = Math.max(0, newHp);
                             if (villager.hp === 0) {
                                 villager.task = 'dead';
+                                villager.deathTime = now;
                                 villager.isSelected = false;
                                 villager.targetId = null;
                             }
                             hasChanged = true;
                         }
                     }
+                }
+                
+                // Third pass: remove vanished villagers
+                const vanishedCount = nextVillagers.filter(v => v.task === 'dead' && now - (v.deathTime || 0) > DEATH_DURATION).length;
+                if (vanishedCount > 0) {
+                    nextVillagers = nextVillagers.filter(v => !(v.task === 'dead' && now - (v.deathTime || 0) > DEATH_DURATION));
+                    hasChanged = true;
                 }
 
                 return hasChanged ? nextVillagers : currentVillagers;
@@ -200,14 +230,9 @@ const TestMapPage = () => {
                     if (targetId) {
                         const targetVillager = currentVillagers.find(tv => tv.id === targetId);
                         if (targetVillager && targetVillager.task !== 'dead') {
-                            const dx = targetVillager.x - v.x;
-                            const dy = targetVillager.y - v.y;
-                            const distance = Math.sqrt(dx * dx + dy * dy);
-                            const task = distance <= ATTACK_RANGE ? 'attacking' : 'moving';
-                            
                             return { 
                                 ...v, 
-                                task: task,
+                                task: 'moving',
                                 targetX: targetVillager.x, 
                                 targetY: targetVillager.y,
                                 targetId: targetId,
@@ -291,8 +316,8 @@ const TestMapPage = () => {
             currentVillagers.map(v => {
                 if (v.id !== villagerId) return v;
                 
-                const target = v.targetId ? currentVillagers.find(t => t.id === v.targetId) : null;
-                const task = target ? 'attacking' : 'idle';
+                // If it was moving to a target, it's now attacking. Otherwise, idle.
+                const task = v.targetId ? 'attacking' : 'idle';
 
                 return { ...v, task, x: newPosition.x, y: newPosition.y };
             })

@@ -27,7 +27,7 @@ interface Villager {
     attack: number;
     targetId: string | null;
     attackLastTime: number;
-    task: 'idle' | 'moving' | 'attacking' | 'dead';
+    task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
     isSelected: boolean;
     deathTime?: number;
 }

@@ -17,7 +17,7 @@ interface AnimatedVillagerProps {
     targetX: number;
     targetY: number;
     isSelected?: boolean;
-    task: 'idle' | 'moving' | 'attacking' | 'dead';
+    task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
     hp: number;
     maxHp: number;
     deathTime?: number;
@@ -99,10 +99,11 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
 
         // Handle death separately with a precise tween
         if (task === 'dead') {
+             // Stop any other animations
             resetToIdle();
             const deathTween = new Konva.Tween({
                 node,
-                duration: DEATH_DURATION / 1000,
+                duration: DEATH_DURATION / 1000, // Tween duration is in seconds
                 opacity: 0,
             });
             deathTween.play();

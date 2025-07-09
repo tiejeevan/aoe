@@ -1,9 +1,9 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Group, Label, Tag, Text, Line } from 'react-konva';
+import { Stage, Layer, Rect, Group, Label, Tag, Text } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import AnimatedGoldMine from '../../../components/AnimatedGoldMine';
@@ -59,7 +59,7 @@ PickaxeIcon.displayName = 'PickaxeIcon';
 const House = React.forwardRef<Konva.Group, Konva.GroupConfig & { isPreview?: boolean }>(({ isPreview, ...props }, ref) => (
     <Group {...props} ref={ref} opacity={isPreview ? 0.6 : 1}>
         <Rect width={GRID_SIZE * 2} height={GRID_SIZE * 1.5} fill="#a16207" stroke="#3c3836" strokeWidth={2} cornerRadius={3} listening={false}/>
-        <Line points={[0, 0, GRID_SIZE, -GRID_SIZE, GRID_SIZE * 2, 0]} closed fill="#854d0e" stroke="#3c3836" strokeWidth={2} listening={false}/>
+        <Konva.Line points={[0, 0, GRID_SIZE, -GRID_SIZE, GRID_SIZE * 2, 0]} closed fill="#854d0e" stroke="#3c3836" strokeWidth={2} listening={false}/>
         <Rect x={GRID_SIZE * 0.75} y={GRID_SIZE * 0.5} width={GRID_SIZE * 0.5} height={GRID_SIZE} fill="#3c3836" listening={false}/>
     </Group>
 ));
@@ -76,11 +76,9 @@ const TestMapPage = () => {
     const [tooltipMineId, setTooltipMineId] = useState<string | null>(null);
     const [stageScale, setStageScale] = useState(1);
     const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-    const [stageDraggable, setStageDraggable] = useState(true);
     const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
     const [playerAction, setPlayerAction] = useState<PlayerAction>(null);
     const [placementPreview, setPlacementPreview] = useState<{x: number, y: number} | null>(null);
-
 
     const stageRef = useRef<Konva.Stage>(null);
     const layerRef = useRef<Konva.Layer>(null);
@@ -89,6 +87,17 @@ const TestMapPage = () => {
     const isSelecting = useRef(false);
     const lastAttackTimes = useRef<Record<string, number>>({});
 
+    // Use refs for animation loop to prevent re-creating the animation on every render
+    const villagersRef = useRef(villagers);
+    useEffect(() => {
+        villagersRef.current = villagers;
+    }, [villagers]);
+
+    const goldMinesRef = useRef(goldMines);
+    useEffect(() => {
+        goldMinesRef.current = goldMines;
+    }, [goldMines]);
+    
     useEffect(() => {
         setIsClient(true);
         const initialVillagers: Villager[] = [];
@@ -111,12 +120,48 @@ const TestMapPage = () => {
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, []);
     
-    // Game Logic Loop (Attacks, Mining, State Changes)
+    // Main Game Loop
     useEffect(() => {
-        if (!isClient) return;
+        if (!isClient || !layerRef.current) return;
 
-        const gameTick = setInterval(() => {
-            setVillagers(currentVillagers => {
+        let logicTickAccumulator = 0;
+        const GAME_TICK_INTERVAL = 250; // ms
+
+        const anim = new Konva.Animation(frame => {
+            if (!frame) return;
+            const timeDiff = frame.timeDiff;
+            logicTickAccumulator += timeDiff;
+
+            const villagersToUpdate = [...villagersRef.current];
+
+            // --- Visual & Position Update (every frame) ---
+            villagersToUpdate.forEach(villager => {
+                if (villager.task === 'dead') return;
+                
+                const node = villagerRefs.current[villager.id];
+                if (!node) return;
+
+                const dx = villager.targetX - villager.x;
+                const dy = villager.targetY - villager.y;
+                const distance = Math.hypot(dx, dy);
+                
+                if (distance < 5) { // Close enough, snap to position and stop moving
+                    villager.x = villager.targetX;
+                    villager.y = villager.targetY;
+                } else {
+                    const moveDistance = UNIT_SPEED * (timeDiff / 1000);
+                    const ratio = Math.min(1, moveDistance / distance);
+                    villager.x += dx * ratio;
+                    villager.y += dy * ratio;
+                }
+                node.position({ x: villager.x, y: villager.y });
+            });
+
+
+            // --- Logic Update (every GAME_TICK_INTERVAL) ---
+            if (logicTickAccumulator > GAME_TICK_INTERVAL) {
+                logicTickAccumulator = logicTickAccumulator % GAME_TICK_INTERVAL;
+
                 const ATTACK_POWER = 2;
                 const ATTACK_RANGE = GRID_SIZE * 1.5;
                 const ATTACK_COOLDOWN = 1500;
@@ -125,118 +170,93 @@ const TestMapPage = () => {
                 const damageToApply = new Map<string, number>();
                 const goldToGain = new Map<string, number>();
                 const now = Date.now();
-                let villagersChanged = false;
+                let villagersStateChanged = false;
 
-                const nextVillagers = currentVillagers.map(villager => {
-                    if (villager.task === 'dead') return villager;
+                villagersToUpdate.forEach(villager => {
+                    if (villager.task === 'dead') return;
 
-                    // --- Attacking Logic ---
-                    if (villager.task === 'attacking' && villager.attackTargetId) {
-                        const target = currentVillagers.find(v => v.id === villager.attackTargetId);
-                        if (!target || target.task === 'dead') {
-                            return { ...villager, task: 'idle', attackTargetId: null };
-                        }
-                        
-                        const distance = Math.hypot(target.x - villager.x, target.y - villager.y);
-
-                        if (distance <= ATTACK_RANGE) {
-                            if (now - (lastAttackTimes.current[villager.id] || 0) > ATTACK_COOLDOWN) {
-                                const currentDamage = damageToApply.get(target.id) || 0;
-                                damageToApply.set(target.id, currentDamage + ATTACK_POWER);
-                                lastAttackTimes.current[villager.id] = now;
-                            }
-                            // Stop moving when in range
-                            return { ...villager, targetX: villager.x, targetY: villager.y };
-                        } else {
-                            // Keep chasing
-                            return { ...villager, targetX: target.x, targetY: target.y };
+                    const distanceToTarget = Math.hypot(villager.targetX - villager.x, villager.targetY - villager.y);
+                    if (distanceToTarget < 5) {
+                        if (villager.task === 'moving') {
+                            villagersStateChanged = true;
+                            if (villager.targetMineId) villager.task = 'mining';
+                            else villager.task = 'idle';
                         }
                     }
 
-                    // --- Mining Logic ---
+                    if (villager.task === 'attacking' && villager.attackTargetId) {
+                        const target = villagersToUpdate.find(v => v.id === villager.attackTargetId);
+                        if (!target || target.task === 'dead') {
+                            villager.task = 'idle';
+                            villager.attackTargetId = null;
+                            villagersStateChanged = true;
+                        } else {
+                            const distanceToTarget = Math.hypot(target.x - villager.x, target.y - villager.y);
+                            if (distanceToTarget <= ATTACK_RANGE) {
+                                villager.targetX = villager.x; // Stop moving
+                                villager.targetY = villager.y;
+                                if (now - (lastAttackTimes.current[villager.id] || 0) > ATTACK_COOLDOWN) {
+                                    const currentDamage = damageToApply.get(target.id) || 0;
+                                    damageToApply.set(target.id, currentDamage + ATTACK_POWER);
+                                    lastAttackTimes.current[villager.id] = now;
+                                }
+                            } else { // Chase target
+                                villager.targetX = target.x;
+                                villager.targetY = target.y;
+                            }
+                        }
+                    }
+
                     if (villager.task === 'mining' && villager.targetMineId) {
                         const currentGold = goldToGain.get(villager.targetMineId) || 0;
-                        goldToGain.set(villager.targetMineId, currentGold + MINE_RATE_PER_VILLAGER * (250 / 1000));
+                        goldToGain.set(villager.targetMineId, currentGold + MINE_RATE_PER_VILLAGER * (GAME_TICK_INTERVAL / 1000));
                     }
-                    
-                    return villager;
                 });
-                
-                // --- Apply Damage ---
+
                 if (damageToApply.size > 0) {
-                    villagersChanged = true;
+                    villagersStateChanged = true;
                     damageToApply.forEach((totalDamage, targetId) => {
-                        const targetIndex = nextVillagers.findIndex(v => v.id === targetId);
-                        if (targetIndex !== -1) {
-                            const newHp = Math.max(0, nextVillagers[targetIndex].hp - totalDamage);
-                            nextVillagers[targetIndex].hp = newHp;
-                            if (newHp === 0) {
-                                nextVillagers[targetIndex].task = 'dead';
-                            }
+                        const target = villagersToUpdate.find(v => v.id === targetId);
+                        if (target) {
+                            target.hp = Math.max(0, target.hp - totalDamage);
+                            if (target.hp === 0) target.task = 'dead';
                         }
                     });
                 }
-                
-                // --- Apply Mining ---
-                if(goldToGain.size > 0) {
+
+                if (goldToGain.size > 0) {
                     setGoldMines(currentMines => {
-                        return currentMines.map(mine => {
+                        const nextMines = currentMines.map(mine => {
                             const minedAmount = goldToGain.get(mine.id);
                             if (minedAmount) {
                                 const newAmount = Math.max(0, mine.amount - minedAmount);
-                                if (newAmount === 0 && mine.amount > 0) { // Was just depleted
-                                    setVillagers(v_state => v_state.map(v => v.targetMineId === mine.id ? { ...v, task: 'idle', targetMineId: null } : v));
+                                if (newAmount === 0 && mine.amount > 0) {
+                                    villagersToUpdate.forEach(v => {
+                                        if (v.targetMineId === mine.id) {
+                                            v.task = 'idle';
+                                            v.targetMineId = null;
+                                            villagersStateChanged = true;
+                                        }
+                                    });
                                     setTooltipMineId(prev => prev === mine.id ? null : prev);
                                 }
-                                return {...mine, amount: newAmount};
+                                return { ...mine, amount: newAmount };
                             }
                             return mine;
-                        }).filter(mine => mine.amount > 0);
+                        });
+                        return nextMines.filter(mine => mine.amount > 0);
                     });
                 }
+                
+                if (villagersStateChanged) {
+                    setVillagers([...villagersToUpdate]);
+                }
+            }
+        }, layerRef.current);
 
-                // --- Movement Logic ---
-                return nextVillagers.map(villager => {
-                    if (villager.task === 'dead') return villager;
-                    const distance = Math.hypot(villager.targetX - villager.x, villager.targetY - villager.y);
-                    if (distance < 5) {
-                        if (villager.task === 'moving') {
-                            villagersChanged = true;
-                            if (villager.targetMineId) return { ...villager, task: 'mining' };
-                            return { ...villager, task: 'idle' };
-                        }
-                        return villager;
-                    }
-                    villagersChanged = true;
-                    const moveDistance = UNIT_SPEED * (250 / 1000); // interval is 250ms
-                    const ratio = Math.min(1, moveDistance / distance);
-                    const newX = villager.x + (villager.targetX - villager.x) * ratio;
-                    const newY = villager.y + (villager.targetY - villager.y) * ratio;
-                    return { ...villager, x: newX, y: newY };
-                });
-            });
-        }, 250);
-
-        return () => clearInterval(gameTick);
+        anim.start();
+        return () => anim.stop();
     }, [isClient]);
-
-    // Visual Animation Trigger
-    useEffect(() => {
-        if (!isClient) return;
-
-        villagers.forEach(villagerData => {
-            const villagerNode = villagerRefs.current[villagerData.id];
-            if (!villagerNode) return;
-
-            // Animate to new position
-            villagerNode.to({
-                x: villagerData.x,
-                y: villagerData.y,
-                duration: 0.25, // duration of movement between ticks
-                easing: Konva.Easings.EaseInOut,
-            });
-        });
-    }, [isClient, villagers]);
 
     const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
         e.evt.preventDefault();
@@ -323,6 +343,7 @@ const TestMapPage = () => {
         if (e.evt.shiftKey) { if (currentlySelected.has(villagerId)) currentlySelected.delete(villagerId); else currentlySelected.add(villagerId); } 
         else { currentlySelected.clear(); currentlySelected.add(villagerId); }
         setTooltipMineId(null);
+        setSelectedVillagerIds(currentlySelected);
     };
 
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
@@ -344,7 +365,7 @@ const TestMapPage = () => {
 
             setVillagers(currentVillagers => currentVillagers.map(v => {
                 if (selectedVillagerIds.has(v.id) && v.task !== 'dead') {
-                    return { ...v, task: 'attacking', attackTargetId: clickedVillagerId, targetMineId: null };
+                    return { ...v, task: 'attacking', attackTargetId: clickedVillagerId, targetMineId: null, targetX: targetVillager.x, targetY: targetVillager.y };
                 }
                 return v;
             }));
@@ -378,7 +399,7 @@ const TestMapPage = () => {
         setPlayerAction({ mode: 'placing_building', data: { buildingType: 'house' } });
     };
 
-    const renderGrid = () => Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => <Rect key={i} x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} y={Math.floor(i / MAP_WIDTH_CELLS) * GRID_SIZE} width={GRID_SIZE} height={GRID_SIZE} fill="#504945" stroke="#665c54" strokeWidth={1} listening={false}/>);
+    const renderGrid = () => Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => <Rect key={i} x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} y={Math.floor(i / MAP_HEIGHT_CELLS) * GRID_SIZE} width={GRID_SIZE} height={GRID_SIZE} fill="#504945" stroke="#665c54" strokeWidth={1} listening={false}/>);
     const activeTooltipMine = tooltipMineId ? goldMines.find(m => m.id === tooltipMineId) : null;
     if (!isClient) return <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-8"><h1 className="text-4xl font-serif text-brand-gold mb-4">Loading Map Engine...</h1></div>;
 
@@ -401,12 +422,15 @@ const TestMapPage = () => {
                                 <AnimatedGoldMine
                                     key={mine.id} id={mine.id} ref={node => { if(node) goldMineRefs.current[mine.id] = node; }}
                                     x={mine.x} y={mine.y} onClick={(e) => handleMineClick(mine.id, e)} onTap={(e) => handleMineClick(mine.id, e as any)}
-                                    onMouseEnter={() => { if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id); if(!isSpacebarPressed) setStageDraggable(false); }}
-                                    onMouseLeave={() => { setHoveredMineId(null); if(!isSpacebarPressed) setStageDraggable(true); }}
+                                    onMouseEnter={() => { if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id); }}
+                                    onMouseLeave={() => { setHoveredMineId(null); }}
                                 />
                             ))}
                             {villagers.map(villager => (
-                                <Group key={villager.id} id={villager.id}>
+                                <Group key={villager.id} id={villager.id}
+                                    onMouseEnter={() => {if (!isSpacebarPressed) (stageRef.current?.container() as HTMLDivElement).style.cursor = 'pointer';}}
+                                    onMouseLeave={() => {if (!isSpacebarPressed) (stageRef.current?.container() as HTMLDivElement).style.cursor = 'default';}}
+                                >
                                     <AnimatedVillager 
                                         ref={node => { if(node) villagerRefs.current[villager.id] = node; }} 
                                         x={villager.x} 
@@ -417,8 +441,6 @@ const TestMapPage = () => {
                                         isSelected={selectedVillagerIds.has(villager.id)}
                                         onClick={(e) => handleUnitClick(e, villager.id)} 
                                         onTap={(e) => handleUnitClick(e, villager.id)}
-                                        onMouseEnter={() => { if(!isSpacebarPressed) setStageDraggable(false); }}
-                                        onMouseLeave={() => { if(!isSpacebarPressed) setStageDraggable(true); }}
                                     />
                                     {villager.hp < villager.maxHp && villager.task !== 'dead' && (
                                         <Group x={villager.x - 20} y={villager.y - 30} listening={false}>

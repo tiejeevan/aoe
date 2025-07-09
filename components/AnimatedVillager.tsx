@@ -7,40 +7,26 @@ import Konva from 'konva';
 
 const scale = 0.07;
 
-interface AnimatedVillagerProps extends Omit<Konva.GroupConfig, 'x' | 'y'> {
+interface AnimatedVillagerProps extends Omit<Konva.GroupConfig, 'id'> {
     id: string;
     isSelected?: boolean;
     task: 'idle' | 'moving' | 'attacking' | 'dead';
     hp: number;
     maxHp: number;
-    x: number;
-    y: number;
-    targetX: number;
-    targetY: number;
-    onMoveEnd: () => void;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ id, isSelected, task, x, y, targetX, targetY, onMoveEnd, hp, maxHp, ...groupProps }, ref) => {
+  ({ id, isSelected, task, hp, maxHp, ...groupProps }, ref) => {
     
-    const nodeRef = useRef<Konva.Group>(null);
     const leftArmRef = useRef<Konva.Group>(null);
     const rightArmRef = useRef<Konva.Group>(null);
     const leftLegRef = useRef<Konva.Group>(null);
     const rightLegRef = useRef<Konva.Group>(null);
     const animRef = useRef<Konva.Animation | null>(null);
+    const mainGroupRef = useRef<Konva.Group>(null);
 
     useEffect(() => {
-        const node = nodeRef.current;
-        if (!node) return;
-
-        if (task !== 'moving') {
-            node.position({ x, y });
-        }
-    }, [x, y, task]);
-
-    useEffect(() => {
-        const node = nodeRef.current;
+        const node = mainGroupRef.current;
         if (!node) return;
 
         if (animRef.current) {
@@ -58,26 +44,6 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
             if (!frame || !node) return;
             
             if (task === 'moving') {
-                const speed = 2; 
-
-                const currentX = node.x();
-                const currentY = node.y();
-                const dx = targetX - currentX;
-                const dy = targetY - currentY;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < speed) {
-                    node.position({ x: targetX, y: targetY });
-                    onMoveEnd();
-                    animRef.current?.stop();
-                    resetToIdle();
-                    return;
-                }
-                
-                const angle = Math.atan2(dy, dx);
-                node.x(currentX + Math.cos(angle) * speed);
-                node.y(currentY + Math.sin(angle) * speed);
-
                 const animSpeed = 0.01;
                 const swingAngle = 20; 
                 const rotation = Math.sin(frame.time * animSpeed) * swingAngle;
@@ -113,11 +79,11 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
             }
         };
 
-    }, [task, targetX, targetY, onMoveEnd]);
+    }, [task]);
 
     return (
-      <Group ref={nodeRef} {...groupProps} name="villager" id={id} visible={task !== 'dead' || (nodeRef.current?.opacity() || 0) > 0}>
-        {/* HP Bar */}
+      <Group ref={mainGroupRef} {...groupProps} name="villager" id={id} visible={task !== 'dead' || (mainGroupRef.current?.opacity() || 0) > 0}>
+        {/* HP Bar - Not listening for clicks */}
          {task !== 'dead' && (
              <Group y={-80 * scale} listening={false}>
                 <Rect x={-50 * scale} y={-10 * scale} width={100 * scale} height={10 * scale} fill="#3c3836" cornerRadius={5 * scale} />
@@ -126,7 +92,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
          )}
 
 
-        {/* Selection Indicator */}
+        {/* Selection Indicator - Not listening for clicks */}
         {isSelected && (
             <Ellipse
                 y={100 * scale}

@@ -7,6 +7,7 @@ import Konva from 'konva';
 
 const moveSpeed = 100; // pixels per second
 const scale = 0.07;
+const DEATH_DURATION = 10000; // ms
 
 interface AnimatedVillagerProps {
     id: string;
@@ -18,13 +19,14 @@ interface AnimatedVillagerProps {
     task: 'idle' | 'moving' | 'attacking' | 'dead';
     hp: number;
     maxHp: number;
+    deathTime?: number;
     onMoveEnd: (newPosition: { x: number; y: number }) => void;
     onMouseEnter: () => void;
     onMouseLeave: () => void;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ id, initialX, initialY, targetX, targetY, isSelected, task, hp, maxHp, onMoveEnd, onMouseEnter, onMouseLeave }, ref) => {
+  ({ id, initialX, initialY, targetX, targetY, isSelected, task, hp, maxHp, deathTime, onMoveEnd, onMouseEnter, onMouseLeave }, ref) => {
     
     const leftArmRef = useRef<Konva.Group>(null);
     const rightArmRef = useRef<Konva.Group>(null);
@@ -84,7 +86,25 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
 
         if (animRef.current) {
             animRef.current.stop();
+            animRef.current = null;
         }
+
+        // Handle death separately with a precise tween
+        if (task === 'dead') {
+             // Stop any other animations
+            resetToIdle();
+            const deathTween = new Konva.Tween({
+                node,
+                duration: DEATH_DURATION / 1000, // Tween duration is in seconds
+                opacity: 0,
+            });
+            deathTween.play();
+            // No need to clean up tween, it will be destroyed with the component
+            return;
+        }
+
+        // Reset opacity if it's not dead
+        node.opacity(1);
 
         const resetToIdle = () => {
             if (leftArmRef.current) leftArmRef.current.rotation(0);
@@ -113,12 +133,6 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                 if (leftArmRef.current) leftArmRef.current.rotation(0);
                 if (leftLegRef.current) leftLegRef.current.rotation(0);
                 if (rightLegRef.current) rightLegRef.current.rotation(0);
-            } else if (task === 'dead') {
-                if(node.opacity() > 0) {
-                    node.opacity(node.opacity() - 0.01);
-                } else {
-                    animRef.current?.stop();
-                }
             } else { // Idle
                 resetToIdle();
             }
@@ -133,7 +147,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     }, [task]);
 
     return (
-      <Group ref={mainGroupRef} x={initialX} y={initialY} name="villager" id={id} visible={task !== 'dead' || (mainGroupRef.current?.opacity() || 0) > 0} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <Group ref={mainGroupRef} x={initialX} y={initialY} name="villager" id={id} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {/* HP Bar - Not listening for clicks */}
          {task !== 'dead' && (
              <Group y={-80 * scale} listening={false}>

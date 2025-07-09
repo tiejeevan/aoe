@@ -92,7 +92,7 @@ const TestMapPage = () => {
              setVillagers(currentVillagers => {
                 const now = Date.now();
                 const damageMap = new Map<string, number>();
-                let hasChanged = false;
+                let villagersNeedUpdate = false;
 
                 let nextVillagers = currentVillagers.map(v => ({...v})); // Create a mutable copy
 
@@ -100,45 +100,35 @@ const TestMapPage = () => {
                 for (const villager of nextVillagers) {
                      if (villager.task === 'dead') continue;
 
-                    if (villager.task === 'moving' && villager.targetId) {
-                         const target = nextVillagers.find(v => v.id === villager.targetId);
-                         if (target && target.task !== 'dead') {
+                    // If an attacking villager's target moves out of range, re-engage
+                    if (villager.task === 'attacking' && villager.targetId) {
+                        const target = nextVillagers.find(v => v.id === villager.targetId);
+                        if (target && target.task !== 'dead') {
                              const dx = target.x - villager.x;
                              const dy = target.y - villager.y;
                              const distance = Math.sqrt(dx * dx + dy * dy);
-                             if (distance <= ATTACK_DISTANCE) {
-                                villager.task = 'attacking';
-                                hasChanged = true;
+                             if (distance > ATTACK_RANGE) {
+                                villager.task = 'moving'; // Re-engage
+                                const ratio = (distance - ATTACK_DISTANCE) / distance;
+                                villager.targetX = villager.x + dx * ratio;
+                                villager.targetY = villager.y + dy * ratio;
+                                villagersNeedUpdate = true;
                              }
-                         } else {
-                            villager.task = 'idle';
-                            villager.targetId = null;
-                            hasChanged = true;
-                         }
+                        }
                     }
 
                     if (villager.task === 'attacking' && villager.targetId) {
                         const target = nextVillagers.find(v => v.id === villager.targetId);
                         if (target && target.task !== 'dead') {
-                            const dx = target.x - villager.x;
-                            const dy = target.y - villager.y;
-                            const distance = Math.sqrt(dx * dx + dy * dy);
-
-                            if (distance > ATTACK_RANGE) {
-                                villager.task = 'moving';
-                                villager.targetX = target.x;
-                                villager.targetY = target.y;
-                                hasChanged = true;
-                            } else if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
+                            if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
                                 const currentDamage = damageMap.get(target.id) || 0;
                                 damageMap.set(target.id, currentDamage + villager.attack);
                                 villager.attackLastTime = now;
-                                hasChanged = true;
                             }
                         } else {
                             villager.task = 'idle';
                             villager.targetId = null;
-                            hasChanged = true;
+                            villagersNeedUpdate = true;
                         }
                     }
                 }
@@ -155,19 +145,19 @@ const TestMapPage = () => {
                                 villager.isSelected = false;
                                 villager.targetId = null;
                             }
-                            hasChanged = true;
                         }
                     }
+                    villagersNeedUpdate = true;
                 }
                 
                 // Third pass: remove vanished villagers
                 const vanishedCount = nextVillagers.filter(v => v.task === 'dead' && now - (v.deathTime || 0) > DEATH_DURATION).length;
                 if (vanishedCount > 0) {
                     nextVillagers = nextVillagers.filter(v => !(v.task === 'dead' && now - (v.deathTime || 0) > DEATH_DURATION));
-                    hasChanged = true;
+                    villagersNeedUpdate = true;
                 }
 
-                return hasChanged ? nextVillagers : currentVillagers;
+                return villagersNeedUpdate ? nextVillagers : currentVillagers;
             });
             requestAnimationFrame(gameLoop);
         };
@@ -223,29 +213,30 @@ const TestMapPage = () => {
 
         const targetVillagerNode = getVillagerNode(e.target);
         const targetId = targetVillagerNode ? targetVillagerNode.id() : null;
+        const targetVillager = villagers.find(v => v.id === targetId);
         
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
                 if (v.isSelected && v.task !== 'dead' && v.id !== targetId) {
-                    if (targetId) {
-                        const targetVillager = currentVillagers.find(tv => tv.id === targetId);
-                        if (targetVillager && targetVillager.task !== 'dead') {
-                            return { 
-                                ...v, 
-                                task: 'moving',
-                                targetX: targetVillager.x, 
-                                targetY: targetVillager.y,
-                                targetId: targetId,
-                            };
+                    if (targetVillager && targetVillager.task !== 'dead') {
+                        // Attack command
+                        const dx = targetVillager.x - v.x;
+                        const dy = targetVillager.y - v.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance <= ATTACK_DISTANCE) {
+                            // Already in range, just attack
+                            return { ...v, task: 'attacking', targetId: targetId };
+                        } else {
+                            // Move to attack
+                            const ratio = (distance - ATTACK_DISTANCE) / distance;
+                            const targetX = v.x + dx * ratio;
+                            const targetY = v.y + dy * ratio;
+                            return { ...v, task: 'moving', targetX, targetY, targetId: targetId };
                         }
                     } else {
-                        return { 
-                            ...v, 
-                            task: 'moving',
-                            targetX: pointerPos.x, 
-                            targetY: pointerPos.y,
-                            targetId: null,
-                        };
+                         // Move command
+                        return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
                     }
                 }
                 return v;
@@ -397,9 +388,12 @@ const TestMapPage = () => {
                                 task={villager.task}
                                 isSelected={villager.isSelected}
                                 onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)}
+                                deathTime={villager.deathTime}
                                 onMouseEnter={() => {
-                                    const node = getVillagerNode(villagerRefs.current.get(villager.id));
-                                    if (node) setIsHoveringEnemy(true);
+                                    const node = villagerRefs.current.get(villager.id);
+                                    if (node && getVillagerNode(node)?.id() !== villager.id) {
+                                         setIsHoveringEnemy(true);
+                                    }
                                 }}
                                 onMouseLeave={() => setIsHoveringEnemy(false)}
                             />

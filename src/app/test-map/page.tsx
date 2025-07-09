@@ -142,7 +142,7 @@ const TestMapPage = () => {
     const [goldMines, setGoldMines] = useState<GoldMine[]>([]);
     const [constructionSites, setConstructionSites] = useState<ConstructionSite[]>([]);
     const [buildings, setBuildings] = useState<Building[]>([]);
-    const [log, setLog] = useState<string[]>([]);
+    const [log, setLog] = useState<{ id: string; message: string }[]>([]);
     const [resources, setResources] = useState<Resources>({ wood: 500, gold: 200, stone: 300 });
     const [population, setPopulation] = useState({ current: 5, capacity: 10 });
     
@@ -199,7 +199,8 @@ const TestMapPage = () => {
     }, []);
 
     const addToLog = useCallback((message: string) => {
-        setLog(prevLog => [message, ...prevLog.slice(0, 4)]);
+        const newEntry = { id: `${Date.now()}-${Math.random()}`, message };
+        setLog(prevLog => [newEntry, ...prevLog.slice(0, 49)]);
     }, []);
     
     // Recalculate population and capacity whenever villagers or buildings change
@@ -291,6 +292,7 @@ const TestMapPage = () => {
                                 villager.deathTime = now;
                                 villager.isSelected = false;
                                 villager.targetId = null;
+                                addToLog(`${villager.name} has been defeated.`);
                             }
                         }
                     }
@@ -298,7 +300,7 @@ const TestMapPage = () => {
                         if (damageMap.has(b.id)) {
                             const newHp = b.hp - (damageMap.get(b.id) || 0);
                             if (newHp <= 0) {
-                                addToLog(`${b.type} at (${Math.round(b.x)}, ${Math.round(b.y)}) has been destroyed!`);
+                                addToLog(`${buildingStats[b.type].name} at (${Math.round(b.x)}, ${Math.round(b.y)}) has been destroyed!`);
                                 return null;
                             }
                             return { ...b, hp: newHp };
@@ -420,6 +422,7 @@ const TestMapPage = () => {
                     setPopup(null);
                     setBuildingPopup(null);
                     if (targetMine) {
+                        addToLog(`${v.name} is on the way to the Gold Mine.`);
                         const dx = targetMine.x - v.x;
                         const dy = targetMine.y - v.y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -429,6 +432,8 @@ const TestMapPage = () => {
                         const targetY = v.y + dy * ratio;
                         return { ...v, task: 'moving', targetX, targetY, targetId: targetMineId };
                     } else if (targetSite) {
+                         const siteName = buildingStats[targetSite.type].name;
+                         addToLog(`${v.name} is going to construct the ${siteName}.`);
                          const dx = targetSite.x - v.x;
                          const dy = targetSite.y - v.y;
                          const distance = Math.sqrt(dx * dx + dy * dy);
@@ -438,7 +443,7 @@ const TestMapPage = () => {
                          const targetY = v.y + dy * ratio;
                          return { ...v, task: 'moving', targetX, targetY, targetId: targetSiteId };
                     } else if (targetVillager && targetVillager.id !== v.id) {
-                        // Attack villager command
+                        addToLog(`${v.name} is attacking ${targetVillager.name}!`);
                         const dx = targetVillager.x - v.x;
                         const dy = targetVillager.y - v.y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -451,7 +456,8 @@ const TestMapPage = () => {
                         }
                         return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetVillagerId };
                     } else if (targetBuilding) {
-                         // Attack building command
+                        const buildingName = buildingStats[targetBuilding.type].name;
+                        addToLog(`${v.name} is attacking the ${buildingName}!`);
                         const dx = targetBuilding.x - v.x;
                         const dy = targetBuilding.y - v.y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -464,7 +470,7 @@ const TestMapPage = () => {
                         }
                         return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetBuildingId };
                     } else {
-                         // Move command
+                        addToLog(`${v.name} is moving to (${Math.round(pointerPos.x)}, ${Math.round(pointerPos.y)}).`);
                         return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
                     }
                 }
@@ -482,6 +488,7 @@ const TestMapPage = () => {
                  return;
              }
              if (name === 'dismiss-button') {
+                 addToLog(`${villagers.find(v => v.id === popup.villagerId)?.name} has been dismissed.`);
                  setVillagers(vs => vs.filter(v => v.id !== popup.villagerId));
                  setPopup(null);
                  return;
@@ -562,12 +569,13 @@ const TestMapPage = () => {
                             const dx = siteX - v.x; const dy = siteY - v.y;
                             const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
                             const ratio = dist > standoff ? (dist - standoff)/dist : 0;
+                            addToLog(`${v.name} is going to construct the ${stats.name}.`);
                             return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
                         }
                         return v;
                     }));
                 }
-                addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}`);
+                addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
             } else {
                  addToLog("Not enough resources to build!");
             }
@@ -664,20 +672,27 @@ const TestMapPage = () => {
                 let newTask: Villager['task'] = 'idle';
                 const targetIsVillager = currentVillagers.some(tv => tv.id === v.targetId);
                 const targetIsMine = goldMines.some(m => m.id === v.targetId);
-                const targetIsSite = constructionSites.some(s => s.id === v.targetId);
-                const targetIsBuilding = buildings.some(b => b.id === v.targetId);
+                const targetIsSite = constructionSites.find(s => s.id === v.targetId);
+                const targetIsBuilding = buildings.find(b => b.id === v.targetId);
                 
-                if (targetIsVillager || targetIsBuilding) newTask = 'attacking';
-                else if (targetIsMine) newTask = 'mining';
-                else if (targetIsSite) {
+                if (targetIsVillager || targetIsBuilding) {
+                    newTask = 'attacking';
+                } else if (targetIsMine) {
+                    newTask = 'mining';
+                    addToLog(`${v.name} has started mining gold.`);
+                } else if (targetIsSite) {
                     newTask = 'building';
+                    const siteName = buildingStats[targetIsSite.type].name;
+                    addToLog(`${v.name} has started building the ${siteName}.`);
                     setConstructionSites(cs => cs.map(s => s.id === v.targetId ? { ...s, builderId: v.id, startTime: s.startTime || Date.now() } : s));
+                } else {
+                     addToLog(`${v.name} has arrived at their destination.`);
                 }
 
                 return { ...v, task: newTask, x: newPosition.x, y: newPosition.y };
             })
         );
-    }, [goldMines, constructionSites, buildings]);
+    }, [goldMines, constructionSites, buildings, addToLog]);
 
     const handleMouseEnterEnemy = (isEnemy: boolean) => setIsHoveringEnemy(isEnemy);
     
@@ -723,9 +738,15 @@ const TestMapPage = () => {
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <div className="absolute top-2 left-2 bg-black/50 text-white p-2 rounded-lg text-xs w-96 z-10 font-mono">
                     <h3 className="font-bold border-b mb-1 text-base">Activity Log</h3>
-                    {log.map((entry, i) => (
-                        <p key={i} className="truncate">{entry}</p>
-                    ))}
+                    <div className="max-h-28 overflow-y-auto pr-2">
+                        {log.length === 0 ? (
+                            <p className="text-gray-400 italic">No activity yet.</p>
+                        ) : (
+                            log.map((entry) => (
+                                <p key={entry.id}>{entry.message}</p>
+                            ))
+                        )}
+                    </div>
                 </div>
                  <div className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-lg text-sm z-10 font-mono">
                     <h3 className="font-bold border-b mb-1">Resources</h3>
@@ -834,5 +855,3 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
-
-    

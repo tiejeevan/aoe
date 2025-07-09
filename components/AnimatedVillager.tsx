@@ -21,7 +21,7 @@ interface AnimatedVillagerProps extends Omit<Konva.GroupConfig, 'x' | 'y'> {
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ isSelected, task, x, y, targetX, targetY, onMoveEnd, hp, maxHp, ...groupProps }, ref) => {
+  ({ id, isSelected, task, x, y, targetX, targetY, onMoveEnd, hp, maxHp, ...groupProps }, ref) => {
     
     const nodeRef = useRef<Konva.Group>(null);
     const leftArmRef = useRef<Konva.Group>(null);
@@ -116,10 +116,10 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     }, [task, targetX, targetY, onMoveEnd]);
 
     return (
-      <Group ref={nodeRef} {...groupProps} name="villager" visible={task !== 'dead' || (nodeRef.current?.opacity() || 0) > 0}>
+      <Group ref={nodeRef} {...groupProps} name="villager" id={id} visible={task !== 'dead' || (nodeRef.current?.opacity() || 0) > 0}>
         {/* HP Bar */}
          {task !== 'dead' && (
-             <Group y={-80 * scale}>
+             <Group y={-80 * scale} listening={false}>
                 <Rect x={-50 * scale} y={-10 * scale} width={100 * scale} height={10 * scale} fill="#3c3836" cornerRadius={5 * scale} />
                 <Rect x={-50 * scale} y={-10 * scale} width={(100 * scale * hp) / maxHp} height={10 * scale} fill="#98971a" cornerRadius={5 * scale} />
             </Group>
@@ -135,6 +135,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                 stroke="#d79921"
                 strokeWidth={2}
                 dash={[10, 5]}
+                listening={false}
             />
         )}
         

@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Stage, Layer, Rect, Circle, Group } from 'react-konva';
 import Konva from 'konva';
+import AnimatedVillager from '../../../components/AnimatedVillager';
 
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 30;
@@ -19,34 +20,6 @@ interface Building {
     height: number;
     type: 'Barracks' | 'Town Center';
 }
-
-// A new component for our animated figure, based on the user's example.
-// It's purely presentational; all animation logic is handled by the parent.
-const AnimatedVillager = React.forwardRef<Konva.Group, {
-    isSelected: boolean;
-    leftLegRef: React.RefObject<Konva.Rect>;
-    rightLegRef: React.RefObject<Konva.Rect>;
-}>(({ isSelected, leftLegRef, rightLegRef }, ref) => {
-    return (
-        <Group ref={ref} offsetY={130}>
-            {/* Body (torso) */}
-            <Rect x={-40} y={-110} width={80} height={130} fill="#3b5998" stroke="black" strokeWidth={2} cornerRadius={20}/>
-            {/* Left Arm */}
-            <Rect x={-70} y={-100} width={30} height={90} fill="#f5d6b4" stroke="black" strokeWidth={2} cornerRadius={15}/>
-            {/* Right Arm */}
-            <Rect x={40} y={-100} width={30} height={90} fill="#f5d6b4" stroke="black" strokeWidth={2} cornerRadius={15}/>
-            {/* Legs */}
-            <Rect ref={leftLegRef} x={-30} y={20} width={30} height={110} fill="#654321" stroke="black" strokeWidth={2} cornerRadius={15}/>
-            <Rect ref={rightLegRef} x={10} y={20} width={30} height={110} fill="#654321" stroke="black" strokeWidth={2} cornerRadius={15}/>
-            {/* Head */}
-            <Circle x={0} y={-150} radius={40} fill="#f5d6b4" stroke="black" strokeWidth={2}/>
-            {/* Selection Indicator */}
-            {isSelected && <Circle radius={60} y={-30} stroke="#d79921" strokeWidth={3} dash={[10, 5]} listening={false}/>}
-        </Group>
-    );
-});
-AnimatedVillager.displayName = 'AnimatedVillager';
-
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
@@ -80,7 +53,8 @@ const TestMapPage = () => {
         const layer = villagerNode.getLayer();
         if (!layer) return;
 
-        const walkAmplitude = 5;
+        const scale = 0.1;
+        const walkAmplitude = 5 * scale;
         const walkPeriod = 400; // ms for a full step cycle
 
         if (animationRef.current) {
@@ -103,8 +77,8 @@ const TestMapPage = () => {
             if (distance < 5) {
                 if (isMoving) setIsMoving(false);
                 // Reset legs to idle position
-                leftLeg.y(20);
-                rightLeg.y(20);
+                leftLeg.y(20 * scale);
+                rightLeg.y(20 * scale);
                 return;
             } else if (!isMoving) {
                 setIsMoving(true);
@@ -119,8 +93,8 @@ const TestMapPage = () => {
 
             // Animate legs
             const angle = (frame.time / walkPeriod) * 2 * Math.PI;
-            leftLeg.y(20 + Math.sin(angle) * walkAmplitude);
-            rightLeg.y(20 - Math.sin(angle) * walkAmplitude);
+            leftLeg.y((20 * scale) + Math.sin(angle) * walkAmplitude);
+            rightLeg.y((20 * scale) - Math.sin(angle) * walkAmplitude);
 
         }, layer);
 

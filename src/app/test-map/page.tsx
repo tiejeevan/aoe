@@ -8,6 +8,11 @@ import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import TownCenter from '../../../components/TownCenter';
 import AnimatedGoldMine from '../../../components/AnimatedGoldMine';
+import Hut from '../../../components/test/Hut';
+import Barracks from '../../../components/test/Barracks';
+import Castle from '../../../components/test/Castle';
+import Workshop from '../../../components/test/Workshop';
+import ResearchLab from '../../../components/test/ResearchLab';
 
 
 const GRID_SIZE = 30;
@@ -20,6 +25,16 @@ const ATTACK_RANGE = 40;    // They can attack from this far away
 const ATTACK_COOLDOWN = 1000; // ms
 const DEATH_DURATION = 10000; // 10 seconds
 const BUILD_TIME = 10000; // 10 seconds in ms
+
+type BuildingType = 'hut' | 'barracks' | 'castle' | 'workshop' | 'researchLab';
+
+const buildingTypes: {id: BuildingType, name: string}[] = [
+    { id: 'hut', name: 'Hut' },
+    { id: 'barracks', name: 'Barracks' },
+    { id: 'castle', name: 'Castle' },
+    { id: 'workshop', name: 'Workshop' },
+    { id: 'researchLab', name: 'Research Lab' },
+];
 
 interface Villager {
     id: string;
@@ -46,14 +61,16 @@ interface ConstructionSite {
     id: string;
     x: number;
     y: number;
+    type: BuildingType;
     progress: number; // 0-100
     builderId: string | null;
 }
 
-interface Hut {
+interface Building {
     id: string;
     x: number;
     y: number;
+    type: BuildingType;
 }
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
@@ -95,7 +112,7 @@ const TestMapPage = () => {
     const [villagers, setVillagers] = useState<Villager[]>([]);
     const [goldMines, setGoldMines] = useState<GoldMine[]>([]);
     const [constructionSites, setConstructionSites] = useState<ConstructionSite[]>([]);
-    const [huts, setHuts] = useState<Hut[]>([]);
+    const [buildings, setBuildings] = useState<Building[]>([]);
     
     // State for panning and zooming
     const [stageScale, setStageScale] = useState(1);
@@ -109,12 +126,19 @@ const TestMapPage = () => {
     const [isHoveringClickable, setIsHoveringClickable] = useState(false);
     
     // State for UI panels
-    const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; } | null>(null);
-    const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; } | null>(null);
-
+    const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; showBuildMenu: boolean; } | null>(null);
+    const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; buildingType: BuildingType | null } | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
+
+    const BuildingComponents: Record<BuildingType, React.ForwardRefExoticComponent<Konva.GroupConfig & React.RefAttributes<Konva.Group>>> = {
+        hut: Hut,
+        barracks: Barracks,
+        castle: Castle,
+        workshop: Workshop,
+        researchLab: ResearchLab,
+    };
 
     // Initial setup on component mount
     useEffect(() => {
@@ -223,7 +247,7 @@ const TestMapPage = () => {
                         if (builder && builder.task === 'building') {
                             const newProgress = site.progress + (100 / (BUILD_TIME / 16)); // ~60fps
                             if (newProgress >= 100) {
-                                setHuts(h => [...h, { id: `hut-${site.id}`, x: site.x, y: site.y }]);
+                                setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type }]);
                                 setVillagers(vs => vs.map(v => v.id === site.builderId ? { ...v, task: 'idle', targetId: null } : v));
                                 return null;
                             }
@@ -232,15 +256,16 @@ const TestMapPage = () => {
                     }
                     return site;
                 }).filter(Boolean) as ConstructionSite[];
-
-                return newSites.length !== currentSites.length ? newSites : currentSites;
+                
+                if (newSites.length !== currentSites.length) return newSites;
+                return currentSites;
             });
             requestAnimationFrame(gameLoop);
         };
 
         const animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isClient, villagers]); // villagers is a key dependency now
+    }, [isClient, villagers]);
 
 
     // Add keyboard listeners for panning
@@ -349,12 +374,17 @@ const TestMapPage = () => {
         if (popup?.visible) {
              const name = e.target.name();
              if (name === 'build-button') {
-                 setPlacementMode({ active: true, initiatorId: popup.villagerId });
-                 setPopup(null);
+                 setPopup(p => p ? {...p, showBuildMenu: true} : null);
                  return;
              }
              if (name === 'dismiss-button') {
                  setVillagers(vs => vs.filter(v => v.id !== popup.villagerId));
+                 setPopup(null);
+                 return;
+             }
+             if (name?.startsWith('build-type-')) {
+                 const buildingType = name.replace('build-type-', '') as BuildingType;
+                 setPlacementMode({ active: true, initiatorId: popup.villagerId, buildingType });
                  setPopup(null);
                  return;
              }
@@ -369,9 +399,10 @@ const TestMapPage = () => {
         if (!pos) return;
         
         // If in placement mode, place the object
-        if (placementMode?.active) {
-            setConstructionSites(cs => [...cs, { id: `site-${Date.now()}`, x: pos.x, y: pos.y, progress: 0, builderId: null }]);
-            setPlacementMode({ active: false, initiatorId: null });
+        if (placementMode?.active && placementMode.buildingType) {
+            const siteId = `site-${Date.now()}`;
+            setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, progress: 0, builderId: null }]);
+            
             // Auto-assign the initiator to build
              if (placementMode.initiatorId) {
                 const siteX = pos.x, siteY = pos.y;
@@ -380,11 +411,12 @@ const TestMapPage = () => {
                         const dx = siteX - v.x; const dy = siteY - v.y;
                         const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
                         const ratio = dist > standoff ? (dist - standoff)/dist : 0;
-                        return { ...v, task: 'moving', targetId: `site-${Date.now()}`, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+                        return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
                     }
                     return v;
                 }));
              }
+             setPlacementMode({ active: false, initiatorId: null, buildingType: null });
             return;
         }
         
@@ -423,7 +455,7 @@ const TestMapPage = () => {
                 // Show popup for single selection
                 if (!isShiftPressed) {
                     const pos = clickedVillagerNode.position();
-                    setPopup({ visible: true, x: pos.x, y: pos.y - 60, villagerId: clickedId });
+                    setPopup({ visible: true, x: pos.x, y: pos.y - 60, villagerId: clickedId, showBuildMenu: false });
                 } else {
                     setPopup(null);
                 }
@@ -531,25 +563,50 @@ const TestMapPage = () => {
                         {renderGrid()}
                         <TownCenter onClick={handleCreateVillager} onTap={handleCreateVillager} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
                         {goldMines.map(mine => <AnimatedGoldMine key={mine.id} id={mine.id} name="gold-mine" x={mine.x} y={mine.y} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} /> )}
-                        {huts.map(hut => (<Rect key={hut.id} x={hut.x - 30} y={hut.y - 30} width={60} height={60} fill="#a16207" stroke="#3c3836" strokeWidth={2} cornerRadius={5} listening={false} />))}
-                        {constructionSites.map(site => (
-                            <Group key={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)}>
-                                <Rect x={-30} y={-30} width={60} height={60} fill="#854d0e" stroke="#fbf1c7" strokeWidth={1} opacity={0.5} />
-                                <Rect x={-25} y={20} width={50} height={8} fill="#3c3836" />
-                                <Rect x={-25} y={20} width={50 * (site.progress / 100)} height={8} fill="#98971a" />
-                            </Group>
-                        ))}
+                        {buildings.map(building => {
+                            const BuildingComponent = BuildingComponents[building.type];
+                            return <BuildingComponent key={building.id} x={building.x} y={building.y} />
+                        })}
+                        {constructionSites.map(site => {
+                            const BuildingComponent = BuildingComponents[site.type];
+                            return (
+                                <Group key={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)}>
+                                    <BuildingComponent opacity={0.3} />
+                                    <Rect x={-30} y={40} width={60} height={8} fill="#3c3836" />
+                                    <Rect x={-30} y={40} width={60 * (site.progress / 100)} height={8} fill="#98971a" />
+                                </Group>
+                            );
+                        })}
                         {villagers.map(villager => <AnimatedVillager ref={(node) => { if (node) villagerRefs.current.set(villager.id, node); else villagerRefs.current.delete(villager.id); }} key={villager.id} id={villager.id} initialX={villager.x} initialY={villager.y} targetX={villager.targetX} targetY={villager.targetY} hp={villager.hp} maxHp={MAX_HP} task={villager.task} isSelected={villager.isSelected} onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)} deathTime={villager.deathTime} onMouseEnter={() => { if(villagers.some(v => v.isSelected) && !villager.isSelected) handleMouseEnterEnemy(true); }} onMouseLeave={() => handleMouseEnterEnemy(false)} /> )}
-                        {placementMode?.active && (<Rect x={getStagePointerPosition()?.x} y={getStagePointerPosition()?.y} width={60} height={60} fill="rgba(152, 151, 26, 0.5)" stroke="#d4be98" strokeWidth={2} listening={false} />)}
+                        {placementMode?.active && placementMode.buildingType && (
+                            React.createElement(BuildingComponents[placementMode.buildingType], {
+                                x: getStagePointerPosition()?.x,
+                                y: getStagePointerPosition()?.y,
+                                opacity: 0.7,
+                                listening: false,
+                            })
+                        )}
                          <Rect x={Math.min(selectionBox.x1, selectionBox.x2)} y={Math.min(selectionBox.y1, selectionBox.y2)} width={Math.abs(selectionBox.x1 - selectionBox.x2)} height={Math.abs(selectionBox.y1 - selectionBox.y2)} fill="rgba(131, 165, 152, 0.3)" stroke="#83a598" strokeWidth={1 / stageScale} visible={selectionBox.visible} listening={false} />
                          {popup?.visible && (
-                            <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick}>
-                                <Rect width={80} height={50} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
-                                <Rect name="build-button" x={5} y={5} width={70} height={20} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
-                                <Text text="Build" x={25} y={8} fill="#fbf1c7" listening={false} />
-                                <Rect name="dismiss-button" x={5} y={27} width={70} height={18} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
-                                <Text text="Dismiss" x={18} y={30} fill="#fbf1c7" fontSize={10} listening={false} />
-                            </Group>
+                            popup.showBuildMenu ? (
+                                <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick}>
+                                    <Rect width={100} height={buildingTypes.length * 22 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                    {buildingTypes.map((building, index) => (
+                                        <Group key={building.id} y={index * 22 + 5}>
+                                            <Rect name={`build-type-${building.id}`} x={5} y={0} width={90} height={20} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                            <Text text={building.name} x={10} y={3} fill="#fbf1c7" listening={false} fontSize={12} />
+                                        </Group>
+                                    ))}
+                                </Group>
+                            ) : (
+                                <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick}>
+                                    <Rect width={80} height={50} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                    <Rect name="build-button" x={5} y={5} width={70} height={20} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Build" x={25} y={8} fill="#fbf1c7" listening={false} />
+                                    <Rect name="dismiss-button" x={5} y={27} width={70} height={18} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Dismiss" x={18} y={30} fill="#fbf1c7" fontSize={10} listening={false} />
+                                </Group>
+                            )
                          )}
                     </Layer>
                 </Stage>

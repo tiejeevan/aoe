@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Group } from 'react-konva';
+import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 
@@ -151,7 +151,7 @@ const TestMapPage = () => {
                     <Layer>
                         <Rect x={0} y={0} width={MAP_WIDTH_CELLS*GRID_SIZE} height={MAP_HEIGHT_CELLS*GRID_SIZE} name="grid-background" listening={true}/>
                         {renderGrid()}
-                        {buildings.map(building => <Rect key={building.id} x={building.x*GRID_SIZE} y={y*GRID_SIZE} width={building.width*GRID_SIZE} height={building.height*GRID_SIZE} fill="#a89984" stroke="#fbf1c7" strokeWidth={2} shadowBlur={10} shadowColor="black" draggable onDragEnd={(e)=>{const newX=Math.round(e.target.x()/GRID_SIZE);const newY=Math.round(e.target.y()/GRID_SIZE);e.target.position({x:newX*GRID_SIZE,y:newY*GRID_SIZE});setBuildings(p=>p.map(b=>b.id===building.id?{...b,x:newX,y:newY}:b));}} onMouseEnter={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='grab';}} onMouseLeave={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='default';}} onClick={(e)=>handleBuildingClick(building,e)} onTap={(e)=>handleBuildingClick(building,e)} listening={true}/>)}
+                        {buildings.map(building => <Rect key={building.id} x={building.x*GRID_SIZE} y={building.y*GRID_SIZE} width={building.width*GRID_SIZE} height={building.height*GRID_SIZE} fill="#a89984" stroke="#fbf1c7" strokeWidth={2} shadowBlur={10} shadowColor="black" draggable onDragEnd={(e)=>{const newX=Math.round(e.target.x()/GRID_SIZE);const newY=Math.round(e.target.y()/GRID_SIZE);e.target.position({x:newX*GRID_SIZE,y:newY*GRID_SIZE});setBuildings(p=>p.map(b=>b.id===building.id?{...b,x:newX,y:newY}:b));}} onMouseEnter={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='grab';}} onMouseLeave={e=>{const s=e.target.getStage();if(s)s.container().style.cursor='default';}} onClick={(e)=>handleBuildingClick(building,e)} onTap={(e)=>handleBuildingClick(building,e)} listening={true}/>)}
                         <AnimatedVillager
                             ref={villagerRef}
                             isMoving={isMoving}

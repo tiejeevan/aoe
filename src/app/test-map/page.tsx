@@ -168,6 +168,10 @@ const TestMapPage = () => {
     const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; siteId: string; } | null>(null);
     const [hoveredBuildingId, setHoveredBuildingId] = useState<string | null>(null);
 
+    // Test Mode State
+    const [isTestMode, setIsTestMode] = useState(false);
+    const originalResourcesRef = useRef<Resources | null>(null);
+
     const stageRef = useRef<Konva.Stage>(null);
     const lastTickRef = useRef<number>(Date.now());
     const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
@@ -236,7 +240,7 @@ const TestMapPage = () => {
     }, [villagers, buildings]);
 
     const handleCreateVillager = useCallback(() => {
-        if (villagers.filter(v => v.task !== 'dead').length >= population.capacity) {
+        if (!isTestMode && villagers.filter(v => v.task !== 'dead').length >= population.capacity) {
             addToLog("Not enough population capacity. Build more huts!");
             return;
         }
@@ -251,7 +255,7 @@ const TestMapPage = () => {
             addToLog("A new villager has been trained!");
             return [...current, newVillager];
         });
-    }, [villagers, population.capacity, addToLog, buildings]);
+    }, [isTestMode, villagers, population.capacity, addToLog, buildings]);
 
 
     // Game Loop
@@ -368,9 +372,9 @@ const TestMapPage = () => {
                 const newSites = currentSites.map(site => {
                     if (site.builderIds.length > 0) {
                         siteUpdated = true;
-                        const workPerBuilderPerMs = 1 / BUILD_TIME;
+                        const workPerBuilderPerMs = 1;
                         const workThisTick = deltaTime * site.builderIds.length * workPerBuilderPerMs;
-                        const newWorkApplied = site.workApplied + (workThisTick * BUILD_TIME);
+                        const newWorkApplied = site.workApplied + workThisTick;
 
                         if (newWorkApplied >= BUILD_TIME) {
                             const stats = buildingStats[site.type];
@@ -571,6 +575,11 @@ const TestMapPage = () => {
              }
              if (name?.startsWith('build-type-')) {
                  const buildingType = name.replace('build-type-', '') as BuildingType;
+                 if (isTestMode) {
+                     setPlacementMode({ active: true, type: 'build', initiatorId: popup.villagerId, buildingType, buildingId: undefined });
+                     setPopup(null);
+                     return;
+                 }
                  const cost = buildingStats[buildingType].cost;
                  const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
                  if (canAfford) {
@@ -619,6 +628,11 @@ const TestMapPage = () => {
                 return;
             }
             if (name === 'train-villager-button') {
+                if (isTestMode) {
+                    handleCreateVillager();
+                    setBuildingPopup(null);
+                    return;
+                }
                  if (population.current >= population.capacity) {
                     addToLog("Not enough population capacity. Build more huts!");
                     return;
@@ -645,39 +659,40 @@ const TestMapPage = () => {
         // If in placement mode, place the object
         if (placementMode?.active) {
             if (placementMode.type === 'build' && placementMode.buildingType) {
-                const stats = buildingStats[placementMode.buildingType];
-                const cost = stats.cost;
-
-                const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
-
-                if (canAfford) {
-                    setResources(prev => {
-                        const newRes = { ...prev };
-                        for (const key in cost) {
-                            newRes[key as keyof Resources] -= cost[key as keyof Resources] || 0;
-                        }
-                        return newRes;
-                    });
-
-                    const siteId = `site-${Date.now()}`;
-                    setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, workApplied: 0, builderIds: [], cost }]);
-                    
-                    if (placementMode.initiatorId) {
-                        const siteX = pos.x, siteY = pos.y;
-                        setVillagers(vs => vs.map(v => {
-                            if (v.id === placementMode.initiatorId) {
-                                const dx = siteX - v.x; const dy = siteY - v.y;
-                                const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
-                                const ratio = dist > standoff ? (dist - standoff)/dist : 0;
-                                addToLog(`${v.name} is going to construct the ${stats.name}.`);
-                                return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
-                            }
-                            return v;
-                        }));
-                    }
-                    addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
+                 const stats = buildingStats[placementMode.buildingType!];
+                if (isTestMode) {
+                    setBuildings(b => [...b, { id: `building-${Date.now()}`, x: pos.x, y: pos.y, type: placementMode.buildingType!, hp: stats.hp, maxHp: stats.hp }]);
+                    addToLog(`Instantly built a ${stats.name} via Test Mode.`);
                 } else {
-                     addToLog("Not enough resources to build!");
+                    const cost = stats.cost;
+                    const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
+                    if (canAfford) {
+                        setResources(prev => {
+                            const newRes = { ...prev };
+                            for (const key in cost) {
+                                newRes[key as keyof Resources] -= cost[key as keyof Resources] || 0;
+                            }
+                            return newRes;
+                        });
+                        const siteId = `site-${Date.now()}`;
+                        setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, workApplied: 0, builderIds: [], cost }]);
+                        if (placementMode.initiatorId) {
+                            const siteX = pos.x, siteY = pos.y;
+                            setVillagers(vs => vs.map(v => {
+                                if (v.id === placementMode.initiatorId) {
+                                    const dx = siteX - v.x; const dy = siteY - v.y;
+                                    const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
+                                    const ratio = dist > standoff ? (dist - standoff)/dist : 0;
+                                    addToLog(`${v.name} is going to construct the ${stats.name}.`);
+                                    return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+                                }
+                                return v;
+                            }));
+                        }
+                        addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
+                    } else {
+                         addToLog("Not enough resources to build!");
+                    }
                 }
             } else if (placementMode.type === 'move' && placementMode.buildingId) {
                 setBuildings(bs => bs.map(b => 
@@ -844,6 +859,55 @@ const TestMapPage = () => {
         setTooltip(null);
     };
 
+    const handleToggleTestMode = useCallback(() => {
+        setIsTestMode(prev => {
+            const newMode = !prev;
+            if (newMode) {
+                // Turning ON
+                originalResourcesRef.current = resources;
+                setResources({ wood: 99999, gold: 99999, stone: 99999 });
+                addToLog("Test Mode Enabled: Instant build/train, infinite resources.");
+
+                // Instantly complete all constructions
+                setConstructionSites(currentSites => {
+                    currentSites.forEach(site => {
+                        const stats = buildingStats[site.type];
+                        setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type, hp: stats.hp, maxHp: stats.hp }]);
+                        addToLog(`Instantly built a ${stats.name} via Test Mode.`);
+                    });
+                    return []; // Clear all sites
+                });
+
+                // Instantly complete all training
+                setBuildings(currentBuildings => {
+                    let newVillagersCount = 0;
+                    const newBuildings = currentBuildings.map(b => {
+                        if (b.training) {
+                            newVillagersCount++;
+                            return { ...b, training: null };
+                        }
+                        return b;
+                    });
+                    if (newVillagersCount > 0) {
+                        for(let i = 0; i < newVillagersCount; i++) {
+                            handleCreateVillager();
+                        }
+                        addToLog(`Instantly trained ${newVillagersCount} villager(s) via Test Mode.`);
+                    }
+                    return newBuildings;
+                });
+                
+            } else {
+                // Turning OFF
+                if (originalResourcesRef.current) {
+                    setResources(originalResourcesRef.current);
+                }
+                addToLog("Test Mode Disabled.");
+            }
+            return newMode;
+        });
+    }, [resources, addToLog, handleCreateVillager]);
+
     const renderGrid = () => Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => ( <Rect key={i} x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} y={Math.floor(i / MAP_WIDTH_CELLS) * GRID_SIZE} width={GRID_SIZE} height={GRID_SIZE} fill="#504945" stroke="#665c54" strokeWidth={1} listening={false} /> ));
 
     const hasSelection = villagers.some(v => v.isSelected);
@@ -885,6 +949,8 @@ const TestMapPage = () => {
                      <h3 className="font-bold border-b mb-1 mt-2">Status</h3>
                     <p>Population: {population.current} / {population.capacity}</p>
                 </div>
+                 <button onClick={handleToggleTestMode} className={`absolute bottom-2 left-2 z-10 font-bold py-1 px-3 rounded-full text-xs shadow-lg hover:scale-105 transition-all ${isTestMode ? 'bg-green-400 text-black' : 'bg-yellow-500 text-black'}`}>Test Mode: {isTestMode ? 'ON' : 'OFF'}</button>
+
                  <Stage 
                     ref={stageRef} width={MAP_WIDTH_CELLS * GRID_SIZE} height={MAP_HEIGHT_CELLS * GRID_SIZE} className="mx-auto" 
                     style={{ cursor: stageCursor }}
@@ -954,7 +1020,7 @@ const TestMapPage = () => {
                             let timeRemainingText = "∞";
 
                             if (numBuilders > 0) {
-                                const timeRemainingMs = workRemaining / (numBuilders * (1 / BUILD_TIME));
+                                const timeRemainingMs = workRemaining / numBuilders;
                                 timeRemainingText = `${(timeRemainingMs / 1000).toFixed(1)}s`;
                             }
                             
@@ -995,7 +1061,7 @@ const TestMapPage = () => {
                                 <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
                                      <Rect width={150} height={Object.keys(buildingStats).filter(b => b !== 'townCenter').length * 28 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
                                      {Object.entries(buildingStats).filter(([type]) => type !== 'townCenter').map(([type, stats], index) => {
-                                        const canAfford = Object.entries(stats.cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
+                                        const canAfford = isTestMode || Object.entries(stats.cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
                                         const costString = Object.entries(stats.cost).map(([res,amt]) => `${amt}${res.substring(0,1)}`).join(' ');
                                         return (
                                             <Group key={type} y={index * 28 + 5}>
@@ -1049,3 +1115,5 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
+
+    

@@ -9,6 +9,7 @@ import Konva from 'konva';
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 30;
 const MAP_HEIGHT_CELLS = 20;
+const UNIT_SPEED = 200; // pixels per second
 
 interface Building {
     id: number;
@@ -20,33 +21,66 @@ interface Building {
 }
 
 const TestMapPage = () => {
-    const [targetPosition, setTargetPosition] = useState({ x: 5, y: 5 });
     const [isClient, setIsClient] = useState(false);
-    const unitRef = useRef<Konva.Circle>(null);
-
+    const [targetPosition, setTargetPosition] = useState({ x: 5, y: 5 });
     const [buildings, setBuildings] = useState<Building[]>([
         { id: 1, x: 15, y: 8, width: 3, height: 3, type: 'Barracks' },
     ]);
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
     const [panelPosition, setPanelPosition] = useState<{ x: number, y: number } | null>(null);
-    const stageRef = useRef<Konva.Stage>(null);
     const [isUnitSelected, setIsUnitSelected] = useState(false);
-
+    
+    const stageRef = useRef<Konva.Stage>(null);
+    const unitRef = useRef<Konva.Circle>(null);
+    const animationRef = useRef<Konva.Animation | null>(null);
 
     useEffect(() => {
         setIsClient(true);
     }, []);
 
     useEffect(() => {
-        if (isClient && unitRef.current) {
-            new Konva.Tween({
-                node: unitRef.current,
-                duration: 0.3,
-                x: targetPosition.x * GRID_SIZE + GRID_SIZE / 2,
-                y: targetPosition.y * GRID_SIZE + GRID_SIZE / 2,
-                easing: Konva.Easings.EaseInOut,
-            }).play();
+        if (!isClient || !unitRef.current) {
+            return;
         }
+
+        const unitNode = unitRef.current;
+        const layer = unitNode.getLayer();
+
+        if (animationRef.current) {
+            animationRef.current.stop();
+        }
+
+        animationRef.current = new Konva.Animation((frame) => {
+            if (!frame || !unitNode) return;
+
+            const targetX = targetPosition.x * GRID_SIZE + GRID_SIZE / 2;
+            const targetY = targetPosition.y * GRID_SIZE + GRID_SIZE / 2;
+            
+            const currentX = unitNode.x();
+            const currentY = unitNode.y();
+
+            const dx = targetX - currentX;
+            const dy = targetY - currentY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 5) {
+                unitNode.position({ x: targetX, y: targetY });
+                animationRef.current?.stop();
+                return;
+            }
+
+            const moveDistance = UNIT_SPEED * (frame.timeDiff / 1000);
+            const ratio = moveDistance / distance;
+            
+            const newX = currentX + dx * ratio;
+            const newY = currentY + dy * ratio;
+
+            unitNode.position({ x: newX, y: newY });
+        }, layer);
+
+        animationRef.current.start();
+
+        return () => animationRef.current?.stop();
     }, [targetPosition, isClient]);
 
     const handleCellClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -58,23 +92,23 @@ const TestMapPage = () => {
                     x: Math.floor(pos.x / GRID_SIZE),
                     y: Math.floor(pos.y / GRID_SIZE),
                 });
-                setIsUnitSelected(false); // Deselect after issuing move command
+                setIsUnitSelected(false);
             } else {
-                 setIsUnitSelected(false); // Deselect if clicking elsewhere
+                 setIsUnitSelected(false);
             }
         }
     };
     
     const handleUnitClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        e.evt.stopPropagation(); // Prevent click from bubbling to the stage
+        e.evt.stopPropagation();
         setIsUnitSelected(true);
-        setSelectedBuilding(null); // Deselect any building
+        setSelectedBuilding(null);
     };
 
     const handleBuildingClick = (building: Building, e: Konva.KonvaEventObject<MouseEvent>) => {
-        e.evt.stopPropagation(); // Prevent click from bubbling to the stage
+        e.evt.stopPropagation();
         setSelectedBuilding(building);
-        setIsUnitSelected(false); // A building was selected, so deselect the unit
+        setIsUnitSelected(false);
         const stage = stageRef.current;
         if (stage) {
             const rect = e.target.getClientRect();
@@ -84,9 +118,7 @@ const TestMapPage = () => {
     
     const handleTrainUnit = (unitType: string) => {
         console.log(`Training ${unitType} from ${selectedBuilding?.type}`);
-        // Here you would typically add a task to a queue in your game state
     };
-
 
     const renderGrid = () => {
         const grid = [];
@@ -102,7 +134,7 @@ const TestMapPage = () => {
                         fill="#504945"
                         stroke="#665c54"
                         strokeWidth={1}
-                        listening={false} // This makes the grid tiles non-interactive
+                        listening={false}
                     />
                 );
             }
@@ -133,7 +165,6 @@ const TestMapPage = () => {
                     onClick={handleCellClick}
                 >
                     <Layer>
-                        {/* A single large rect for the background to detect clicks */}
                         <Rect 
                             x={0} y={0}
                             width={MAP_WIDTH_CELLS * GRID_SIZE}
@@ -161,8 +192,8 @@ const TestMapPage = () => {
                         
                         <Circle
                             ref={unitRef}
-                            x={targetPosition.x * GRID_SIZE + GRID_SIZE / 2}
-                            y={targetPosition.y * GRID_SIZE + GRID_SIZE / 2}
+                            x={5 * GRID_SIZE + GRID_SIZE / 2}
+                            y={5 * GRID_SIZE + GRID_SIZE / 2}
                             radius={GRID_SIZE / 3}
                             fill="#83a598"
                             stroke={isUnitSelected ? '#d79921' : '#fdf6e3'}
@@ -171,6 +202,7 @@ const TestMapPage = () => {
                             shadowColor={isUnitSelected ? '#d79921' : '#458588'}
                             onClick={handleUnitClick}
                             onTap={handleUnitClick}
+                            listening={true} 
                         />
                     </Layer>
                 </Stage>
@@ -205,5 +237,3 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
-
-    

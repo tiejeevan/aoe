@@ -14,10 +14,11 @@ function easeInOutQuad(t: number) {
 interface AnimatedVillagerProps extends Konva.GroupConfig {
   isMoving: boolean;
   isSelected: boolean;
+  isMining: boolean;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ isMoving, isSelected, ...groupProps }, ref) => {
+  ({ isMoving, isSelected, isMining, ...groupProps }, ref) => {
     const leftUpperArm = useRef<Konva.Rect>(null);
     const leftLowerArm = useRef<Konva.Rect>(null);
     const rightUpperArm = useRef<Konva.Rect>(null);
@@ -28,6 +29,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     const rightLowerLeg = useRef<Konva.Rect>(null);
     const torso = useRef<Konva.Rect>(null);
     const headGroup = useRef<Konva.Group>(null);
+    const pickaxeRef = useRef<Konva.Group>(null);
 
     const animationRequestRef = useRef<number>();
     const startTimeRef = useRef<number>(0);
@@ -36,16 +38,23 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         if(typeof window !== 'undefined'){
             startTimeRef.current = performance.now();
         }
-    }, [])
+    }, []);
 
+    const resetToIdle = () => {
+        const allRefs = [leftUpperArm, rightUpperArm, leftUpperLeg, rightUpperLeg, leftLowerArm, rightLowerArm, leftLowerLeg, rightLowerLeg, headGroup];
+        allRefs.forEach(limbRef => {
+            if(limbRef.current) limbRef.current.rotation(0);
+        });
+        if (torso.current) torso.current.y(-50 * scale);
+        if (headGroup.current) headGroup.current.y(-70 * scale);
+        if (pickaxeRef.current) pickaxeRef.current.visible(false);
+    };
 
     useEffect(() => {
       if (isMoving) {
+        if (pickaxeRef.current) pickaxeRef.current.visible(false);
         const animate = () => {
           const now = performance.now();
-          if (startTimeRef.current === 0) {
-            startTimeRef.current = now;
-          }
           const elapsed = (now - startTimeRef.current) / 1000;
           const cycle = elapsed % 2;
           const progress = cycle / 2;
@@ -79,28 +88,35 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           animationRequestRef.current = requestAnimationFrame(animate);
         };
         animationRequestRef.current = requestAnimationFrame(animate);
+      } else if (isMining) {
+         if (pickaxeRef.current) pickaxeRef.current.visible(true);
+         resetToIdle(); // Reset legs to idle before starting mine animation
+
+         const animateMine = () => {
+            const now = performance.now();
+            const elapsed = (now - startTimeRef.current) / 1000;
+            const swingSpeed = 4;
+            const swingAngle = -45 + 45 * Math.sin(elapsed * swingSpeed);
+
+            if(rightUpperArm.current) rightUpperArm.current.rotation(swingAngle);
+            if(leftUpperArm.current) leftUpperArm.current.rotation(swingAngle);
+            if(rightLowerArm.current) rightLowerArm.current.rotation(20);
+            if(leftLowerArm.current) leftLowerArm.current.rotation(20);
+
+             if (torso.current) torso.current.y(-50 * scale + Math.abs(Math.sin(elapsed * swingSpeed) * 5 * scale));
+            
+            animationRequestRef.current = requestAnimationFrame(animateMine);
+         }
+         animationRequestRef.current = requestAnimationFrame(animateMine);
       } else {
-        if (animationRequestRef.current) {
-          cancelAnimationFrame(animationRequestRef.current);
-        }
-        // Reset to idle pose
-        const allRefs = [leftUpperArm, rightUpperArm, leftUpperLeg, rightUpperLeg, leftLowerArm, rightLowerArm, leftLowerLeg, rightLowerLeg];
-        allRefs.forEach(limbRef => {
-            if(limbRef.current) limbRef.current.rotation(0);
-        });
-        if (torso.current) torso.current.y(-50 * scale);
-        if (headGroup.current) {
-          headGroup.current.y(-70 * scale);
-          headGroup.current.rotation(0);
-        }
+        if (animationRequestRef.current) cancelAnimationFrame(animationRequestRef.current);
+        resetToIdle();
       }
 
       return () => {
-        if (animationRequestRef.current) {
-          cancelAnimationFrame(animationRequestRef.current);
-        }
+        if (animationRequestRef.current) cancelAnimationFrame(animationRequestRef.current);
       };
-    }, [isMoving]);
+    }, [isMoving, isMining]);
 
     return (
       <Group ref={ref} {...groupProps}>
@@ -146,7 +162,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
             strokeWidth={2 * scale}
             cornerRadius={15 * scale}
             offsetX={15 * scale}
-            offsetY={0}
+            offsetY={-5 * scale}
           />
           <Rect
             ref={leftLowerArm}
@@ -165,7 +181,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           />
         </Group>
 
-        {/* Right Arm Group */}
+        {/* Right Arm Group with Pickaxe */}
         <Group>
           <Rect
             ref={rightUpperArm}
@@ -180,23 +196,29 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
             strokeWidth={2 * scale}
             cornerRadius={15 * scale}
             offsetX={15 * scale}
-            offsetY={0}
+            offsetY={-5 * scale}
           />
-          <Rect
-            ref={rightLowerArm}
-            x={70 * scale}
-            y={25 * scale}
-            width={25 * scale}
-            height={50 * scale}
-            fillLinearGradientStartPoint={{ x: 0, y: 25 * scale }}
-            fillLinearGradientEndPoint={{ x: 0, y: 75 * scale }}
-            fillLinearGradientColorStops={[0, "#f5d6b4", 1, "#a07a56"]}
-            stroke="black"
-            strokeWidth={2 * scale}
-            cornerRadius={12 * scale}
-            offsetX={12.5 * scale}
-            offsetY={0}
-          />
+          <Group>
+              <Rect
+                ref={rightLowerArm}
+                x={70 * scale}
+                y={25 * scale}
+                width={25 * scale}
+                height={50 * scale}
+                fillLinearGradientStartPoint={{ x: 0, y: 25 * scale }}
+                fillLinearGradientEndPoint={{ x: 0, y: 75 * scale }}
+                fillLinearGradientColorStops={[0, "#f5d6b4", 1, "#a07a56"]}
+                stroke="black"
+                strokeWidth={2 * scale}
+                cornerRadius={12 * scale}
+                offsetX={12.5 * scale}
+                offsetY={0}
+              />
+              <Group ref={pickaxeRef} visible={false} x={80*scale} y={50*scale} rotation={45}>
+                  <Rect x={0} y={-80*scale} width={8*scale} height={120*scale} fill="#8B4513" cornerRadius={2*scale} />
+                  <Rect x={-20*scale} y={-90*scale} width={40*scale} height={20*scale} fill="#6c757d" cornerRadius={4*scale}/>
+              </Group>
+          </Group>
         </Group>
 
         {/* Left Leg Group */}

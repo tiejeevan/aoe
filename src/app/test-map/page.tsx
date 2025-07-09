@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect } from 'react-konva';
+import { Stage, Layer, Rect, Group } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import AnimatedGoldMine from '../../../components/AnimatedGoldMine';
@@ -19,8 +19,21 @@ interface Villager {
     y: number;
     targetX: number;
     targetY: number;
-    isMoving: boolean;
+    task: 'idle' | 'moving' | 'mining';
+    targetMineId: string | null;
 }
+
+const PickaxeIcon = React.forwardRef<Konva.Group, Konva.GroupConfig>((props, ref) => (
+    <Group {...props} ref={ref} listening={false} opacity={0.8}>
+      <Rect x={-12} y={-12} width={24} height={24} fill="#201c1a" cornerRadius={4} />
+      <Group rotation={-45}>
+          <Rect x={-2} y={-10} width={4} height={20} fill="#8B4513" />
+          <Rect x={-8} y={-12} width={16} height={6} fill="#6c757d" />
+      </Group>
+    </Group>
+));
+PickaxeIcon.displayName = 'PickaxeIcon';
+
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
@@ -28,6 +41,7 @@ const TestMapPage = () => {
     const [goldMines, setGoldMines] = useState<{ id: string; x: number; y: number }[]>([]);
     const [selectedVillagerIds, setSelectedVillagerIds] = useState<Set<string>>(new Set());
     const [selectionRect, setSelectionRect] = useState<{ x: number, y: number, width: number, height: number, visible: boolean } | null>(null);
+    const [hoveredMineId, setHoveredMineId] =useState<string|null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Record<string, Konva.Group>>({});
@@ -44,7 +58,7 @@ const TestMapPage = () => {
             const id = `villager-${i}`;
             const x = (Math.floor(Math.random() * 5) + 3) * GRID_SIZE;
             const y = (Math.floor(Math.random() * 5) + 3) * GRID_SIZE;
-            initialVillagers.push({ id, x, y, targetX: x, targetY: y, isMoving: false });
+            initialVillagers.push({ id, x, y, targetX: x, targetY: y, task: 'idle', targetMineId: null });
         }
         setVillagers(initialVillagers);
         
@@ -52,13 +66,25 @@ const TestMapPage = () => {
         setGoldMines([{ id: 'gold-mine-1', x: 25 * GRID_SIZE, y: 12 * GRID_SIZE }]);
     }, []);
 
-    const updateVillagersMovingState = useCallback(() => {
-        setVillagers(currentVillagers => 
+    const updateVillagersState = useCallback(() => {
+         setVillagers(currentVillagers => 
             currentVillagers.map(v => {
                 const node = villagerRefs.current[v.id];
                 if (!node) return v;
+
                 const isMoving = Math.hypot(v.targetX - node.x(), v.targetY - node.y()) > 5;
-                return v.isMoving !== isMoving ? { ...v, isMoving, x: node.x(), y: node.y() } : v;
+                const newIsMovingState = isMoving && v.task === 'moving';
+                
+                if(newIsMovingState) {
+                    return { ...v, x: node.x(), y: node.y() };
+                }
+                
+                if(!isMoving && v.task === 'moving') {
+                    if(v.targetMineId) return { ...v, task: 'mining', x: node.x(), y: node.y() };
+                    return { ...v, task: 'idle', x: node.x(), y: node.y() };
+                }
+
+                return v;
             })
         );
     }, []);
@@ -69,11 +95,10 @@ const TestMapPage = () => {
 
         const anim = new Konva.Animation(frame => {
             if (!frame) return;
-            let aVillagerIsMoving = false;
             
             villagers.forEach(villagerData => {
                 const villagerNode = villagerRefs.current[villagerData.id];
-                if (!villagerNode) return;
+                if (!villagerNode || villagerData.task !== 'moving') return;
 
                 const targetX = villagerData.targetX;
                 const targetY = villagerData.targetY;
@@ -84,26 +109,26 @@ const TestMapPage = () => {
                 const dy = targetY - currentY;
                 const distance = Math.hypot(dx, dy);
 
-                if (distance < 5) return;
+                if (distance < 5) {
+                    villagerNode.x(targetX);
+                    villagerNode.y(targetY);
+                    return;
+                };
                 
-                aVillagerIsMoving = true;
                 const moveDistance = UNIT_SPEED * (frame.timeDiff / 1000);
                 const ratio = Math.min(1, moveDistance / distance);
                 villagerNode.position({ x: currentX + dx * ratio, y: currentY + dy * ratio });
             });
-            if (aVillagerIsMoving || villagers.some(v => v.isMoving)) {
-                 updateVillagersMovingState();
-            }
+            updateVillagersState();
 
         }, layer);
         
         anim.start();
         return () => anim.stop();
 
-    }, [isClient, villagers, updateVillagersMovingState]);
+    }, [isClient, villagers, updateVillagersState]);
 
     const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        // Only start selection on left-click on the stage background
         if (e.evt.button !== 0 || e.target !== stageRef.current) return;
 
         isSelecting.current = true;
@@ -128,11 +153,9 @@ const TestMapPage = () => {
     const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
         isSelecting.current = false;
         const selectionBox = selectionRectRef.current?.getClientRect();
-        setSelectionRect(null); // Hide rect immediately
+        setSelectionRect(null);
 
-        if (e.evt.button !== 0 || !selectionBox) {
-            return;
-        }
+        if (e.evt.button !== 0 || !selectionBox) return;
 
         const isDrag = Math.abs(selectionBox.width) > 5 || Math.abs(selectionBox.height) > 5;
 
@@ -154,10 +177,7 @@ const TestMapPage = () => {
                 setSelectedVillagerIds(newSelectedIds);
             }
         } else {
-            // This is a click, not a drag. Deselect if clicking on background.
-            if (e.target === stageRef.current) {
-                setSelectedVillagerIds(new Set());
-            }
+            if (e.target === stageRef.current) setSelectedVillagerIds(new Set());
         }
     };
 
@@ -167,11 +187,8 @@ const TestMapPage = () => {
         const currentlySelected = new Set(selectedVillagerIds);
         
         if (e.evt.shiftKey) {
-            if (currentlySelected.has(villagerId)) {
-                currentlySelected.delete(villagerId);
-            } else {
-                currentlySelected.add(villagerId);
-            }
+            if (currentlySelected.has(villagerId)) currentlySelected.delete(villagerId);
+            else currentlySelected.add(villagerId);
         } else {
             currentlySelected.clear();
             currentlySelected.add(villagerId);
@@ -189,27 +206,28 @@ const TestMapPage = () => {
         let targetX = pos.x;
         let targetY = pos.y;
         let targetRadius = 15;
+        let targetMineId: string | null = null;
         
-        // Check if right-clicking on a mine. The name "gold-mine" is set on the Group in AnimatedGoldMine.
-        const clickedNode = e.target;
-        const mineGroup = clickedNode.getAncestors().find(ancestor => ancestor.id()?.startsWith('gold-mine'));
+        const mineGroup = e.target.getAncestors().find(ancestor => ancestor.id()?.startsWith('gold-mine'));
 
         if (mineGroup) {
+            targetMineId = mineGroup.id();
             targetX = mineGroup.x();
             targetY = mineGroup.y();
-            targetRadius = 50; // Scatter wider around the mine
+            targetRadius = 50; 
         }
 
         setVillagers(currentVillagers => 
             currentVillagers.map(v => {
                 if (selectedVillagerIds.has(v.id)) {
-                    // Simple scatter logic
                     const angle = Math.random() * 2 * Math.PI;
-                    const radius = Math.sqrt(selectedVillagerIds.size) * targetRadius;
+                    const radius = Math.random() * targetRadius;
                     return {
                         ...v,
                         targetX: targetX + Math.cos(angle) * radius,
                         targetY: targetY + Math.sin(angle) * radius,
+                        task: 'moving',
+                        targetMineId,
                     };
                 }
                 return v;
@@ -227,8 +245,8 @@ const TestMapPage = () => {
 
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
-            <h1 className="text-3xl font-serif text-brand-gold mb-2">Drag-to-Select Test Map</h1>
-            <p className="text-parchment-dark mb-4 text-sm">Drag to select villagers. Right-click to move them or target the mine.</p>
+            <h1 className="text-3xl font-serif text-brand-gold mb-2">Resource Interaction Test Map</h1>
+            <p className="text-parchment-dark mb-4 text-sm">Drag to select. Right-click to move or target the mine.</p>
             <div className="w-full max-w-5xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
                     ref={stageRef} 
@@ -250,22 +268,32 @@ const TestMapPage = () => {
                                 ref={node => { if(node) goldMineRefs.current[mine.id] = node; }}
                                 x={mine.x}
                                 y={mine.y}
+                                onMouseEnter={() => {if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id)}}
+                                onMouseLeave={() => setHoveredMineId(null)}
                             />
                         ))}
 
-                        {villagers.map(villager => 
-                            <AnimatedVillager
-                                key={villager.id}
-                                ref={node => { if(node) villagerRefs.current[villager.id] = node; }}
-                                id={villager.id}
-                                x={villager.x}
-                                y={villager.y}
-                                isMoving={villager.isMoving}
-                                isSelected={selectedVillagerIds.has(villager.id)}
-                                onClick={(e) => handleUnitClick(e, villager.id)}
-                                onTap={(e) => handleUnitClick(e, villager.id)}
-                            />
-                        )}
+                        {villagers.map(villager => {
+                             const villagerNode = villagerRefs.current[villager.id];
+                             const currentX = villagerNode?.x() || villager.x;
+                             const currentY = villagerNode?.y() || villager.y;
+                             const isActuallyMoving = Math.hypot(villager.targetX - currentX, villager.targetY - currentY) > 5 && villager.task === 'moving';
+
+                             return (
+                                <AnimatedVillager
+                                    key={villager.id}
+                                    ref={node => { if(node) villagerRefs.current[villager.id] = node; }}
+                                    id={villager.id}
+                                    x={currentX}
+                                    y={currentY}
+                                    isMoving={isActuallyMoving}
+                                    isMining={villager.task === 'mining'}
+                                    isSelected={selectedVillagerIds.has(villager.id)}
+                                    onClick={(e) => handleUnitClick(e, villager.id)}
+                                    onTap={(e) => handleUnitClick(e, villager.id)}
+                                />
+                             )
+                        })}
                         {selectionRect?.visible &&
                             <Rect
                                 ref={selectionRectRef}
@@ -278,6 +306,12 @@ const TestMapPage = () => {
                                 strokeWidth={1}
                             />
                         }
+                        {hoveredMineId && goldMines.find(m => m.id === hoveredMineId) && (
+                            <PickaxeIcon
+                                x={goldMines.find(m => m.id === hoveredMineId)!.x}
+                                y={goldMines.find(m => m.id === hoveredMineId)!.y - 60}
+                            />
+                        )}
                     </Layer>
                 </Stage>
             </div>

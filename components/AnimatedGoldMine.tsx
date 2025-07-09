@@ -74,7 +74,7 @@ const AnimatedGoldMine = React.forwardRef<Konva.Group, Konva.GroupConfig>((props
             height={140 * scale}
             fillLinearGradientStartPoint={{ x: 0, y: -70 * scale }}
             fillLinearGradientEndPoint={{ x: 0, y: 70 * scale }}
-            fillLinearGradientColorStops={[0, "#696969", 0.5, "#4A4A4A", 1, "#363636"]}
+            fillLinearGradientColorStops={[0, "#B8860B", 0.5, "#9E6F0A", 1, "#8B4513"]}
             stroke="#201c1a"
             strokeWidth={4 * scale}
             cornerRadius={30 * scale}
@@ -87,6 +87,32 @@ const AnimatedGoldMine = React.forwardRef<Konva.Group, Konva.GroupConfig>((props
             fill="#201c1a"
             cornerRadius={10 * scale}
         />
+
+        {/* Gold Piles at the front */}
+        <Group y={30 * scale}>
+            <Rect 
+                x={-40 * scale} 
+                y={0} 
+                width={80 * scale} 
+                height={40 * scale} 
+                fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                fillLinearGradientEndPoint={{ x: 0, y: 40 * scale }}
+                fillLinearGradientColorStops={[0, "#FFD700", 0.7, "#DAA520"]}
+                cornerRadius={15 * scale}
+                rotation={-5}
+            />
+             <Rect 
+                x={-25 * scale} 
+                y={5 * scale} 
+                width={50 * scale} 
+                height={30 * scale} 
+                fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+                fillLinearGradientEndPoint={{ x: 0, y: 30 * scale }}
+                fillLinearGradientColorStops={[0, "#F0E68C", 0.7, "#BDB76B"]}
+                cornerRadius={10 * scale}
+                rotation={10}
+            />
+        </Group>
 
         {/* Wooden Support Beams */}
         <Rect
@@ -142,19 +168,21 @@ const AnimatedGoldMine = React.forwardRef<Konva.Group, Konva.GroupConfig>((props
             />
         </Group>
 
-        {/* Gold Sparkles */}
+        {/* Gold Sparkles moved onto the piles */}
         <Group ref={sparklesRef} y={40 * scale}>
-            {[...Array(6)].map((_, i) => (
+            {[...Array(8)].map((_, i) => (
             <Star
                 key={i}
                 numPoints={5}
                 innerRadius={2 * scale}
                 outerRadius={6 * scale}
                 fill="#FFD700"
-                stroke="black"
+                stroke="white"
                 strokeWidth={0.5 * scale}
-                x={-20 * scale + Math.random() * 40 * scale}
-                y={-20 * scale + Math.random() * 40 * scale}
+                shadowBlur={5}
+                shadowColor="#FFD700"
+                x={-30 * scale + Math.random() * 60 * scale}
+                y={-10 * scale + Math.random() * 20 * scale}
             />
             ))}
         </Group>

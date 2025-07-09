@@ -1,30 +1,77 @@
 
 'use client';
 
-import React, { forwardRef, useEffect, useRef } from 'react';
+import React, { forwardRef, useEffect, useRef, useImperativeHandle } from 'react';
 import { Group, Rect, Circle, Ellipse } from 'react-konva';
 import Konva from 'konva';
 
 const scale = 0.07;
+const moveSpeed = 100; // pixels per second
 
-interface AnimatedVillagerProps extends Omit<Konva.GroupConfig, 'id'> {
+interface AnimatedVillagerProps {
     id: string;
+    initialX: number;
+    initialY: number;
+    targetX: number;
+    targetY: number;
     isSelected?: boolean;
     task: 'idle' | 'moving' | 'attacking' | 'dead';
     hp: number;
     maxHp: number;
+    onMoveEnd: (newPosition: { x: number; y: number }) => void;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ id, isSelected, task, hp, maxHp, ...groupProps }, ref) => {
+  ({ id, initialX, initialY, targetX, targetY, isSelected, task, hp, maxHp, onMoveEnd }, ref) => {
     
     const leftArmRef = useRef<Konva.Group>(null);
     const rightArmRef = useRef<Konva.Group>(null);
     const leftLegRef = useRef<Konva.Group>(null);
     const rightLegRef = useRef<Konva.Group>(null);
     const animRef = useRef<Konva.Animation | null>(null);
+    const movementTweenRef = useRef<Konva.Tween | null>(null);
     const mainGroupRef = useRef<Konva.Group>(null);
 
+    useImperativeHandle(ref, () => mainGroupRef.current!, []);
+    
+    // Effect for movement tweening
+    useEffect(() => {
+        const node = mainGroupRef.current;
+        if (!node) return;
+
+        if (movementTweenRef.current) {
+            movementTweenRef.current.destroy();
+        }
+
+        const currentPos = node.position();
+        const distance = Math.sqrt(Math.pow(targetX - currentPos.x, 2) + Math.pow(targetY - currentPos.y, 2));
+        
+        if (distance < 1) { // Already at target
+            return;
+        }
+
+        movementTweenRef.current = new Konva.Tween({
+            node,
+            duration: distance / moveSpeed,
+            x: targetX,
+            y: targetY,
+            onFinish: () => {
+                onMoveEnd({ x: targetX, y: targetY });
+            },
+        });
+
+        if (task === 'moving') {
+            movementTweenRef.current.play();
+        }
+
+        return () => {
+            movementTweenRef.current?.destroy();
+        };
+
+    }, [targetX, targetY, task, onMoveEnd]);
+
+
+    // Effect for cosmetic animations (walking, attacking, dying)
     useEffect(() => {
         const node = mainGroupRef.current;
         if (!node) return;
@@ -66,7 +113,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                 } else {
                     animRef.current?.stop();
                 }
-            } else { 
+            } else { // Idle
                 resetToIdle();
             }
         }, node.getLayer());
@@ -74,15 +121,13 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         animRef.current.start();
         
         return () => {
-            if (animRef.current) {
-                animRef.current.stop();
-            }
+            animRef.current?.stop();
         };
 
     }, [task]);
 
     return (
-      <Group ref={mainGroupRef} {...groupProps} name="villager" id={id} visible={task !== 'dead' || (mainGroupRef.current?.opacity() || 0) > 0}>
+      <Group ref={mainGroupRef} x={initialX} y={initialY} name="villager" id={id} visible={task !== 'dead' || (mainGroupRef.current?.opacity() || 0) > 0}>
         {/* HP Bar - Not listening for clicks */}
          {task !== 'dead' && (
              <Group y={-80 * scale} listening={false}>

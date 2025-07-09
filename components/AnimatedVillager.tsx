@@ -5,8 +5,8 @@ import React, { forwardRef, useEffect, useRef, useImperativeHandle } from 'react
 import { Group, Rect, Circle, Ellipse } from 'react-konva';
 import Konva from 'konva';
 
-const scale = 0.07;
 const moveSpeed = 100; // pixels per second
+const scale = 0.07;
 
 interface AnimatedVillagerProps {
     id: string;
@@ -29,7 +29,6 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     const leftLegRef = useRef<Konva.Group>(null);
     const rightLegRef = useRef<Konva.Group>(null);
     const animRef = useRef<Konva.Animation | null>(null);
-    const movementTweenRef = useRef<Konva.Tween | null>(null);
     const mainGroupRef = useRef<Konva.Group>(null);
 
     useImperativeHandle(ref, () => mainGroupRef.current!, []);
@@ -39,33 +38,27 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         const node = mainGroupRef.current;
         if (!node) return;
 
-        if (movementTweenRef.current) {
-            movementTweenRef.current.destroy();
-        }
-
+        let tween: Konva.Tween | null = null;
+        
         const currentPos = node.position();
         const distance = Math.sqrt(Math.pow(targetX - currentPos.x, 2) + Math.pow(targetY - currentPos.y, 2));
         
-        if (distance < 1) { // Already at target
-            return;
-        }
-
-        movementTweenRef.current = new Konva.Tween({
-            node,
-            duration: distance / moveSpeed,
-            x: targetX,
-            y: targetY,
-            onFinish: () => {
-                onMoveEnd({ x: targetX, y: targetY });
-            },
-        });
-
-        if (task === 'moving') {
-            movementTweenRef.current.play();
+        if (task === 'moving' && distance > 1) {
+            tween = new Konva.Tween({
+                node,
+                duration: distance / moveSpeed,
+                x: targetX,
+                y: targetY,
+                onFinish: () => {
+                    onMoveEnd({ x: targetX, y: targetY });
+                },
+            });
+            
+            tween.play();
         }
 
         return () => {
-            movementTweenRef.current?.destroy();
+            tween?.destroy();
         };
 
     }, [targetX, targetY, task, onMoveEnd]);

@@ -1,9 +1,9 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef, forwardRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Group, Label, Tag, Text, Circle, Line, Ellipse, Star } from 'react-konva';
+import { Stage, Layer, Rect, Group, Label, Tag, Text, Ellipse } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 
@@ -40,214 +40,12 @@ interface Building {
 }
 
 type PlayerAction = 
-    | { mode: 'moving_villager'; data: { villagerId: string } }
     | { mode: 'placing_building'; data: { buildingType: 'house' } }
     | null;
 
 // =================================================================
-// Konva Components (Self-Contained)
+// Self-Contained Konva Components
 // =================================================================
-
-const AnimatedGoldMine = React.forwardRef<Konva.Group, Konva.GroupConfig>((props, ref) => {
-  const pulleyRef = useRef<Konva.Group>(null);
-  const bucketRef = useRef<Konva.Group>(null);
-  const sparklesRef = useRef<Konva.Group>(null);
-  const dustRef = useRef<Konva.Group>(null);
-  const animationRef = useRef<number>();
-
-  useEffect(() => {
-    const startTime = performance.now();
-    const scale = 0.2; // scale is defined inside the component now
-
-    const animate = () => {
-      if (typeof window === 'undefined') return;
-      const now = performance.now();
-      const elapsed = (now - startTime) / 1000;
-
-      // Rotate pulley continuously
-      if (pulleyRef.current) {
-        pulleyRef.current.rotation((elapsed * 45) % 360);
-      }
-
-      // Animate bucket going up and down
-      if (bucketRef.current) {
-        const yPos = -20 * scale + 20 * scale * Math.sin(elapsed * 2);
-        bucketRef.current.y(yPos);
-      }
-
-      // Flicker sparkles by scaling them in/out
-      if (sparklesRef.current) {
-        const sparkleScale = 0.8 + 0.2 * Math.sin(elapsed * 8);
-        sparklesRef.current.scale({ x: sparkleScale, y: sparkleScale });
-      }
-
-      // Animate dust particles rising
-      if (dustRef.current) {
-        dustRef.current.children.forEach((child) => {
-           const newY = (child.y() - 0.2 * scale);
-           if (newY < -60 * scale) {
-               child.y(0);
-               child.opacity(1);
-           } else {
-               child.y(newY);
-               child.opacity(1 - (Math.abs(newY) / (60 * scale)));
-           }
-        });
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animationRef.current = requestAnimationFrame(animate);
-    return () => {
-        if (animationRef.current) {
-            cancelAnimationFrame(animationRef.current);
-        }
-    };
-  }, []);
-  
-  const scale = 0.2; // scale is defined inside the component
-  return (
-    <Group {...props} ref={ref}>
-        {/* Cave Entrance */}
-        <Rect
-            x={-100 * scale}
-            y={-70 * scale}
-            width={200 * scale}
-            height={140 * scale}
-            fillLinearGradientStartPoint={{ x: 0, y: -70 * scale }}
-            fillLinearGradientEndPoint={{ x: 0, y: 70 * scale }}
-            fillLinearGradientColorStops={[0, "#B8860B", 0.5, "#9E6F0A", 1, "#8B4513"]}
-            stroke="#201c1a"
-            strokeWidth={4 * scale}
-            cornerRadius={30 * scale}
-        />
-        <Rect
-            x={-50 * scale}
-            y={0}
-            width={100 * scale}
-            height={70 * scale}
-            fill="#201c1a"
-            cornerRadius={10 * scale}
-        />
-
-        {/* Gold Piles at the front */}
-        <Group y={30 * scale}>
-            <Rect 
-                x={-40 * scale} 
-                y={0} 
-                width={80 * scale} 
-                height={40 * scale} 
-                fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                fillLinearGradientEndPoint={{ x: 0, y: 40 * scale }}
-                fillLinearGradientColorStops={[0, "#FFD700", 0.7, "#DAA520"]}
-                cornerRadius={15 * scale}
-                rotation={-5}
-            />
-             <Rect 
-                x={-25 * scale} 
-                y={5 * scale} 
-                width={50 * scale} 
-                height={30 * scale} 
-                fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                fillLinearGradientEndPoint={{ x: 0, y: 30 * scale }}
-                fillLinearGradientColorStops={[0, "#F0E68C", 0.7, "#BDB76B"]}
-                cornerRadius={10 * scale}
-                rotation={10}
-            />
-        </Group>
-
-        {/* Wooden Support Beams */}
-        <Rect
-            x={-110 * scale}
-            y={-80 * scale}
-            width={30 * scale}
-            height={160 * scale}
-            fill="#8B4513"
-            stroke="black"
-            strokeWidth={2 * scale}
-            cornerRadius={4 * scale}
-        />
-        <Rect
-            x={80 * scale}
-            y={-80 * scale}
-            width={30 * scale}
-            height={160 * scale}
-            fill="#8B4513"
-            stroke="black"
-            strokeWidth={2 * scale}
-            cornerRadius={4 * scale}
-        />
-        <Rect
-            x={-110 * scale}
-            y={-90 * scale}
-            width={220 * scale}
-            height={20 * scale}
-            fill="#A0522D"
-            stroke="black"
-            strokeWidth={2 * scale}
-            cornerRadius={2 * scale}
-        />
-
-        {/* Pulley System */}
-        <Group ref={pulleyRef} y={-100 * scale}>
-            <Circle radius={20 * scale} fill="#C2B280" stroke="black" strokeWidth={2 * scale} />
-            <Line points={[-5 * scale, -20 * scale, 5 * scale, 20 * scale]} stroke="black" strokeWidth={3 * scale} lineCap="round" />
-            <Line points={[-20 * scale, 0, 20 * scale, 0]} stroke="black" strokeWidth={3 * scale} lineCap="round" />
-        </Group>
-
-        {/* Bucket on Rope */}
-        <Group ref={bucketRef} y={-20 * scale}>
-            <Line points={[0, -80 * scale, 0, 0]} stroke="#333" strokeWidth={3 * scale} />
-            <Rect
-            x={-15 * scale}
-            y={0}
-            width={30 * scale}
-            height={20 * scale}
-            fill="#8B4513"
-            stroke="black"
-            strokeWidth={1.5 * scale}
-            cornerRadius={4 * scale}
-            />
-        </Group>
-
-        {/* Gold Sparkles moved onto the piles */}
-        <Group ref={sparklesRef} y={40 * scale}>
-            {[...Array(8)].map((_, i) => (
-            <Star
-                key={i}
-                numPoints={5}
-                innerRadius={2 * scale}
-                outerRadius={6 * scale}
-                fill="#FFD700"
-                stroke="white"
-                strokeWidth={0.5 * scale}
-                shadowBlur={5}
-                shadowColor="#FFD700"
-                x={-30 * scale + Math.random() * 60 * scale}
-                y={-10 * scale + Math.random() * 20 * scale}
-            />
-            ))}
-        </Group>
-
-        {/* Dust Particles */}
-        <Group ref={dustRef} y={60 * scale} listening={false}>
-            {[...Array(10)].map((_, i) => (
-            <Circle
-                key={i}
-                radius={4 * scale}
-                fill="#ccc"
-                opacity={0.4}
-                x={-30 * scale + Math.random() * 60 * scale}
-                y={Math.random() * -30 * scale}
-            />
-            ))}
-        </Group>
-    </Group>
-  );
-});
-AnimatedGoldMine.displayName = 'AnimatedGoldMine';
-
 
 const PickaxeIcon = React.forwardRef<Konva.Group, Konva.GroupConfig>((props, ref) => (
     <Group {...props} ref={ref} listening={false} opacity={0.8}>
@@ -268,6 +66,15 @@ const House = React.forwardRef<Konva.Group, Konva.GroupConfig & { isPreview?: bo
     </Group>
 ));
 House.displayName = 'House';
+
+const GoldMine = React.forwardRef<Konva.Group, Konva.GroupConfig>((props, ref) => (
+    <Group {...props} ref={ref}>
+        <Ellipse radiusX={30} radiusY={20} fill="#DAA520" />
+        <Ellipse radiusX={25} radiusY={15} fill="#FFD700" y={-5} />
+    </Group>
+));
+GoldMine.displayName = 'GoldMine';
+
 
 // =================================================================
 // Main Page Component
@@ -305,7 +112,7 @@ const TestMapPage = () => {
             const id = `villager-${i}`;
             const x = (Math.floor(Math.random() * 5) + 3) * GRID_SIZE;
             const y = (Math.floor(Math.random() * 5) + 3) * GRID_SIZE;
-            initialVillagers.push({ id, x, y, hp: 10, maxHp: 10, targetX: x, targetY: y, task: 'idle', targetMineId: null, attackTargetId: null });
+            initialVillagers.push({ id, x, y, hp: 100, maxHp: 100, targetX: x, targetY: y, task: 'idle', targetMineId: null, attackTargetId: null });
         }
         setVillagers(initialVillagers);
         
@@ -324,18 +131,20 @@ const TestMapPage = () => {
     useEffect(() => {
         if (!isClient) return;
 
-        let logicTickAccumulator = 0;
-        const GAME_TICK_INTERVAL = 250; // ms
-
         const anim = new Konva.Animation(frame => {
             if (!frame) return;
             const timeDiff = frame.timeDiff;
-            logicTickAccumulator += timeDiff;
 
             const villagersToUpdate = [...villagersRef.current];
             let villagersStateChanged = false;
 
-            // --- Visual & Position Update (every frame) ---
+            const ATTACK_POWER = 10;
+            const ATTACK_RANGE = GRID_SIZE * 1.5;
+            const ATTACK_COOLDOWN = 1000;
+            const MINE_RATE_PER_VILLAGER = 10;
+            const now = Date.now();
+            const damageToApply = new Map<string, number>();
+
             villagersToUpdate.forEach(villager => {
                 if (villager.task === 'dead') return;
                 
@@ -349,98 +158,58 @@ const TestMapPage = () => {
                     villager.x += dx * ratio;
                     villager.y += dy * ratio;
                     villagersStateChanged = true;
+                } else {
+                    if (villager.task === 'moving') {
+                         villagersStateChanged = true;
+                         villager.task = villager.targetMineId ? 'mining' : 'idle';
+                    }
+                }
+
+                if (villager.task === 'attacking' && villager.attackTargetId) {
+                    const target = villagersToUpdate.find(v => v.id === villager.attackTargetId);
+                    if (!target || target.task === 'dead') {
+                        villager.task = 'idle';
+                        villager.attackTargetId = null;
+                        villagersStateChanged = true;
+                    } else {
+                        const distanceToAttackTarget = Math.hypot(target.x - villager.x, target.y - villager.y);
+                        if (distanceToAttackTarget <= ATTACK_RANGE) {
+                            if (now - (lastAttackTimes.current[villager.id] || 0) > ATTACK_COOLDOWN) {
+                                const currentDamage = damageToApply.get(target.id) || 0;
+                                damageToApply.set(target.id, currentDamage + ATTACK_POWER);
+                                lastAttackTimes.current[villager.id] = now;
+                            }
+                        }
+                    }
+                }
+
+                 if (villager.task === 'mining' && villager.targetMineId) {
+                    setGoldMines(currentMines => {
+                        const nextMines = [...currentMines];
+                        const mineIndex = nextMines.findIndex(m => m.id === villager.targetMineId);
+                        if (mineIndex > -1) {
+                            const newAmount = nextMines[mineIndex].amount - MINE_RATE_PER_VILLAGER * (timeDiff / 1000);
+                            nextMines[mineIndex] = { ...nextMines[mineIndex], amount: Math.max(0, newAmount) };
+                            if (newAmount <= 0) {
+                                villager.task = 'idle';
+                                villager.targetMineId = null;
+                                villagersStateChanged = true;
+                            }
+                        }
+                        return nextMines.filter(m => m.amount > 0);
+                    });
                 }
             });
 
-
-            // --- Logic Update (every GAME_TICK_INTERVAL) ---
-            if (logicTickAccumulator > GAME_TICK_INTERVAL) {
-                logicTickAccumulator %= GAME_TICK_INTERVAL;
-
-                const ATTACK_POWER = 2;
-                const ATTACK_RANGE = GRID_SIZE * 1.5;
-                const ATTACK_COOLDOWN = 1500;
-                const MINE_RATE_PER_VILLAGER = 5;
-
-                const damageToApply = new Map<string, number>();
-                const goldToGain = new Map<string, number>();
-                const now = Date.now();
-
-                villagersToUpdate.forEach(villager => {
-                    if (villager.task === 'dead') return;
-
-                    const distanceToTarget = Math.hypot(villager.targetX - villager.x, villager.targetY - villager.y);
-                    
-                    // Check for arrival if moving
-                    if (villager.task === 'moving' && distanceToTarget < 5) {
-                        villagersStateChanged = true;
-                        if (villager.targetMineId) villager.task = 'mining';
-                        else villager.task = 'idle';
-                    }
-
-                    if (villager.task === 'attacking' && villager.attackTargetId) {
-                        const target = villagersToUpdate.find(v => v.id === villager.attackTargetId);
-                        if (!target || target.task === 'dead') {
-                            villager.task = 'idle';
-                            villager.attackTargetId = null;
-                            villagersStateChanged = true;
-                        } else {
-                            const distanceToAttackTarget = Math.hypot(target.x - villager.x, target.y - villager.y);
-                            if (distanceToAttackTarget <= ATTACK_RANGE) {
-                                villager.targetX = villager.x; // Stop moving
-                                villager.targetY = villager.y;
-                                if (now - (lastAttackTimes.current[villager.id] || 0) > ATTACK_COOLDOWN) {
-                                    const currentDamage = damageToApply.get(target.id) || 0;
-                                    damageToApply.set(target.id, currentDamage + ATTACK_POWER);
-                                    lastAttackTimes.current[villager.id] = now;
-                                }
-                            } else { // Chase target
-                                villager.targetX = target.x;
-                                villager.targetY = target.y;
-                            }
-                        }
-                    }
-
-                    if (villager.task === 'mining' && villager.targetMineId) {
-                        const currentGold = goldToGain.get(villager.targetMineId) || 0;
-                        goldToGain.set(villager.targetMineId, currentGold + MINE_RATE_PER_VILLAGER * (GAME_TICK_INTERVAL / 1000));
+            if (damageToApply.size > 0) {
+                villagersStateChanged = true;
+                damageToApply.forEach((totalDamage, targetId) => {
+                    const target = villagersToUpdate.find(v => v.id === targetId);
+                    if (target) {
+                        target.hp = Math.max(0, target.hp - totalDamage);
+                        if (target.hp === 0) target.task = 'dead';
                     }
                 });
-
-                if (damageToApply.size > 0) {
-                    villagersStateChanged = true;
-                    damageToApply.forEach((totalDamage, targetId) => {
-                        const target = villagersToUpdate.find(v => v.id === targetId);
-                        if (target) {
-                            target.hp = Math.max(0, target.hp - totalDamage);
-                            if (target.hp === 0) target.task = 'dead';
-                        }
-                    });
-                }
-
-                if (goldToGain.size > 0) {
-                    setGoldMines(currentMines => {
-                        const nextMines = currentMines.map(mine => {
-                            const minedAmount = goldToGain.get(mine.id);
-                            if (minedAmount) {
-                                const newAmount = Math.max(0, mine.amount - minedAmount);
-                                if (newAmount === 0 && mine.amount > 0) {
-                                    villagersToUpdate.forEach(v => {
-                                        if (v.targetMineId === mine.id) {
-                                            v.task = 'idle';
-                                            v.targetMineId = null;
-                                            villagersStateChanged = true;
-                                        }
-                                    });
-                                    setTooltipMineId(prev => prev === mine.id ? null : prev);
-                                }
-                                return { ...mine, amount: newAmount };
-                            }
-                            return mine;
-                        });
-                        return nextMines.filter(mine => mine.amount > 0);
-                    });
-                }
             }
 
             if (villagersStateChanged) {
@@ -512,7 +281,9 @@ const TestMapPage = () => {
         if (e.evt.button !== 0) { setSelectionRect(null); return; }
 
         if (isDrag) {
-            const selectionBox = new Konva.Rect({
+            const stage = stageRef.current;
+            if(!stage) return;
+            const box = new Konva.Rect({
                 x: Math.min(x1, x2),
                 y: Math.min(y1, y2),
                 width: Math.abs(x1 - x2),
@@ -520,7 +291,8 @@ const TestMapPage = () => {
             });
             const newSelectedIds = new Set<string>();
             villagers.forEach(v => {
-                if (v.task !== 'dead' && Konva.Util.haveIntersection(selectionBox.getClientRect(), new Konva.Rect({x:v.x, y:v.y, width:1, height:1}).getClientRect())) {
+                 const villagerNode = stage.findOne('#' + v.id);
+                 if (villagerNode && Konva.Util.haveIntersection(box.getClientRect(), villagerNode.getClientRect())) {
                     newSelectedIds.add(v.id);
                 }
             });
@@ -587,8 +359,8 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
-                <h1 className="text-3xl font-serif text-brand-gold">Resource Interaction Test Map</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move/attack. Hold Spacebar + drag to pan. Scroll to zoom.</p>
+                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
+                <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move/attack/mine. Hold Spacebar + drag to pan. Scroll to zoom.</p>
             </div>
             <div className="flex w-full max-w-6xl">
                 <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
@@ -602,7 +374,7 @@ const TestMapPage = () => {
                             {renderGrid()}
                             {buildings.map(building => (<House key={building.id} id={building.id} x={building.x} y={building.y} />))}
                             {goldMines.map(mine => (
-                                <AnimatedGoldMine
+                                <GoldMine
                                     key={mine.id} id={mine.id}
                                     x={mine.x} y={mine.y} onClick={(e) => handleMineClick(mine.id, e)} onTap={(e) => handleMineClick(mine.id, e as any)}
                                     onMouseEnter={() => { if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id); }}
@@ -611,14 +383,14 @@ const TestMapPage = () => {
                             ))}
                             {villagers.map(villager => (
                                 <Group key={villager.id} id={villager.id} x={villager.x} y={villager.y}
-                                    onMouseEnter={() => {if (!isSpacebarPressed) (stageRef.current?.container() as HTMLDivElement).style.cursor = 'pointer';}}
-                                    onMouseLeave={() => {if (!isSpacebarPressed) (stageRef.current?.container() as HTMLDivElement).style.cursor = 'default';}}
                                     onClick={(e) => handleUnitClick(e, villager.id)} 
                                     onTap={(e) => handleUnitClick(e, villager.id)}
                                 >
-                                    <AnimatedVillager 
+                                    <AnimatedVillager
                                         isMoving={villager.task === 'moving'}
                                         isMining={villager.task === 'mining'}
+                                        isBuilding={villager.task === 'building'}
+                                        isAttacking={villager.task === 'attacking'}
                                         isDead={villager.task === 'dead'}
                                         isSelected={selectedVillagerIds.has(villager.id)}
                                     />
@@ -632,7 +404,7 @@ const TestMapPage = () => {
                             ))}
                             {selectionRect?.visible && (<Rect x={selectionRect.x1} y={selectionRect.y1} width={selectionRect.x2 - selectionRect.x1} height={selectionRect.y2 - selectionRect.y1} fill="rgba(131, 165, 152, 0.3)" stroke="#83a598" strokeWidth={1 / stageScale} listening={false} />)}
                             {hoveredMineId && goldMines.find(m => m.id === hoveredMineId) && (<PickaxeIcon x={goldMines.find(m => m.id === hoveredMineId)!.x} y={goldMines.find(m => m.id === hoveredMineId)!.y - 60}/>)}
-                            {activeTooltipMine && (<Label x={activeTooltipMine.x} y={activeTooltipMine.y - 90} opacity={0.9} listening={false} ><Tag fill='#201c1a' pointerDirection='down' pointerWidth={10} pointerHeight={10} lineJoin='round' cornerRadius={5} shadowColor='black' shadowBlur={5} shadowOpacity={0.4} /><Text text={`Gold: ${Math.floor(activeTooltipMine.amount)}`} fontFamily='Quattrocento Sans, sans-serif' fontSize={16} padding={8} fill='#fbf1c7' /></Label>)}
+                            {activeTooltipMine && (<Label x={activeTooltipMine.x} y={activeTooltipMine.y - 40} opacity={0.9} listening={false} ><Tag fill='#201c1a' pointerDirection='down' pointerWidth={10} pointerHeight={10} lineJoin='round' cornerRadius={5} shadowColor='black' shadowBlur={5} shadowOpacity={0.4} /><Text text={`Gold: ${Math.floor(activeTooltipMine.amount)}`} fontFamily='Quattrocento Sans, sans-serif' fontSize={16} padding={8} fill='#fbf1c7' /></Label>)}
                             {placementPreview && (<House x={placementPreview.x} y={placementPreview.y} isPreview />)}
                         </Layer>
                     </Stage>

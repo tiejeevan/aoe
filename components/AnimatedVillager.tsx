@@ -107,7 +107,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     }, [task, targetX, targetY, onMoveEnd]);
 
     return (
-      <Group ref={nodeRef} {...groupProps}>
+      <Group ref={nodeRef} {...groupProps} name="villager">
         {/* Selection Indicator */}
         {isSelected && (
             <Ellipse

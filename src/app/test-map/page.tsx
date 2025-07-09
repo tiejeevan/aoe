@@ -18,6 +18,7 @@ interface Villager {
     targetX: number;
     targetY: number;
     task: 'idle' | 'moving';
+    isSelected: boolean;
 }
 
 const TestMapPage = () => {
@@ -29,22 +30,30 @@ const TestMapPage = () => {
     const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
     const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
 
+    // State for selection
+    const [selectionBox, setSelectionBox] = useState({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
+    const [mouseDownPos, setMouseDownPos] = useState<{x: number, y: number} | null>(null);
+
     const stageRef = useRef<Konva.Stage>(null);
 
     // Initial setup on component mount
     useEffect(() => {
         setIsClient(true);
-        const initialX = 10 * GRID_SIZE;
-        const initialY = 10 * GRID_SIZE;
-        // Create one villager at a fixed position
-        setVillagers([{
-            id: 'villager-1',
-            x: initialX,
-            y: initialY,
-            targetX: initialX,
-            targetY: initialY,
-            task: 'idle',
-        }]);
+        // Create multiple villagers
+        const initialVillagers: Villager[] = Array.from({ length: 5 }).map((_, i) => {
+            const x = (10 + i * 4) * GRID_SIZE;
+            const y = (10 + (i%2) * 4) * GRID_SIZE;
+            return {
+                id: `villager-${i + 1}`,
+                x: x,
+                y: y,
+                targetX: x,
+                targetY: y,
+                task: 'idle',
+                isSelected: false,
+            };
+        });
+        setVillagers(initialVillagers);
     }, []);
 
     // Add keyboard listeners for panning
@@ -74,7 +83,7 @@ const TestMapPage = () => {
         }
     };
     
-    // New handler for right-click movement
+    // Move selected villagers on right click
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
         e.evt.preventDefault();
         const stage = stageRef.current;
@@ -82,21 +91,77 @@ const TestMapPage = () => {
         const pointerPos = stage.getPointerPosition();
         if (!pointerPos) return;
 
-        // Move the first villager
-        if (villagers.length > 0) {
-            setVillagers(currentVillagers => {
-                const newVillagers = [...currentVillagers];
-                const villager = newVillagers[0];
-                newVillagers[0] = { 
-                    ...villager, 
-                    targetX: pointerPos.x, 
-                    targetY: pointerPos.y,
-                    task: 'moving'
-                };
-                return newVillagers;
-            });
-        }
+        setVillagers(currentVillagers =>
+            currentVillagers.map(v => {
+                if (v.isSelected) {
+                    return { 
+                        ...v, 
+                        targetX: pointerPos.x, 
+                        targetY: pointerPos.y,
+                        task: 'moving'
+                    };
+                }
+                return v;
+            })
+        );
     };
+
+    const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        if (e.evt.button === 2) return; // Ignore right-click
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pos = stage.getPointerPosition();
+        if (!pos) return;
+        
+        // If clicking on a villager, select just that one.
+        if (e.target.hasName('villager')) {
+            const clickedId = e.target.id();
+            setVillagers(v => v.map(villager => ({
+                ...villager,
+                isSelected: villager.id === clickedId
+            })));
+            return;
+        }
+
+        // If clicking on the background, start selection process.
+        setMouseDownPos(pos);
+        setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, visible: true });
+    };
+
+    const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        if (!selectionBox.visible || !mouseDownPos) return;
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pos = stage.getPointerPosition();
+        if (!pos) return;
+        setSelectionBox(prev => ({ ...prev, x2: pos.x, y2: pos.y }));
+    };
+
+    const handleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        if (mouseDownPos) { // This means a drag was started on the background
+            const x1 = Math.min(selectionBox.x1, selectionBox.x2);
+            const y1 = Math.min(selectionBox.y1, selectionBox.y2);
+            const x2 = Math.max(selectionBox.x1, selectionBox.x2);
+            const y2 = Math.max(selectionBox.y1, selectionBox.y2);
+            
+            const dragDistance = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+            if (dragDistance < 5) { // It's a click on the background
+                setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
+            } else { // It's a drag selection
+                setVillagers(currentVillagers => 
+                    currentVillagers.map(v => ({
+                        ...v,
+                        isSelected: v.x > x1 && v.x < x2 && v.y > y1 && v.y < y2
+                    }))
+                );
+            }
+        }
+        
+        setMouseDownPos(null);
+        setSelectionBox({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
+    };
+
 
     const handleVillagerMoveEnd = (villagerId: string) => {
         setVillagers(currentVillagers => 
@@ -137,8 +202,8 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
-                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map - Step 3: Smooth Movement</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Right-click on the map to move the villager. It should now glide smoothly with a walking animation.</p>
+                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
+                <p className="text-parchment-dark mb-4 text-sm">Drag to select villagers. Right-click to move them.</p>
             </div>
             <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                  <Stage 
@@ -147,6 +212,9 @@ const TestMapPage = () => {
                     height={MAP_HEIGHT_CELLS * GRID_SIZE} 
                     className="mx-auto" 
                     onWheel={handleWheel}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
                     onContextMenu={handleStageContextMenu}
                     draggable={isSpacebarPressed} 
                     scaleX={stageScale} 
@@ -161,15 +229,27 @@ const TestMapPage = () => {
                             <AnimatedVillager
                                 key={villager.id}
                                 id={villager.id}
-                                x={villager.x} // Initial X
-                                y={villager.y} // Initial Y
+                                x={villager.x}
+                                y={villager.y}
                                 targetX={villager.targetX}
                                 targetY={villager.targetY}
                                 task={villager.task}
+                                isSelected={villager.isSelected}
                                 onMoveEnd={() => handleVillagerMoveEnd(villager.id)}
                             />
                         ))}
 
+                         <Rect
+                            x={Math.min(selectionBox.x1, selectionBox.x2)}
+                            y={Math.min(selectionBox.y1, selectionBox.y2)}
+                            width={Math.abs(selectionBox.x1 - selectionBox.x2)}
+                            height={Math.abs(selectionBox.y1 - selectionBox.y2)}
+                            fill="rgba(131, 165, 152, 0.3)"
+                            stroke="#83a598"
+                            strokeWidth={1}
+                            visible={selectionBox.visible}
+                            listening={false}
+                        />
                     </Layer>
                 </Stage>
             </div>

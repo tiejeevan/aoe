@@ -43,10 +43,12 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     useEffect(() => {
         const node = mainGroupRef.current;
         if (!node) return;
+        let isCancelled = false;
 
-        // Destroy any existing tween before creating a new one.
-        // Optional chaining (?.) prevents an error if the ref is null or the tween is already destroyed.
-        movementTweenRef.current?.destroy();
+        // Stop any previous tween
+        if (movementTweenRef.current) {
+            movementTweenRef.current.destroy();
+        }
         
         if (task === 'moving') {
             const currentPos = node.position();
@@ -59,7 +61,9 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                     x: targetX,
                     y: targetY,
                     onFinish: () => {
-                        onMoveEnd({ x: targetX, y: targetY });
+                        if (!isCancelled) {
+                            onMoveEnd({ x: targetX, y: targetY });
+                        }
                     },
                 });
                 movementTweenRef.current.play();
@@ -72,7 +76,10 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         }
 
         return () => {
-             movementTweenRef.current?.destroy();
+            isCancelled = true;
+            if (movementTweenRef.current) {
+                movementTweenRef.current.destroy();
+            }
         };
 
     }, [targetX, targetY, task, onMoveEnd]);

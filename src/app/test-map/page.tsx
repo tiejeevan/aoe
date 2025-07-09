@@ -18,7 +18,7 @@ interface Villager {
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
-    // Start with one static villager
+    // Villagers are now in state to allow for updates
     const [villagers, setVillagers] = useState<Villager[]>([]);
     
     // State for panning and zooming
@@ -66,6 +66,24 @@ const TestMapPage = () => {
         }
     };
     
+    // New handler for right-click movement
+    const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
+        e.evt.preventDefault();
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pointerPos = stage.getPointerPosition();
+        if (!pointerPos) return;
+
+        // For now, move the first villager
+        if (villagers.length > 0) {
+            setVillagers(currentVillagers => {
+                const newVillagers = [...currentVillagers];
+                newVillagers[0] = { ...newVillagers[0], x: pointerPos.x, y: pointerPos.y };
+                return newVillagers;
+            });
+        }
+    };
+
     // Render the background grid
     const renderGrid = () => {
         return Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => (
@@ -94,8 +112,8 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
-                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map - Step 1: Static Villager</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Hold Spacebar + drag to pan. Scroll to zoom. Villager movement is currently disabled.</p>
+                <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map - Step 2: Basic Movement</h1>
+                <p className="text-parchment-dark mb-4 text-sm">Right-click on the map to move the villager. It will teleport instantly. This confirms the movement logic before we add smoothing.</p>
             </div>
             <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                  <Stage 
@@ -104,6 +122,7 @@ const TestMapPage = () => {
                     height={MAP_HEIGHT_CELLS * GRID_SIZE} 
                     className="mx-auto" 
                     onWheel={handleWheel}
+                    onContextMenu={handleStageContextMenu}
                     draggable={isSpacebarPressed} 
                     scaleX={stageScale} 
                     scaleY={stageScale} 
@@ -113,7 +132,6 @@ const TestMapPage = () => {
                     <Layer>
                         {renderGrid()}
                         
-                        {/* Render the single static villager */}
                         {villagers.map(villager => (
                             <AnimatedVillager
                                 key={villager.id}

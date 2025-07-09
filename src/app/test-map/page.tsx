@@ -50,6 +50,9 @@ const TestMapPage = () => {
     const [selectionRect, setSelectionRect] = useState<{ x: number, y: number, width: number, height: number, visible: boolean } | null>(null);
     const [hoveredMineId, setHoveredMineId] =useState<string|null>(null);
     const [tooltipMineId, setTooltipMineId] = useState<string | null>(null);
+    const [stageScale, setStageScale] = useState(1);
+    const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+
 
     const stageRef = useRef<Konva.Stage>(null);
     const villagerRefs = useRef<Record<string, Konva.Group>>({});
@@ -167,13 +170,44 @@ const TestMapPage = () => {
 
     }, [isClient, villagers, updateVillagersState]);
 
+    const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
+        e.evt.preventDefault();
+        const stage = e.target.getStage();
+        if (!stage) return;
+
+        const scaleBy = 1.05;
+        const oldScale = stage.scaleX();
+        const pointer = stage.getPointerPosition();
+        if (!pointer) return;
+        
+        const mousePointTo = {
+            x: (pointer.x - stage.x()) / oldScale,
+            y: (pointer.y - stage.y()) / oldScale,
+        };
+
+        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+        
+        const minScale = 0.5;
+        const maxScale = 3.0;
+        const clampedScale = Math.max(minScale, Math.min(newScale, maxScale));
+        
+        if (clampedScale !== oldScale) {
+            setStageScale(clampedScale);
+            const newPos = {
+                x: pointer.x - mousePointTo.x * clampedScale,
+                y: pointer.y - mousePointTo.y * clampedScale,
+            };
+            setStagePos(newPos);
+        }
+    };
+
     const handleMineClick = (mineId: string, e: Konva.KonvaEventObject<MouseEvent>) => {
         e.evt.stopPropagation();
         setTooltipMineId(prevId => (prevId === mineId ? null : mineId));
     };
 
     const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (e.evt.button !== 0) return;
+        if (e.evt.button !== 0 || e.evt.altKey || e.evt.ctrlKey) return;
 
         if (e.target === stageRef.current) {
             setTooltipMineId(null);
@@ -199,6 +233,8 @@ const TestMapPage = () => {
 
     const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
         isSelecting.current = false;
+        if (!selectionRect) return;
+
         const selectionBox = selectionRectRef.current?.getClientRect();
         setSelectionRect(null);
 
@@ -300,7 +336,7 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">Resource Interaction Test Map</h1>
-            <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move. Click mine for info.</p>
+            <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move. Scroll to zoom. Drag to pan.</p>
             <div className="w-full max-w-5xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
                     ref={stageRef} 
@@ -311,6 +347,12 @@ const TestMapPage = () => {
                     onMouseMove={handleStageMouseMove}
                     onMouseUp={handleStageMouseUp}
                     onContextMenu={handleStageContextMenu}
+                    onWheel={handleWheel}
+                    draggable
+                    scaleX={stageScale}
+                    scaleY={stageScale}
+                    x={stagePos.x}
+                    y={stagePos.y}
                 >
                     <Layer ref={layerRef}>
                         {renderGrid()}

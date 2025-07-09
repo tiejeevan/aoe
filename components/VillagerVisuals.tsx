@@ -8,8 +8,8 @@ import type Konva from 'konva';
 // --- Tool Components ---
 const Knife = ({ scale }: { scale: number }) => (
     <Group x={0} y={90 * scale} rotation={-45}>
-        <Rect x={-5 * scale} y={-15 * scale} width={10 * scale} height={30 * scale} fill="#854d0e" cornerRadius={2 * scale} />
-        <Rect x={-4 * scale} y={-65 * scale} width={8 * scale} height={50 * scale} fill="#a8a29e" stroke="#201c1a" strokeWidth={1*scale} cornerRadius={4*scale}/>
+        <Rect x={-10 * scale} y={-30 * scale} width={20 * scale} height={60 * scale} fill="#854d0e" cornerRadius={4 * scale} />
+        <Rect x={-8 * scale} y={-130 * scale} width={16 * scale} height={100 * scale} fill="#a8a29e" stroke="#201c1a" strokeWidth={1*scale} cornerRadius={8*scale}/>
     </Group>
 );
 

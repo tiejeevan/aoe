@@ -50,13 +50,12 @@ const TestMapPage = () => {
     const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
     const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
 
-    // State for selection
+    // State for selection and interaction
     const [selectionBox, setSelectionBox] = useState({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
     const [mouseDownPos, setMouseDownPos] = useState<{x: number, y: number} | null>(null);
+    const [isHoveringEnemy, setIsHoveringEnemy] = useState(false);
 
     const stageRef = useRef<Konva.Stage>(null);
-    const lastTickRef = useRef<number>(Date.now());
-    
     const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
 
     // Initial setup on component mount
@@ -87,53 +86,59 @@ const TestMapPage = () => {
         if (!isClient) return;
         
         const gameLoop = () => {
-            const now = Date.now();
-            lastTickRef.current = now;
-
-            setVillagers(currentVillagers => {
-                let villagersToUpdate = [...currentVillagers];
+             setVillagers(currentVillagers => {
+                const now = Date.now();
                 const damageMap = new Map<string, number>();
+                let hasChanged = false;
 
-                // Combat logic pass
-                villagersToUpdate.forEach(villager => {
+                const nextVillagers = currentVillagers.map(v => ({...v})); // Create a mutable copy
+
+                // First pass: determine attacks and build damage map
+                for (const villager of nextVillagers) {
                     if (villager.task === 'attacking' && villager.targetId) {
-                        const target = villagersToUpdate.find(v => v.id === villager.targetId);
+                        const target = nextVillagers.find(v => v.id === villager.targetId);
                         if (target && target.task !== 'dead') {
-                             const dx = target.x - villager.x;
-                             const dy = target.y - villager.y;
-                             const distance = Math.sqrt(dx * dx + dy * dy);
+                            const dx = target.x - villager.x;
+                            const dy = target.y - villager.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
 
-                             if (distance > ATTACK_RANGE) {
-                                 // Target moved out of range, chase them
-                                villagersToUpdate = villagersToUpdate.map(v => v.id === villager.id ? {...v, task: 'moving', targetX: target.x, targetY: target.y} : v);
-                             } else if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
+                            if (distance > ATTACK_RANGE) {
+                                villager.task = 'moving';
+                                villager.targetX = target.x;
+                                villager.targetY = target.y;
+                                hasChanged = true;
+                            } else if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
                                 const currentDamage = damageMap.get(target.id) || 0;
                                 damageMap.set(target.id, currentDamage + villager.attack);
-                                villagersToUpdate = villagersToUpdate.map(v => v.id === villager.id ? {...v, attackLastTime: now} : v);
+                                villager.attackLastTime = now;
+                                hasChanged = true;
                             }
                         } else {
-                            // Target is dead or gone, go idle
-                            villagersToUpdate = villagersToUpdate.map(v => v.id === villager.id ? {...v, task: 'idle', targetId: null} : v);
+                            villager.task = 'idle';
+                            villager.targetId = null;
+                            hasChanged = true;
                         }
                     }
-                });
-
-                // Apply damage
-                if (damageMap.size > 0) {
-                    villagersToUpdate = villagersToUpdate.map(v => {
-                        if (damageMap.has(v.id)) {
-                            const newHp = v.hp - (damageMap.get(v.id) || 0);
-                            if (newHp <= 0) {
-                                return { ...v, hp: 0, task: 'dead' as const, isSelected: false, targetId: null };
-                            }
-                            return { ...v, hp: newHp };
-                        }
-                        return v;
-                    });
                 }
-                return villagersToUpdate;
-            });
 
+                // Second pass: apply damage and check for deaths
+                if (damageMap.size > 0) {
+                    for (const villager of nextVillagers) {
+                        if (damageMap.has(villager.id)) {
+                            const newHp = villager.hp - (damageMap.get(villager.id) || 0);
+                            villager.hp = Math.max(0, newHp);
+                            if (villager.hp === 0) {
+                                villager.task = 'dead';
+                                villager.isSelected = false;
+                                villager.targetId = null;
+                            }
+                            hasChanged = true;
+                        }
+                    }
+                }
+
+                return hasChanged ? nextVillagers : currentVillagers;
+            });
             requestAnimationFrame(gameLoop);
         };
 
@@ -283,9 +288,14 @@ const TestMapPage = () => {
 
     const handleMoveEnd = useCallback((villagerId: string, newPosition: {x: number, y: number}) => {
         setVillagers(currentVillagers => 
-            currentVillagers.map(v => 
-                v.id === villagerId ? { ...v, task: 'idle', x: newPosition.x, y: newPosition.y } : v
-            )
+            currentVillagers.map(v => {
+                if (v.id !== villagerId) return v;
+                
+                const target = v.targetId ? currentVillagers.find(t => t.id === v.targetId) : null;
+                const task = target ? 'attacking' : 'idle';
+
+                return { ...v, task, x: newPosition.x, y: newPosition.y };
+            })
         );
     }, []);
 
@@ -304,6 +314,10 @@ const TestMapPage = () => {
             />
         ));
     };
+
+    const hasSelection = villagers.some(v => v.isSelected);
+    const attackCursorUrl = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23fb4934" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 9.5l-5-5-5 5 5 5 5-5z"/><path d="M9.5 14.5l5 5 5-5-5-5-5 5z"/><path d="M2.5 12l9 9"/><path d="M12.5 2.5l9 9"/></svg>'), auto`;
+    const stageCursor = isSpacebarPressed ? 'grab' : hasSelection && isHoveringEnemy ? attackCursorUrl : 'default';
     
     if (!isClient) {
         return (
@@ -319,12 +333,13 @@ const TestMapPage = () => {
                 <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
                 <p className="text-parchment-dark mb-4 text-sm">Drag to select. Right-click on ground to move, right-click on another villager to attack.</p>
             </div>
-            <div className={`flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
+            <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
                     ref={stageRef} 
                     width={MAP_WIDTH_CELLS * GRID_SIZE} 
                     height={MAP_HEIGHT_CELLS * GRID_SIZE} 
                     className="mx-auto" 
+                    style={{ cursor: stageCursor }}
                     onWheel={handleWheel}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
@@ -357,6 +372,11 @@ const TestMapPage = () => {
                                 task={villager.task}
                                 isSelected={villager.isSelected}
                                 onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)}
+                                onMouseEnter={() => {
+                                    const node = getVillagerNode(villagerRefs.current.get(villager.id));
+                                    if (node) setIsHoveringEnemy(true);
+                                }}
+                                onMouseLeave={() => setIsHoveringEnemy(false)}
                             />
                         ))}
 

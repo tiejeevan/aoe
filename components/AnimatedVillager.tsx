@@ -19,10 +19,12 @@ interface AnimatedVillagerProps {
     hp: number;
     maxHp: number;
     onMoveEnd: (newPosition: { x: number; y: number }) => void;
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ id, initialX, initialY, targetX, targetY, isSelected, task, hp, maxHp, onMoveEnd }, ref) => {
+  ({ id, initialX, initialY, targetX, targetY, isSelected, task, hp, maxHp, onMoveEnd, onMouseEnter, onMouseLeave }, ref) => {
     
     const leftArmRef = useRef<Konva.Group>(null);
     const rightArmRef = useRef<Konva.Group>(null);
@@ -30,6 +32,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     const rightLegRef = useRef<Konva.Group>(null);
     const animRef = useRef<Konva.Animation | null>(null);
     const mainGroupRef = useRef<Konva.Group>(null);
+    const movementTweenRef = useRef<Konva.Tween | null>(null);
 
     useImperativeHandle(ref, () => mainGroupRef.current!, []);
     
@@ -38,27 +41,36 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         const node = mainGroupRef.current;
         if (!node) return;
 
-        let tween: Konva.Tween | null = null;
+        if (movementTweenRef.current) {
+            movementTweenRef.current.destroy();
+        }
         
-        const currentPos = node.position();
-        const distance = Math.sqrt(Math.pow(targetX - currentPos.x, 2) + Math.pow(targetY - currentPos.y, 2));
-        
-        if (task === 'moving' && distance > 1) {
-            tween = new Konva.Tween({
-                node,
-                duration: distance / moveSpeed,
-                x: targetX,
-                y: targetY,
-                onFinish: () => {
-                    onMoveEnd({ x: targetX, y: targetY });
-                },
-            });
-            
-            tween.play();
+        if (task === 'moving') {
+            const currentPos = node.position();
+            const distance = Math.sqrt(Math.pow(targetX - currentPos.x, 2) + Math.pow(targetY - currentPos.y, 2));
+
+            if (distance > 1) {
+                 movementTweenRef.current = new Konva.Tween({
+                    node,
+                    duration: distance / moveSpeed,
+                    x: targetX,
+                    y: targetY,
+                    onFinish: () => {
+                        onMoveEnd({ x: targetX, y: targetY });
+                    },
+                });
+                movementTweenRef.current.play();
+            } else {
+                 onMoveEnd({ x: targetX, y: targetY });
+            }
+        } else {
+             node.x(targetX);
+             node.y(targetY);
         }
 
         return () => {
-            tween?.destroy();
+             movementTweenRef.current?.destroy();
+             movementTweenRef.current = null;
         };
 
     }, [targetX, targetY, task, onMoveEnd]);
@@ -120,7 +132,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     }, [task]);
 
     return (
-      <Group ref={mainGroupRef} x={initialX} y={initialY} name="villager" id={id} visible={task !== 'dead' || (mainGroupRef.current?.opacity() || 0) > 0}>
+      <Group ref={mainGroupRef} x={initialX} y={initialY} name="villager" id={id} visible={task !== 'dead' || (mainGroupRef.current?.opacity() || 0) > 0} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {/* HP Bar - Not listening for clicks */}
          {task !== 'dead' && (
              <Group y={-80 * scale} listening={false}>

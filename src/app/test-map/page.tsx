@@ -38,6 +38,7 @@ const buildingTypes: {id: BuildingType, name: string}[] = [
 
 interface Villager {
     id: string;
+    name: string;
     x: number;
     y: number;
     targetX: number;
@@ -64,6 +65,7 @@ interface ConstructionSite {
     type: BuildingType;
     progress: number; // 0-100
     builderId: string | null;
+    startTime: number;
 }
 
 interface Building {
@@ -106,6 +108,12 @@ const getConstructionSiteNode = (node: Konva.Node | null): Konva.Group | null =>
     return null;
 };
 
+const isClickOnPopup = (node: Konva.Node | null): boolean => {
+    if (!node) return false;
+    if (node.getAttr('isPopup')) return true;
+    return isClickOnPopup(node.getParent());
+};
+
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
@@ -113,6 +121,7 @@ const TestMapPage = () => {
     const [goldMines, setGoldMines] = useState<GoldMine[]>([]);
     const [constructionSites, setConstructionSites] = useState<ConstructionSite[]>([]);
     const [buildings, setBuildings] = useState<Building[]>([]);
+    const [log, setLog] = useState<string[]>([]);
     
     // State for panning and zooming
     const [stageScale, setStageScale] = useState(1);
@@ -148,6 +157,7 @@ const TestMapPage = () => {
             const y = (10 + (i%2) * 4) * GRID_SIZE;
             return {
                 id: `villager-${i + 1}`,
+                name: `Villager ${i + 1}`,
                 x: x,
                 y: y,
                 targetX: x,
@@ -249,6 +259,13 @@ const TestMapPage = () => {
                             if (newProgress >= 100) {
                                 setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type }]);
                                 setVillagers(vs => vs.map(v => v.id === site.builderId ? { ...v, task: 'idle', targetId: null } : v));
+                                
+                                const endTime = Date.now();
+                                const timeTaken = ((endTime - site.startTime) / 1000).toFixed(1);
+                                const builderName = builder ? builder.name : 'A villager';
+                                const buildingName = buildingTypes.find(b => b.id === site.type)?.name || 'a building';
+                                const newLogEntry = `${builderName} built a ${buildingName} at (${Math.round(site.x)}, ${Math.round(site.y)}) in ${timeTaken} seconds.`;
+                                setLog(prevLog => [newLogEntry, ...prevLog.slice(0, 4)]);
                                 return null;
                             }
                             return { ...site, progress: newProgress };
@@ -257,7 +274,9 @@ const TestMapPage = () => {
                     return site;
                 }).filter(Boolean) as ConstructionSite[];
                 
-                if (newSites.length !== currentSites.length) return newSites;
+                if (newSites.length !== currentSites.length || newSites.some((s, i) => s.progress !== currentSites[i].progress)) {
+                    return newSites;
+                }
                 return currentSites;
             });
             requestAnimationFrame(gameLoop);
@@ -401,7 +420,7 @@ const TestMapPage = () => {
         // If in placement mode, place the object
         if (placementMode?.active && placementMode.buildingType) {
             const siteId = `site-${Date.now()}`;
-            setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, progress: 0, builderId: null }]);
+            setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, progress: 0, builderId: null, startTime: Date.now() }]);
             
             // Auto-assign the initiator to build
              if (placementMode.initiatorId) {
@@ -438,6 +457,7 @@ const TestMapPage = () => {
         const { x1: selX1, y1: selY1, x2: selX2, y2: selY2 } = selectionBox;
         const dragDistance = Math.sqrt(Math.pow(selX2 - selX1, 2) + Math.pow(selY2 - selY1, 2));
         const isShiftPressed = e.evt.shiftKey;
+        const pos = getStagePointerPosition();
 
         // If it was a small drag, treat as a click
         if (dragDistance < 5) {
@@ -453,15 +473,15 @@ const TestMapPage = () => {
                     return { ...villager, isSelected: villager.id === clickedId };
                 }));
                 // Show popup for single selection
-                if (!isShiftPressed) {
-                    const pos = clickedVillagerNode.position();
+                if (!isShiftPressed && pos) {
                     setPopup({ visible: true, x: pos.x, y: pos.y - 60, villagerId: clickedId, showBuildMenu: false });
                 } else {
                     setPopup(null);
                 }
             } else {
                 // Clicked on empty space, deselect all and hide popup
-                if (!isShiftPressed) {
+                const clickedOnPopup = isClickOnPopup(e.target);
+                if (!isShiftPressed && !clickedOnPopup) {
                     setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
                     setPopup(null);
                 }
@@ -515,10 +535,11 @@ const TestMapPage = () => {
     
     const handleCreateVillager = useCallback(() => {
         setVillagers(current => {
-            const newVillagerId = `villager-${Date.now()}`;
+            const newId = current.length > 0 ? Math.max(...current.map(v => parseInt(v.id.split('-')[1]))) + 1 : 1;
+            const newVillagerId = `villager-${newId}`;
             const spawnX = (MAP_WIDTH_CELLS * GRID_SIZE / 2) + (Math.random() - 0.5) * 50;
             const spawnY = (MAP_HEIGHT_CELLS * GRID_SIZE / 2) + 100;
-            const newVillager: Villager = { id: newVillagerId, x: spawnX, y: spawnY, targetX: spawnX, targetY: spawnY, hp: MAX_HP, attack: ATTACK_POWER, targetId: null, attackLastTime: 0, task: 'idle', isSelected: false };
+            const newVillager: Villager = { id: newVillagerId, name: `Villager ${newId}`, x: spawnX, y: spawnY, targetX: spawnX, targetY: spawnY, hp: MAX_HP, attack: ATTACK_POWER, targetId: null, attackLastTime: 0, task: 'idle', isSelected: false };
             return [...current, newVillager];
         });
     }, []);
@@ -546,6 +567,12 @@ const TestMapPage = () => {
                 <p className="text-parchment-dark mb-4 text-sm">Click villager for options. Drag to select. Right-click to move/attack/build.</p>
             </div>
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
+                 <div className="absolute top-2 left-2 bg-black/50 text-white p-2 rounded-lg text-xs w-96 z-10 font-mono">
+                    <h3 className="font-bold border-b mb-1 text-base">Activity Log</h3>
+                    {log.map((entry, i) => (
+                        <p key={i} className="truncate">{entry}</p>
+                    ))}
+                </div>
                  <Stage 
                     ref={stageRef} width={MAP_WIDTH_CELLS * GRID_SIZE} height={MAP_HEIGHT_CELLS * GRID_SIZE} className="mx-auto" 
                     style={{ cursor: stageCursor }}
@@ -589,7 +616,7 @@ const TestMapPage = () => {
                          <Rect x={Math.min(selectionBox.x1, selectionBox.x2)} y={Math.min(selectionBox.y1, selectionBox.y2)} width={Math.abs(selectionBox.x1 - selectionBox.x2)} height={Math.abs(selectionBox.y1 - selectionBox.y2)} fill="rgba(131, 165, 152, 0.3)" stroke="#83a598" strokeWidth={1 / stageScale} visible={selectionBox.visible} listening={false} />
                          {popup?.visible && (
                             popup.showBuildMenu ? (
-                                <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick}>
+                                <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
                                     <Rect width={100} height={buildingTypes.length * 22 + 10} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
                                     {buildingTypes.map((building, index) => (
                                         <Group key={building.id} y={index * 22 + 5}>
@@ -599,7 +626,7 @@ const TestMapPage = () => {
                                     ))}
                                 </Group>
                             ) : (
-                                <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick}>
+                                <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
                                     <Rect width={80} height={50} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
                                     <Rect name="build-button" x={5} y={5} width={70} height={20} fill="#504945" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
                                     <Text text="Build" x={25} y={8} fill="#fbf1c7" listening={false} />
@@ -617,5 +644,3 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
-
-    

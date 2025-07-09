@@ -9,22 +9,37 @@ const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 30;
 const MAP_HEIGHT_CELLS = 20;
 
+interface Building {
+    id: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    type: 'Barracks' | 'Town Center';
+}
+
 const TestMapPage = () => {
     const [targetPosition, setTargetPosition] = useState({ x: 5, y: 5 });
     const [isClient, setIsClient] = useState(false);
     const unitRef = useRef<Konva.Circle>(null);
 
+    const [buildings, setBuildings] = useState<Building[]>([
+        { id: 1, x: 15, y: 8, width: 3, height: 3, type: 'Barracks' },
+    ]);
+    const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
+    const [panelPosition, setPanelPosition] = useState<{ x: number, y: number } | null>(null);
+    const stageRef = useRef<Konva.Stage>(null);
+
+
     useEffect(() => {
-        // Konva requires the window object, so we only render it on the client.
         setIsClient(true);
     }, []);
 
-    // This effect runs when the target position changes, triggering the animation.
     useEffect(() => {
         if (isClient && unitRef.current) {
             new Konva.Tween({
                 node: unitRef.current,
-                duration: 0.3, // Duration of the movement in seconds
+                duration: 0.3,
                 x: targetPosition.x * GRID_SIZE + GRID_SIZE / 2,
                 y: targetPosition.y * GRID_SIZE + GRID_SIZE / 2,
                 easing: Konva.Easings.EaseInOut,
@@ -32,9 +47,33 @@ const TestMapPage = () => {
         }
     }, [targetPosition, isClient]);
 
-    const handleCellClick = (x: number, y: number) => {
-        setTargetPosition({ x, y });
+    const handleCellClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        if (e.target.hasName('grid-background')) {
+            setSelectedBuilding(null);
+            const pos = e.target.getStage()?.getPointerPosition();
+            if (pos) {
+                 setTargetPosition({
+                    x: Math.floor(pos.x / GRID_SIZE),
+                    y: Math.floor(pos.y / GRID_SIZE),
+                });
+            }
+        }
     };
+
+    const handleBuildingClick = (building: Building, e: Konva.KonvaEventObject<MouseEvent>) => {
+        setSelectedBuilding(building);
+        const stage = stageRef.current;
+        if (stage) {
+            const rect = e.target.getClientRect();
+            setPanelPosition({ x: rect.x + rect.width + 10, y: rect.y });
+        }
+    };
+    
+    const handleTrainUnit = (unitType: string) => {
+        console.log(`Training ${unitType} from ${selectedBuilding?.type}`);
+        // Here you would typically add a task to a queue in your game state
+    };
+
 
     const renderGrid = () => {
         const grid = [];
@@ -50,8 +89,6 @@ const TestMapPage = () => {
                         fill="#504945"
                         stroke="#665c54"
                         strokeWidth={1}
-                        onClick={() => handleCellClick(x, y)}
-                        onTap={() => handleCellClick(x, y)}
                     />
                 );
             }
@@ -71,19 +108,43 @@ const TestMapPage = () => {
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">High-Performance RTS Map</h1>
             <p className="text-parchment-dark mb-4 text-sm">
-                This map uses an HTML5 Canvas for fast rendering. Click a tile to move the unit.
+                Click a tile to move the unit. Click a building to see actions.
             </p>
-            <div className="w-full max-w-4xl aspect-video bg-black rounded-lg overflow-hidden border-2 border-stone-light">
+            <div className="w-full max-w-4xl aspect-[3/2] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage
+                    ref={stageRef}
                     width={MAP_WIDTH_CELLS * GRID_SIZE}
                     height={MAP_HEIGHT_CELLS * GRID_SIZE}
                     className="mx-auto"
+                    onClick={handleCellClick}
                 >
                     <Layer>
-                        {/* Render the grid cells */}
+                        {/* A single large rect for the background to detect clicks */}
+                        <Rect 
+                            x={0} y={0}
+                            width={MAP_WIDTH_CELLS * GRID_SIZE}
+                            height={MAP_HEIGHT_CELLS * GRID_SIZE}
+                            name="grid-background"
+                        />
                         {renderGrid()}
 
-                        {/* Render the movable unit */}
+                        {buildings.map(building => (
+                            <Rect
+                                key={building.id}
+                                x={building.x * GRID_SIZE}
+                                y={building.y * GRID_SIZE}
+                                width={building.width * GRID_SIZE}
+                                height={building.height * GRID_SIZE}
+                                fill="#a89984"
+                                stroke="#fbf1c7"
+                                strokeWidth={2}
+                                shadowBlur={10}
+                                shadowColor="black"
+                                onClick={(e) => handleBuildingClick(building, e)}
+                                onTap={(e) => handleBuildingClick(building, e)}
+                            />
+                        ))}
+                        
                         <Circle
                             ref={unitRef}
                             x={targetPosition.x * GRID_SIZE + GRID_SIZE / 2}
@@ -97,6 +158,28 @@ const TestMapPage = () => {
                         />
                     </Layer>
                 </Stage>
+                 {selectedBuilding && panelPosition && (
+                    <div 
+                        className="absolute bg-stone-dark/80 backdrop-blur-sm border-2 border-stone-light/50 rounded-lg p-4 shadow-lg text-parchment-light sci-fi-panel-popup"
+                        style={{ top: `${panelPosition.y}px`, left: `${panelPosition.x}px` }}
+                    >
+                        <h4 className="text-lg font-serif text-brand-gold mb-2">{selectedBuilding.type}</h4>
+                        <div className="flex flex-col gap-2">
+                             <button onClick={() => handleTrainUnit('Swordsman')} className="sci-fi-button text-sm">
+                                Train Swordsman
+                            </button>
+                             <button onClick={() => handleTrainUnit('Pikeman')} className="sci-fi-button text-sm">
+                                Train Pikeman
+                            </button>
+                        </div>
+                        <button 
+                            onClick={() => setSelectedBuilding(null)} 
+                            className="absolute -top-3 -right-3 w-7 h-7 bg-brand-red rounded-full text-white font-bold flex items-center justify-center border-2 border-stone-dark"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                )}
             </div>
              <Link href="/" className="sci-fi-button mt-6">
                 Return to Main Menu

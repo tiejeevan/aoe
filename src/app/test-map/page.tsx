@@ -667,6 +667,7 @@ const TestMapPage = () => {
     const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
     const [playerAction, setPlayerAction] = useState<PlayerAction>(null);
     const [placementPreview, setPlacementPreview] = useState<{x: number, y: number} | null>(null);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const stageRef = useRef<Konva.Stage>(null);
     const layerRef = useRef<Konva.Layer>(null);
@@ -993,8 +994,21 @@ const TestMapPage = () => {
 
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
-            <h1 className="text-3xl font-serif text-brand-gold mb-2">Resource Interaction Test Map</h1>
-            <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move/attack. Hold Spacebar + drag to pan. Scroll to zoom.</p>
+            {isSettingsOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                    <div className="bg-stone-dark p-8 rounded-lg shadow-2xl border-2 border-stone-light w-full max-w-2xl mx-auto text-center">
+                        <h2 className="text-2xl font-serif text-brand-gold mb-6">Villager animation control area</h2>
+                        <button onClick={() => setIsSettingsOpen(false)} className="sci-fi-button">Close</button>
+                    </div>
+                </div>
+            )}
+            <div className="w-full max-w-6xl mb-4 flex justify-between items-start">
+                <div>
+                    <h1 className="text-3xl font-serif text-brand-gold">Resource Interaction Test Map</h1>
+                    <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move/attack. Hold Spacebar + drag to pan. Scroll to zoom.</p>
+                </div>
+                <button onClick={() => setIsSettingsOpen(true)} className="sci-fi-button">Settings</button>
+            </div>
             <div className="flex w-full max-w-6xl">
                 <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                      <Stage 

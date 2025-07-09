@@ -57,6 +57,7 @@ const TestMapPage = () => {
 
 
     const stageRef = useRef<Konva.Stage>(null);
+    const layerRef = useRef<Konva.Layer>(null);
     const villagerRefs = useRef<Record<string, Konva.Group>>({});
     const goldMineRefs = useRef<Record<string, Konva.Group>>({});
     const isSelecting = useRef(false);
@@ -235,11 +236,12 @@ const TestMapPage = () => {
             setTooltipMineId(null);
             isSelecting.current = true;
             const stage = stageRef.current;
+            if (!stage) return;
             const pos = stage.getPointerPosition();
             if (!pos) return;
-
-            const x1 = (pos.x - stage.x()) / stage.scaleX();
-            const y1 = (pos.y - stage.y()) / stage.scaleY();
+            
+            const transform = stage.getAbsoluteTransform().copy().invert();
+            const { x: x1, y: y1 } = transform.point(pos);
 
             setSelectionRect({ x1, y1, x2: x1, y2: y1, visible: true });
         }
@@ -252,9 +254,9 @@ const TestMapPage = () => {
         if (!stage) return;
         const pos = stage.getPointerPosition();
         if (!pos) return;
-
-        const x2 = (pos.x - stage.x()) / stage.scaleX();
-        const y2 = (pos.y - stage.y()) / stage.scaleY();
+        
+        const transform = stage.getAbsoluteTransform().copy().invert();
+        const { x: x2, y: y2 } = transform.point(pos);
 
         setSelectionRect({ ...selectionRect, x2, y2 });
     };
@@ -285,7 +287,7 @@ const TestMapPage = () => {
             };
             const newSelectedIds = new Set<string>();
             Object.values(villagerRefs.current).forEach(node => {
-                if (node && Konva.Util.haveIntersection(selectionBox, node.getClientRect({ relativeTo: stage }))) {
+                if (node && Konva.Util.haveIntersection(selectionBox, node.getClientRect({}))) {
                     newSelectedIds.add(node.id());
                 }
             });
@@ -328,9 +330,10 @@ const TestMapPage = () => {
         if (!stage) return;
         const pos = stage.getPointerPosition();
         if (!pos) return;
+        
+        const transform = stage.getAbsoluteTransform().copy().invert();
+        let { x: targetX, y: targetY } = transform.point(pos);
 
-        let targetX = (pos.x - stage.x()) / stage.scaleX();
-        let targetY = (pos.y - stage.y()) / stage.scaleY();
         let targetRadius = 15;
         let targetMineId: string | null = null;
         

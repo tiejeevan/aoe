@@ -1,24 +1,39 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Stage, Layer, Rect, Circle } from 'react-konva';
+import Konva from 'konva';
 
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 30;
 const MAP_HEIGHT_CELLS = 20;
 
 const TestMapPage = () => {
-    const [unitPosition, setUnitPosition] = useState({ x: 5, y: 5 });
+    const [targetPosition, setTargetPosition] = useState({ x: 5, y: 5 });
     const [isClient, setIsClient] = useState(false);
+    const unitRef = useRef<Konva.Circle>(null);
 
     useEffect(() => {
         // Konva requires the window object, so we only render it on the client.
         setIsClient(true);
     }, []);
 
+    // This effect runs when the target position changes, triggering the animation.
+    useEffect(() => {
+        if (isClient && unitRef.current) {
+            new Konva.Tween({
+                node: unitRef.current,
+                duration: 0.3, // Duration of the movement in seconds
+                x: targetPosition.x * GRID_SIZE + GRID_SIZE / 2,
+                y: targetPosition.y * GRID_SIZE + GRID_SIZE / 2,
+                easing: Konva.Easings.EaseInOut,
+            }).play();
+        }
+    }, [targetPosition, isClient]);
+
     const handleCellClick = (x: number, y: number) => {
-        setUnitPosition({ x, y });
+        setTargetPosition({ x, y });
     };
 
     const renderGrid = () => {
@@ -70,8 +85,9 @@ const TestMapPage = () => {
 
                         {/* Render the movable unit */}
                         <Circle
-                            x={unitPosition.x * GRID_SIZE + GRID_SIZE / 2}
-                            y={unitPosition.y * GRID_SIZE + GRID_SIZE / 2}
+                            ref={unitRef}
+                            x={targetPosition.x * GRID_SIZE + GRID_SIZE / 2}
+                            y={targetPosition.y * GRID_SIZE + GRID_SIZE / 2}
                             radius={GRID_SIZE / 3}
                             fill="#83a598"
                             stroke="#fdf6e3"

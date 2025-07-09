@@ -53,6 +53,7 @@ const TestMapPage = () => {
     const [stageScale, setStageScale] = useState(1);
     const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
     const [stageDraggable, setStageDraggable] = useState(true);
+    const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
 
 
     const stageRef = useRef<Konva.Stage>(null);
@@ -76,6 +77,27 @@ const TestMapPage = () => {
         
         // Initialize gold mines
         setGoldMines([{ id: 'gold-mine-1', x: 25 * GRID_SIZE, y: 12 * GRID_SIZE, amount: 5000 }]);
+    }, []);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === ' ') {
+                e.preventDefault(); // Prevent page scroll
+                setIsSpacebarPressed(true);
+            }
+        };
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === ' ') {
+                setIsSpacebarPressed(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
     }, []);
 
     const updateVillagersState = useCallback(() => {
@@ -208,7 +230,8 @@ const TestMapPage = () => {
     };
 
     const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (e.evt.button !== 0 || e.evt.altKey || e.evt.ctrlKey) return;
+        // If space is pressed, we're in pan mode, so do nothing for selection.
+        if (isSpacebarPressed || e.evt.button !== 0 || e.evt.altKey || e.evt.ctrlKey) return;
 
         if (e.target === stageRef.current) {
             setTooltipMineId(null);
@@ -337,8 +360,8 @@ const TestMapPage = () => {
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">Resource Interaction Test Map</h1>
-            <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move. Scroll to zoom. Drag to pan.</p>
-            <div className="w-full max-w-5xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
+            <p className="text-parchment-dark mb-4 text-sm">Left-click drag to select. Right-click to move. Hold Spacebar + drag to pan. Scroll to zoom.</p>
+            <div className={`w-full max-w-5xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                  <Stage 
                     ref={stageRef} 
                     width={MAP_WIDTH_CELLS * GRID_SIZE} 
@@ -349,7 +372,7 @@ const TestMapPage = () => {
                     onMouseUp={handleStageMouseUp}
                     onContextMenu={handleStageContextMenu}
                     onWheel={handleWheel}
-                    draggable={stageDraggable}
+                    draggable={isSpacebarPressed}
                     scaleX={stageScale}
                     scaleY={stageScale}
                     x={stagePos.x}
@@ -369,11 +392,11 @@ const TestMapPage = () => {
                                 onTap={(e) => handleMineClick(mine.id, e as any)}
                                 onMouseEnter={() => {
                                     if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id);
-                                    setStageDraggable(false);
+                                    if(!isSpacebarPressed) setStageDraggable(false);
                                 }}
                                 onMouseLeave={() => {
                                     setHoveredMineId(null);
-                                    setStageDraggable(true);
+                                    if(!isSpacebarPressed) setStageDraggable(true);
                                 }}
                             />
                         ))}
@@ -396,8 +419,8 @@ const TestMapPage = () => {
                                     isSelected={selectedVillagerIds.has(villager.id)}
                                     onClick={(e) => handleUnitClick(e, villager.id)}
                                     onTap={(e) => handleUnitClick(e, villager.id)}
-                                    onMouseEnter={() => setStageDraggable(false)}
-                                    onMouseLeave={() => setStageDraggable(true)}
+                                    onMouseEnter={() => { if(!isSpacebarPressed) setStageDraggable(false); }}
+                                    onMouseLeave={() => { if(!isSpacebarPressed) setStageDraggable(true); }}
                                 />
                              )
                         })}

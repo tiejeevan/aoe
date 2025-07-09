@@ -160,7 +160,7 @@ const TestMapPage = () => {
     const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; showBuildMenu: boolean; } | null>(null);
     const [buildingPopup, setBuildingPopup] = useState<{ visible: boolean; x: number; y: number; buildingId: string; } | null>(null);
     const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; buildingType: BuildingType | null } | null>(null);
-    const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; text: string } | null>(null);
+    const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; siteId: string; } | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
     const lastTickRef = useRef<number>(Date.now());
@@ -741,24 +741,12 @@ const TestMapPage = () => {
         if (!siteNode) return;
         const site = constructionSites.find(s => s.id === siteNode.id());
         if (!site) return;
-
-        const workRemaining = BUILD_TIME - site.workApplied;
-        const numBuilders = site.builderIds.length;
-        let timeRemainingText = "∞";
-
-        if (numBuilders > 0) {
-            const timeRemainingMs = workRemaining / numBuilders;
-            timeRemainingText = `${(timeRemainingMs / 1000).toFixed(1)}s`;
-        }
         
-        const builderText = `Builders: ${numBuilders}`;
-        const buildingName = buildingStats[site.type].name;
-
         setTooltip({
             visible: true,
             x: site.x,
             y: site.y - 45,
-            text: `Building: ${buildingName}\n${builderText}\nTime Left: ${timeRemainingText}`
+            siteId: site.id
         });
     };
 
@@ -858,33 +846,51 @@ const TestMapPage = () => {
                             })
                         )}
                          <Rect x={Math.min(selectionBox.x1, selectionBox.x2)} y={Math.min(selectionBox.y1, selectionBox.y2)} width={Math.abs(selectionBox.x1 - selectionBox.x2)} height={Math.abs(selectionBox.y1 - selectionBox.y2)} fill="rgba(131, 165, 152, 0.3)" stroke="#83a598" strokeWidth={1 / stageScale} visible={selectionBox.visible} listening={false} />
-                         {tooltip?.visible && (
-                             <Group listening={false}>
-                                <Rect
-                                    x={tooltip.x}
-                                    y={tooltip.y}
-                                    width={150}
-                                    height={45}
-                                    fill="#3c3836"
-                                    stroke="#fbf1c7"
-                                    strokeWidth={1 / stageScale}
-                                    cornerRadius={4}
-                                    opacity={0.8}
-                                    offsetX={75}
-                                />
-                                <Text
-                                    x={tooltip.x}
-                                    y={tooltip.y}
-                                    text={tooltip.text}
-                                    fontSize={12}
-                                    fill="#fbf1c7"
-                                    padding={5}
-                                    offsetX={75}
-                                    width={150}
-                                    align="center"
-                                />
-                             </Group>
-                         )}
+                         {tooltip?.visible && (() => {
+                            const site = constructionSites.find(s => s.id === tooltip.siteId);
+                            if (!site) return null;
+
+                            const workRemaining = BUILD_TIME - site.workApplied;
+                            const numBuilders = site.builderIds.length;
+                            let timeRemainingText = "∞";
+
+                            if (numBuilders > 0) {
+                                const timeRemainingMs = workRemaining / numBuilders;
+                                timeRemainingText = `${(timeRemainingMs / 1000).toFixed(1)}s`;
+                            }
+                            
+                            const builderText = `Builders: ${numBuilders}`;
+                            const buildingName = buildingStats[site.type].name;
+                            const tooltipText = `Building: ${buildingName}\n${builderText}\nTime Left: ${timeRemainingText}`;
+
+                            return (
+                                <Group listening={false}>
+                                    <Rect
+                                        x={tooltip.x}
+                                        y={tooltip.y}
+                                        width={150}
+                                        height={55}
+                                        fill="#3c3836"
+                                        stroke="#fbf1c7"
+                                        strokeWidth={1 / stageScale}
+                                        cornerRadius={4}
+                                        opacity={0.8}
+                                        offsetX={75}
+                                    />
+                                    <Text
+                                        x={tooltip.x}
+                                        y={tooltip.y}
+                                        text={tooltipText}
+                                        fontSize={12}
+                                        fill="#fbf1c7"
+                                        padding={5}
+                                        offsetX={75}
+                                        width={150}
+                                        align="center"
+                                    />
+                                </Group>
+                            );
+                         })()}
                          {popup?.visible && (
                             popup.showBuildMenu ? (
                                 <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>

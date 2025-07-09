@@ -28,6 +28,27 @@ const Pickaxe = ({ scale }: { scale: number }) => (
         <Rect x={40 * scale} y={-85 * scale} width={10 * scale} height={15 * scale} fill="#a8a29e" rotation={30} offsetX={5*scale} />
     </Group>
 );
+
+const ResourceBag = ({ scale }: { scale: number }) => (
+    <Group y={40 * scale} x={-40 * scale} rotation={10}>
+        <Rect
+            width={40 * scale}
+            height={50 * scale}
+            fill="#a16207"
+            stroke="#3c3836"
+            strokeWidth={2 * scale}
+            cornerRadius={10 * scale}
+        />
+         <Rect
+            x={10 * scale}
+            y={-5 * scale}
+            width={20 * scale}
+            height={10 * scale}
+            fill="#854d0e"
+            cornerRadius={5 * scale}
+        />
+    </Group>
+)
 // --- End Tool Components ---
 
 
@@ -35,8 +56,9 @@ interface VillagerVisualsProps {
   scale: number;
   hp: number;
   maxHp: number;
-  task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
+  task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining' | 'gathering' | 'returning';
   isSelected?: boolean;
+  isCarrying?: boolean;
   leftArmRef: React.RefObject<Konva.Group>;
   rightArmRef: React.RefObject<Konva.Group>;
   leftLegRef: React.RefObject<Konva.Group>;
@@ -49,6 +71,7 @@ export const VillagerVisuals: React.FC<VillagerVisualsProps> = ({
   maxHp,
   task,
   isSelected,
+  isCarrying,
   leftArmRef,
   rightArmRef,
   leftLegRef,
@@ -76,6 +99,9 @@ export const VillagerVisuals: React.FC<VillagerVisualsProps> = ({
           listening={false}
         />
       )}
+      
+      {isCarrying && <ResourceBag scale={scale} />}
+
 
       {/* Torso */}
       <Rect
@@ -141,6 +167,7 @@ export const VillagerVisuals: React.FC<VillagerVisualsProps> = ({
         {task === 'attacking' && <Knife scale={scale} />}
         {task === 'building' && <Hammer scale={scale} />}
         {task === 'mining' && <Pickaxe scale={scale} />}
+        {task === 'gathering' && <Pickaxe scale={scale} />}
       </Group>
 
       {/* Head Group */}

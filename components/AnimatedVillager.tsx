@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { forwardRef, useEffect, useRef, useImperativeHandle } from 'react';
+import React, { forwardRef, useEffect, useRef } from 'react';
 import { Group } from 'react-konva';
 import Konva from 'konva';
 import { VillagerVisuals } from './VillagerVisuals';
@@ -12,22 +12,23 @@ const DEATH_DURATION = 10000; // ms
 
 interface AnimatedVillagerProps {
     id: string;
-    initialX: number;
-    initialY: number;
+    x: number;
+    y: number;
     targetX: number;
     targetY: number;
     isSelected?: boolean;
-    task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
+    task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining' | 'gathering' | 'returning';
     hp: number;
     maxHp: number;
     deathTime?: number;
-    onMoveEnd: (newPosition: { x: number; y: number }) => void;
+    onMoveEnd: (villagerId: string, newPosition: { x: number; y: number }) => void;
     onMouseEnter: () => void;
     onMouseLeave: () => void;
+    carrying?: { type: string; amount: number };
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ id, initialX, initialY, targetX, targetY, isSelected, task, hp, maxHp, deathTime, onMoveEnd, onMouseEnter, onMouseLeave }, ref) => {
+  ({ id, x, y, targetX, targetY, isSelected, task, hp, maxHp, deathTime, onMoveEnd, onMouseEnter, onMouseLeave, carrying }, ref) => {
     
     const leftArmRef = useRef<Konva.Group>(null);
     const rightArmRef = useRef<Konva.Group>(null);
@@ -37,22 +38,22 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     const mainGroupRef = useRef<Konva.Group>(null);
     const movementTweenRef = useRef<Konva.Tween | null>(null);
 
-    useImperativeHandle(ref, () => mainGroupRef.current!, []);
-    
-    // Effect for movement tweening
     useEffect(() => {
         const node = mainGroupRef.current;
         if (!node) return;
 
-        // Clean up any existing tween before starting a new one.
+        // Ensure initial position is correct
+        node.x(x);
+        node.y(y);
+        
+        // Stop any previous tween
         if (movementTweenRef.current) {
             movementTweenRef.current.destroy();
             movementTweenRef.current = null;
         }
 
-        if (task === 'moving') {
-            const currentPos = node.position();
-            const distance = Math.sqrt(Math.pow(targetX - currentPos.x, 2) + Math.pow(targetY - currentPos.y, 2));
+        if (task === 'moving' || task === 'returning') {
+            const distance = Math.sqrt(Math.pow(targetX - x, 2) + Math.pow(targetY - y, 2));
 
             if (distance > 1) {
                  movementTweenRef.current = new Konva.Tween({
@@ -61,29 +62,15 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                     x: targetX,
                     y: targetY,
                     onFinish: () => {
-                        movementTweenRef.current = null; // Null it out when finished
-                        onMoveEnd({ x: targetX, y: targetY });
+                        onMoveEnd(id, { x: targetX, y: targetY });
                     },
                 });
                 movementTweenRef.current.play();
             } else {
-                 onMoveEnd({ x: targetX, y: targetY });
+                 onMoveEnd(id, { x: targetX, y: targetY });
             }
-        } else {
-             // If not moving, ensure position is correct and no tween is running.
-             node.x(targetX);
-             node.y(targetY);
         }
-
-        return () => {
-            // Cleanup on unmount or before next effect run
-            if (movementTweenRef.current) {
-                movementTweenRef.current.destroy();
-                movementTweenRef.current = null;
-            }
-        };
-
-    }, [targetX, targetY, task, onMoveEnd]);
+    }, [x, y, targetX, targetY, task, id, onMoveEnd]);
 
 
     // Effect for cosmetic animations (walking, attacking, dying)
@@ -122,27 +109,27 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         animRef.current = new Konva.Animation((frame) => {
             if (!frame || !node) return;
             
-            if (task === 'moving') {
-                const animSpeed = 0.01;
-                const swingAngle = 20; 
-                const rotation = Math.sin(frame.time * animSpeed) * swingAngle;
+            const animSpeed = 0.01;
+            const swingAngle = 20; 
 
+            if (task === 'moving' || task === 'returning') {
+                const rotation = Math.sin(frame.time * animSpeed) * swingAngle;
                 if (leftArmRef.current) leftArmRef.current.rotation(rotation);
                 if (rightArmRef.current) rightArmRef.current.rotation(-rotation);
                 if (leftLegRef.current) leftLegRef.current.rotation(-rotation);
                 if (rightLegRef.current) rightLegRef.current.rotation(rotation);
             } else if (task === 'attacking') {
-                const animSpeed = 0.02;
-                const swingAngle = 45;
-                const rotation = Math.sin((frame.time) * animSpeed) * swingAngle;
+                const attackAnimSpeed = 0.02;
+                const attackSwingAngle = 45;
+                const rotation = Math.sin((frame.time) * attackAnimSpeed) * attackSwingAngle;
                 if (rightArmRef.current) rightArmRef.current.rotation(rotation);
                 if (leftArmRef.current) leftArmRef.current.rotation(0);
                 if (leftLegRef.current) leftLegRef.current.rotation(0);
                 if (rightLegRef.current) rightLegRef.current.rotation(0);
-            } else if (task === 'mining') {
-                const animSpeed = 0.01;
-                const swingAngle = 40;
-                const rotation = (Math.sin(frame.time * animSpeed) * swingAngle) - 20;
+            } else if (task === 'mining' || task === 'gathering' || task === 'building') {
+                const workAnimSpeed = 0.01;
+                const workSwingAngle = 40;
+                const rotation = (Math.sin(frame.time * workAnimSpeed) * workSwingAngle) - 20;
                 if(rightArmRef.current) rightArmRef.current.rotation(rotation);
                 if(leftArmRef.current) leftArmRef.current.rotation(rotation);
             }
@@ -160,7 +147,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     }, [task]);
 
     return (
-      <Group ref={mainGroupRef} x={initialX} y={initialY} name="villager" id={id} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <Group ref={mainGroupRef} x={x} y={y} name="villager" id={id} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         <VillagerVisuals
           scale={scale}
           hp={hp}
@@ -171,6 +158,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           rightArmRef={rightArmRef}
           leftLegRef={leftLegRef}
           rightLegRef={rightLegRef}
+          isCarrying={(carrying?.amount || 0) > 0}
         />
       </Group>
     );

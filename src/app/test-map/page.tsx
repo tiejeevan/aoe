@@ -27,13 +27,16 @@ const ATTACK_COOLDOWN = 1000; // ms
 const DEATH_DURATION = 10000; // 10 seconds
 const BUILD_TIME = 10000; // 10 seconds in ms
 const TRAIN_VILLAGER_TIME = 30000; // 30 seconds in ms
+const GATHER_RATE_PER_SECOND = 5;
+const GATHER_COOLDOWN = 1000;
+const CARRY_CAPACITY = 10;
+
 
 type BuildingType = 'hut' | 'barracks' | 'castle' | 'workshop' | 'researchLab' | 'townCenter';
+type ResourceType = 'wood' | 'gold' | 'stone';
 
 type Resources = {
-    wood: number;
-    gold: number;
-    stone: number;
+    [key in ResourceType]: number;
 };
 
 const buildingStats: Record<BuildingType, { name: string; cost: Partial<Resources>; hp: number; providesCapacity?: number }> = {
@@ -57,15 +60,19 @@ interface Villager {
     attack: number;
     targetId: string | null;
     attackLastTime: number;
-    task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
+    task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining' | 'gathering' | 'returning';
     isSelected: boolean;
     deathTime?: number;
+    carrying?: { type: ResourceType, amount: number };
+    gatherLastTime?: number;
 }
 
 interface GoldMine {
     id: string;
     x: number;
     y: number;
+    amount: number;
+    type: ResourceType;
 }
 
 interface ConstructionSite {
@@ -174,7 +181,6 @@ const TestMapPage = () => {
 
     const stageRef = useRef<Konva.Stage>(null);
     const lastTickRef = useRef<number>(Date.now());
-    const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
 
     const BuildingComponents: Record<BuildingType, React.ForwardRefExoticComponent<Konva.GroupConfig & React.RefAttributes<Konva.Group>>> = {
         hut: Hut,
@@ -220,7 +226,7 @@ const TestMapPage = () => {
         };
         setBuildings([initialTC]);
 
-        setGoldMines([{ id: 'gold-mine-1', x: 8 * GRID_SIZE, y: 12 * GRID_SIZE }]);
+        setGoldMines([{ id: 'gold-mine-1', x: 8 * GRID_SIZE, y: 12 * GRID_SIZE, amount: 1000, type: 'gold' }]);
     }, []);
 
     const addToLog = useCallback((message: string) => {
@@ -362,6 +368,38 @@ const TestMapPage = () => {
                     nextVillagers = nextVillagers.filter(v => !(v.task === 'dead' && v.deathTime && now - v.deathTime > DEATH_DURATION));
                     villagersNeedUpdate = true;
                 }
+                 // Fourth pass: gathering
+                nextVillagers = nextVillagers.map(villager => {
+                    if (villager.task === 'gathering' && now - (villager.gatherLastTime || 0) > GATHER_COOLDOWN) {
+                        const mine = goldMines.find(m => m.id === villager.targetId);
+                        if (mine && mine.amount > 0) {
+                            const amountToGather = Math.min(mine.amount, GATHER_RATE_PER_SECOND);
+                            const newCarrying = (villager.carrying?.amount || 0) + amountToGather;
+                            
+                            villager.carrying = { type: mine.type, amount: newCarrying };
+                            villager.gatherLastTime = now;
+                            setGoldMines(mines => mines.map(m => m.id === mine.id ? { ...m, amount: m.amount - amountToGather } : m));
+                            
+                            if (newCarrying >= CARRY_CAPACITY) {
+                                // Find nearest dropoff (Town Center for now)
+                                const townCenter = buildings.find(b => b.type === 'townCenter');
+                                if (townCenter) {
+                                    villager.task = 'returning';
+                                    villager.targetX = townCenter.x;
+                                    villager.targetY = townCenter.y;
+                                    villager.targetId = townCenter.id; // Target the building now
+                                    addToLog(`${villager.name} is returning with ${villager.carrying.amount} ${villager.carrying.type}.`);
+                                }
+                            }
+                        } else {
+                            // Mine depleted or gone, go idle
+                            villager.task = 'idle';
+                            villager.targetId = null;
+                        }
+                         villagersNeedUpdate = true;
+                    }
+                    return villager;
+                });
 
                 return villagersNeedUpdate ? nextVillagers : currentVillagers;
             });
@@ -413,7 +451,7 @@ const TestMapPage = () => {
 
         const animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isClient, villagers, buildings, addToLog, handleCreateVillager, constructionSites]);
+    }, [isClient, villagers, buildings, addToLog, handleCreateVillager, constructionSites, goldMines]);
 
 
     // Add keyboard listeners for panning
@@ -787,10 +825,7 @@ const TestMapPage = () => {
 
             setVillagers(currentVillagers => 
                 currentVillagers.map(v => {
-                    const node = villagerRefs.current.get(v.id);
-                    if (!node) return v;
-                    const { x: vx, y: vy } = node.position();
-                    const isWithinBox = v.task !== 'dead' && vx > x1 && vx < x2 && vy > y1 && vy < y2;
+                    const isWithinBox = v.task !== 'dead' && v.x > x1 && v.x < x2 && v.y > y1 && v.y < y2;
                     return { ...v, isSelected: isShiftPressed ? (isWithinBox || v.isSelected) : isWithinBox };
                 })
             );
@@ -803,19 +838,21 @@ const TestMapPage = () => {
     const handleMoveEnd = useCallback((villagerId: string, newPosition: {x: number, y: number}) => {
         setVillagers(currentVillagers => 
             currentVillagers.map(v => {
-                if (v.id !== villagerId) return v;
+                if (v.id !== villagerId) return { ...v, x: v.x, y: v.y };
+
+                let newVillagerState = { ...v, x: newPosition.x, y: newPosition.y };
                 
                 let newTask: Villager['task'] = 'idle';
                 const targetIsVillager = currentVillagers.some(tv => tv.id === v.targetId);
-                const targetIsMine = goldMines.some(m => m.id === v.targetId);
+                const targetIsMine = goldMines.find(m => m.id === v.targetId);
                 const targetIsSite = constructionSites.find(s => s.id === v.targetId);
                 const targetIsBuilding = buildings.find(b => b.id === v.targetId);
                 
-                if (targetIsVillager || targetIsBuilding) {
+                if (targetIsVillager || (targetIsBuilding && targetIsBuilding.type !== 'townCenter')) {
                     newTask = 'attacking';
                 } else if (targetIsMine) {
-                    newTask = 'mining';
-                    addToLog(`${v.name} has started mining gold.`);
+                    newTask = 'gathering';
+                    addToLog(`${v.name} has started gathering ${targetIsMine.type}.`);
                 } else if (targetIsSite) {
                     newTask = 'building';
                     const siteName = buildingStats[targetIsSite.type].name;
@@ -827,11 +864,35 @@ const TestMapPage = () => {
                         }
                         return s;
                     }));
+                } else if (targetIsBuilding && targetIsBuilding.type === 'townCenter' && v.carrying && v.carrying.amount > 0) {
+                     // Dropped off resources
+                    const {type, amount} = v.carrying;
+                    setResources(prev => ({...prev, [type]: prev[type] + amount}));
+                    addToLog(`${v.name} dropped off ${amount} ${type}.`);
+                    newVillagerState.carrying = undefined;
+
+                    // Go back to the mine
+                    const originalMine = goldMines.find(m => m.id === v.targetId); // This logic needs adjustment if there are multiple mines. For now, it just works with one.
+                    const mineToReturnTo = goldMines[0];
+                    if (mineToReturnTo && mineToReturnTo.amount > 0) {
+                        const dx = mineToReturnTo.x - newPosition.x;
+                        const dy = mineToReturnTo.y - newPosition.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const standoff = 40;
+                        const ratio = distance > standoff ? (distance - standoff) / distance : 0;
+                        newVillagerState.targetX = newPosition.x + dx * ratio;
+                        newVillagerState.targetY = newPosition.y + dy * ratio;
+                        newVillagerState.targetId = mineToReturnTo.id;
+                        newTask = 'moving';
+                    } else {
+                        newTask = 'idle';
+                        newVillagerState.targetId = null;
+                    }
                 } else {
                      addToLog(`${v.name} has arrived at their destination.`);
                 }
 
-                return { ...v, task: newTask, x: newPosition.x, y: newPosition.y };
+                return { ...newVillagerState, task: newTask };
             })
         );
     }, [goldMines, constructionSites, buildings, addToLog]);
@@ -1001,7 +1062,7 @@ const TestMapPage = () => {
                                 </Group>
                             );
                         })}
-                        {villagers.map(villager => <AnimatedVillager ref={(node) => { if (node) villagerRefs.current.set(villager.id, node); else villagerRefs.current.delete(villager.id); }} key={villager.id} id={villager.id} initialX={villager.x} initialY={villager.y} targetX={villager.targetX} targetY={villager.targetY} hp={villager.hp} maxHp={MAX_HP} task={villager.task} isSelected={villager.isSelected} onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)} deathTime={villager.deathTime} onMouseEnter={() => { if(villagers.some(v => v.isSelected) && !villager.isSelected) handleMouseEnterEnemy(true); }} onMouseLeave={() => handleMouseEnterEnemy(false)} /> )}
+                        {villagers.map(villager => <AnimatedVillager key={villager.id} id={villager.id} x={villager.x} y={villager.y} targetX={villager.targetX} targetY={villager.targetY} hp={villager.hp} maxHp={MAX_HP} task={villager.task} isSelected={villager.isSelected} onMoveEnd={handleMoveEnd} deathTime={villager.deathTime} onMouseEnter={() => { if(villagers.some(v => v.isSelected) && !villager.isSelected) handleMouseEnterEnemy(true); }} onMouseLeave={() => handleMouseEnterEnemy(false)} carrying={villager.carrying}/> )}
                         {placementMode?.active && placementMode.buildingType && previewPos && (
                             React.createElement(BuildingComponents[placementMode.buildingType], {
                                 x: previewPos.x,
@@ -1115,5 +1176,3 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
-
-    

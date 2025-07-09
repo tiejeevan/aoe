@@ -7,6 +7,8 @@ import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
 import TownCenter from '../../../components/TownCenter';
+import AnimatedGoldMine from '../../../components/AnimatedGoldMine';
+
 
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 40;
@@ -31,7 +33,12 @@ interface Villager {
     task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
     isSelected: boolean;
     deathTime?: number;
-    showAttackPreview?: boolean;
+}
+
+interface GoldMine {
+    id: string;
+    x: number;
+    y: number;
 }
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
@@ -45,10 +52,22 @@ const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
     return null;
 };
 
+const getMineNode = (node: Konva.Node | null): Konva.Group | null => {
+    if (!node) return null;
+    if (node.name() === 'gold-mine' && node instanceof Konva.Group) {
+        return node;
+    }
+    if (node.getParent()) {
+        return getMineNode(node.getParent());
+    }
+    return null;
+};
+
 
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
     const [villagers, setVillagers] = useState<Villager[]>([]);
+    const [goldMines, setGoldMines] = useState<GoldMine[]>([]);
     
     // State for panning and zooming
     const [stageScale, setStageScale] = useState(1);
@@ -85,6 +104,7 @@ const TestMapPage = () => {
             };
         });
         setVillagers(initialVillagers);
+        setGoldMines([{ id: 'gold-mine-1', x: 8 * GRID_SIZE, y: 12 * GRID_SIZE }]);
     }, []);
 
     // Game Loop for Combat and State Updates
@@ -215,13 +235,27 @@ const TestMapPage = () => {
         if (!pointerPos) return;
 
         const targetVillagerNode = getVillagerNode(e.target);
-        const targetId = targetVillagerNode ? targetVillagerNode.id() : null;
-        const targetVillager = villagers.find(v => v.id === targetId);
+        const targetMineNode = getMineNode(e.target);
+
+        const targetVillagerId = targetVillagerNode ? targetVillagerNode.id() : null;
+        const targetMineId = targetMineNode ? targetMineNode.id() : null;
+        
+        const targetVillager = villagers.find(v => v.id === targetVillagerId);
+        const targetMine = goldMines.find(m => m.id === targetMineId);
         
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
-                if (v.isSelected && v.task !== 'dead' && v.id !== targetId) {
-                    if (targetVillager && targetVillager.task !== 'dead') {
+                if (v.isSelected && v.task !== 'dead') {
+                    if (targetMine) {
+                        const dx = targetMine.x - v.x;
+                        const dy = targetMine.y - v.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const standoff = 40;
+                        const ratio = distance > standoff ? (distance - standoff) / distance : 0;
+                        const targetX = v.x + dx * ratio;
+                        const targetY = v.y + dy * ratio;
+                        return { ...v, task: 'moving', targetX, targetY, targetId: targetMineId };
+                    } else if (targetVillager && targetVillager.id !== v.id) {
                         // Attack command
                         const dx = targetVillager.x - v.x;
                         const dy = targetVillager.y - v.y;
@@ -233,7 +267,7 @@ const TestMapPage = () => {
                             finalTargetX = v.x + dx * ratio;
                             finalTargetY = v.y + dy * ratio;
                         }
-                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetId };
+                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetVillagerId };
                     } else {
                          // Move command
                         return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
@@ -307,24 +341,23 @@ const TestMapPage = () => {
             currentVillagers.map(v => {
                 if (v.id !== villagerId) return v;
                 
-                const task = v.targetId ? 'attacking' : 'idle';
+                let newTask: Villager['task'] = 'idle';
+                const targetIsVillager = currentVillagers.some(tv => tv.id === v.targetId);
+                const targetIsMine = goldMines.some(m => m.id === v.targetId);
 
-                return { ...v, task, x: newPosition.x, y: newPosition.y };
+                if (targetIsVillager) {
+                    newTask = 'attacking';
+                } else if (targetIsMine) {
+                    newTask = 'mining';
+                }
+
+                return { ...v, task: newTask, x: newPosition.x, y: newPosition.y };
             })
         );
-    }, []);
+    }, [goldMines]);
 
     const handleMouseEnterEnemy = (isEnemy: boolean) => {
         setIsHoveringEnemy(isEnemy);
-        const anySelected = villagers.some(v => v.isSelected);
-        if (anySelected && isEnemy) {
-            setVillagers(v => v.map(vill => vill.isSelected ? {...vill, showAttackPreview: true} : vill));
-        }
-    };
-    
-    const handleMouseLeaveEnemy = () => {
-        setIsHoveringEnemy(false);
-         setVillagers(v => v.map(vill => ({...vill, showAttackPreview: false})));
     };
     
     const handleCreateVillager = useCallback(() => {
@@ -390,7 +423,7 @@ const TestMapPage = () => {
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
                 <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Click the Town Center to create villagers. Drag to select. Right-click on ground to move, right-click on another villager to attack.</p>
+                <p className="text-parchment-dark mb-4 text-sm">Click the Town Center to create villagers. Drag to select. Right-click on ground to move, right-click on another villager to attack, or right-click the Gold Mine to start mining.</p>
             </div>
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <Stage 
@@ -422,6 +455,18 @@ const TestMapPage = () => {
                             onMouseEnter={() => handleMouseEnterClickable(true)}
                             onMouseLeave={() => handleMouseEnterClickable(false)}
                         />
+
+                        {goldMines.map(mine => (
+                            <AnimatedGoldMine
+                                key={mine.id}
+                                id={mine.id}
+                                name="gold-mine"
+                                x={mine.x}
+                                y={mine.y}
+                                onMouseEnter={() => handleMouseEnterClickable(true)}
+                                onMouseLeave={() => handleMouseEnterClickable(false)}
+                            />
+                        ))}
                         
                         {villagers.map(villager => (
                             <AnimatedVillager
@@ -442,7 +487,6 @@ const TestMapPage = () => {
                                 isSelected={villager.isSelected}
                                 onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)}
                                 deathTime={villager.deathTime}
-                                showAttackPreview={villager.showAttackPreview}
                                 onMouseEnter={() => {
                                     const anySelected = villagers.some(v => v.isSelected);
                                     if(anySelected && !villager.isSelected) handleMouseEnterEnemy(true);
@@ -471,5 +515,3 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
-
-    

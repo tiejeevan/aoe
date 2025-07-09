@@ -44,10 +44,9 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         const node = mainGroupRef.current;
         if (!node) return;
 
-        if (movementTweenRef.current) {
-            movementTweenRef.current.destroy();
-            movementTweenRef.current = null;
-        }
+        // Destroy any existing tween before creating a new one.
+        // Optional chaining (?.) prevents an error if the ref is null or the tween is already destroyed.
+        movementTweenRef.current?.destroy();
         
         if (task === 'moving') {
             const currentPos = node.position();
@@ -74,7 +73,6 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
 
         return () => {
              movementTweenRef.current?.destroy();
-             movementTweenRef.current = null;
         };
 
     }, [targetX, targetY, task, onMoveEnd]);
@@ -85,17 +83,17 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
         const node = mainGroupRef.current;
         if (!node) return;
 
-        if (animRef.current) {
-            animRef.current.stop();
-            animRef.current = null;
-        }
-
         const resetToIdle = () => {
             if (leftArmRef.current) leftArmRef.current.rotation(0);
             if (rightArmRef.current) rightArmRef.current.rotation(0);
             if (leftLegRef.current) leftLegRef.current.rotation(0);
             if (rightLegRef.current) rightLegRef.current.rotation(0);
         };
+
+        if (animRef.current) {
+            animRef.current.stop();
+            animRef.current = null;
+        }
 
         // Handle death separately with a precise tween
         if (task === 'dead') {
@@ -133,7 +131,14 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
                 if (leftArmRef.current) leftArmRef.current.rotation(0);
                 if (leftLegRef.current) leftLegRef.current.rotation(0);
                 if (rightLegRef.current) rightLegRef.current.rotation(0);
-            } else { // Idle
+            } else if (task === 'mining') {
+                const animSpeed = 0.01;
+                const swingAngle = 40;
+                const rotation = (Math.sin(frame.time * animSpeed) * swingAngle) - 20;
+                if(rightArmRef.current) rightArmRef.current.rotation(rotation);
+                if(leftArmRef.current) leftArmRef.current.rotation(rotation);
+            }
+            else { // Idle
                 resetToIdle();
             }
         }, node.getLayer());

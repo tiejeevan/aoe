@@ -26,7 +26,7 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     const rightUpperLeg = useRef<Konva.Rect>(null);
     const rightLowerLeg = useRef<Konva.Rect>(null);
     const torso = useRef<Konva.Rect>(null);
-    const head = useRef<Konva.Circle>(null);
+    const headGroup = useRef<Konva.Group>(null);
 
     const animationRequestRef = useRef<number>();
     const startTimeRef = useRef<number>(0);
@@ -70,7 +70,10 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           if (rightLowerLeg.current) rightLowerLeg.current.rotation(-kneeBend);
 
           if (torso.current) torso.current.y(-50 * scale + Math.sin(elapsed * 6) * 3 * scale);
-          if (head.current) head.current.y(-120 * scale + Math.sin(elapsed * 6) * 3 * scale);
+          if (headGroup.current) {
+            headGroup.current.y(-70 * scale + Math.sin(elapsed * 6) * 3 * scale);
+            headGroup.current.rotation(Math.sin(elapsed * 3) * 5);
+          }
 
           animationRequestRef.current = requestAnimationFrame(animate);
         };
@@ -85,7 +88,10 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
             if(limbRef.current) limbRef.current.rotation(0);
         });
         if (torso.current) torso.current.y(-50 * scale);
-        if (head.current) head.current.y(-120 * scale);
+        if (headGroup.current) {
+          headGroup.current.y(-70 * scale);
+          headGroup.current.rotation(0);
+        }
       }
 
       return () => {
@@ -260,43 +266,42 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
           />
         </Group>
 
-        {/* Head */}
-        <Group>
+        {/* Head Group */}
+        <Group ref={headGroup} y={-70 * scale}>
           <Circle
-            ref={head}
             x={0}
-            y={-120 * scale}
+            y={-50 * scale}
             radius={40 * scale}
-            fillLinearGradientStartPoint={{ x: 0, y: -160 * scale }}
-            fillLinearGradientEndPoint={{ x: 0, y: -80 * scale }}
+            fillLinearGradientStartPoint={{ x: 0, y: -90 * scale }}
+            fillLinearGradientEndPoint={{ x: 0, y: -10 * scale }}
             fillLinearGradientColorStops={[0, "#f5d6b4", 1, "#c49a6c"]}
             stroke="black"
             strokeWidth={2 * scale}
           />
-          <Circle x={-15 * scale} y={-130 * scale} radius={6 * scale} fill="black" />
-          <Circle x={15 * scale} y={-130 * scale} radius={6 * scale} fill="black" />
+          <Circle x={-15 * scale} y={-60 * scale} radius={6 * scale} fill="black" />
+          <Circle x={15 * scale} y={-60 * scale} radius={6 * scale} fill="black" />
           <Line
-            points={[-25 * scale, -145 * scale, -5 * scale, -140 * scale]}
+            points={[-25 * scale, -75 * scale, -5 * scale, -70 * scale]}
             stroke="black"
             strokeWidth={2 * scale}
             lineCap="round"
             tension={0.5}
           />
           <Line
-            points={[5 * scale, -140 * scale, 25 * scale, -145 * scale]}
+            points={[5 * scale, -70 * scale, 25 * scale, -75 * scale]}
             stroke="black"
             strokeWidth={2 * scale}
             lineCap="round"
             tension={0.5}
           />
           <Line
-            points={[0, -120 * scale, 0, -110 * scale]}
+            points={[0, -50 * scale, 0, -40 * scale]}
             stroke="#9c7b53"
             strokeWidth={1.5 * scale}
             lineCap="round"
           />
           <Line
-            points={[-15 * scale, -100 * scale, 0, -90 * scale, 15 * scale, -100 * scale]}
+            points={[-15 * scale, -30 * scale, 0, -20 * scale, 15 * scale, -30 * scale]}
             stroke="black"
             strokeWidth={2 * scale}
             tension={0.5}

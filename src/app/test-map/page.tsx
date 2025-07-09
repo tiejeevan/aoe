@@ -26,6 +26,18 @@ interface Villager {
     isSelected: boolean;
 }
 
+const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
+    if (!node) return null;
+    if (node.hasName('villager') && node instanceof Konva.Group) {
+        return node;
+    }
+    if (node.getParent()) {
+        return getVillagerNode(node.getParent());
+    }
+    return null;
+};
+
+
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
     const [villagers, setVillagers] = useState<Villager[]>([]);
@@ -67,6 +79,10 @@ const TestMapPage = () => {
 
     // Game Loop for Combat and State Updates
     useEffect(() => {
+        if (!isClient) return;
+        
+        let animationFrameId: number;
+
         const gameLoop = () => {
             setVillagers(currentVillagers => {
                 let villagersToUpdate = JSON.parse(JSON.stringify(currentVillagers)) as Villager[];
@@ -113,7 +129,7 @@ const TestMapPage = () => {
                         if (damageMap.has(v.id)) {
                             const newHp = v.hp - (damageMap.get(v.id) || 0);
                             if (newHp <= 0) {
-                                return { ...v, hp: 0, task: 'dead' as const, isSelected: false };
+                                return { ...v, hp: 0, task: 'dead' as const, isSelected: false, targetId: null };
                             }
                             return { ...v, hp: newHp };
                         }
@@ -122,11 +138,11 @@ const TestMapPage = () => {
                 }
                 return villagersToUpdate;
             });
-            requestAnimationFrame(gameLoop);
+            animationFrameId = requestAnimationFrame(gameLoop);
         };
-        const animationFrameId = requestAnimationFrame(gameLoop);
+        animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, []);
+    }, [isClient]);
 
 
     // Add keyboard listeners for panning
@@ -175,9 +191,9 @@ const TestMapPage = () => {
         const pointerPos = getStagePointerPosition();
         if (!pointerPos) return;
 
-        const targetIsVillager = e.target.hasName('villager');
-        const targetId = targetIsVillager ? e.target.id() : null;
-
+        const targetVillagerNode = getVillagerNode(e.target);
+        const targetId = targetVillagerNode ? targetVillagerNode.id() : null;
+        
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
                 if (v.isSelected && v.task !== 'dead' && v.id !== targetId) {
@@ -212,14 +228,22 @@ const TestMapPage = () => {
         const pos = getStagePointerPosition();
         if (!pos) return;
         
-        const isClickOnVillager = e.target.hasName('villager');
-        if (isClickOnVillager) {
-            const clickedId = e.target.id();
+        const clickedVillagerNode = getVillagerNode(e.target);
+
+        if (clickedVillagerNode) {
+            const clickedId = clickedVillagerNode.id();
             const isShiftPressed = e.evt.shiftKey;
+            
              setVillagers(v => v.map(villager => ({
                 ...villager,
-                isSelected: isShiftPressed ? (villager.id === clickedId ? !villager.isSelected : villager.isSelected) : villager.id === clickedId
+                isSelected: isShiftPressed 
+                    ? (villager.id === clickedId ? !villager.isSelected : villager.isSelected) 
+                    : villager.id === clickedId
             })));
+            
+            // Prevent starting a selection box
+            setSelectionBox({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
+            setMouseDownPos(null);
             return;
         }
 
@@ -359,3 +383,5 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
+
+    

@@ -13,6 +13,7 @@ import Barracks from '../../../components/test/Barracks';
 import Castle from '../../../components/test/Castle';
 import Workshop from '../../../components/test/Workshop';
 import ResearchLab from '../../../components/test/ResearchLab';
+import KonvaProgressBar from '../../../components/test/KonvaProgressBar';
 
 
 const GRID_SIZE = 30;
@@ -367,9 +368,9 @@ const TestMapPage = () => {
                 const newSites = currentSites.map(site => {
                     if (site.builderIds.length > 0) {
                         siteUpdated = true;
-                        const workPerMs = 1 / BUILD_TIME;
-                        const workThisTick = deltaTime * site.builderIds.length;
-                        const newWorkApplied = site.workApplied + workThisTick;
+                        const workPerBuilderPerMs = 1 / BUILD_TIME;
+                        const workThisTick = deltaTime * site.builderIds.length * workPerBuilderPerMs;
+                        const newWorkApplied = site.workApplied + (workThisTick * BUILD_TIME);
 
                         if (newWorkApplied >= BUILD_TIME) {
                             const stats = buildingStats[site.type];
@@ -377,7 +378,8 @@ const TestMapPage = () => {
                             setVillagers(vs => vs.map(v => site.builderIds.includes(v.id) ? { ...v, task: 'idle', targetId: null } : v));
                             
                             const builderNames = site.builderIds.map(id => villagers.find(v => v.id === id)?.name || 'A villager').join(', ');
-                            addToLog(`${builderNames} built a ${stats.name} at (${Math.round(site.x)}, ${Math.round(site.y)}).`);
+                            const timeTaken = (Date.now() - (constructionSites.find(s => s.id === site.id)?.workApplied === 0 ? now - deltaTime : now - (deltaTime * (site.workApplied / BUILD_TIME)))) / 1000;
+                            addToLog(`${builderNames} built a ${stats.name} at (${Math.round(site.x)}, ${Math.round(site.y)}). It took ${timeTaken.toFixed(1)} seconds.`);
                             return null;
                         }
                         return { ...site, workApplied: newWorkApplied };
@@ -407,7 +409,7 @@ const TestMapPage = () => {
 
         const animationFrameId = requestAnimationFrame(gameLoop);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isClient, villagers, buildings, addToLog, handleCreateVillager]);
+    }, [isClient, villagers, buildings, addToLog, handleCreateVillager, constructionSites]);
 
 
     // Add keyboard listeners for panning
@@ -865,7 +867,7 @@ const TestMapPage = () => {
             <div className="flex-grow w-full max-w-6xl aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative">
                  <div className="absolute top-2 left-2 bg-black/50 text-white p-2 rounded-lg text-xs w-96 z-10 font-mono">
                     <h3 className="font-bold border-b mb-1 text-base">Activity Log</h3>
-                    <div className="h-28 overflow-y-auto pr-2">
+                    <div className="h-48 overflow-y-auto pr-2">
                         {log.length === 0 ? (
                             <p className="text-gray-400 italic">No activity yet.</p>
                         ) : (
@@ -911,10 +913,14 @@ const TestMapPage = () => {
                                         </Group>
                                     )}
                                     {building.training && hoveredBuildingId === building.id && (
-                                        <Group y={-70}>
-                                            <Rect x={-50} y={0} width={100} height={10} fill="#282828" stroke="#fbf1c7" strokeWidth={1} />
-                                            <Rect x={-50} y={0} width={100 * ((Date.now() - building.training.startTime) / building.training.duration)} height={10} fill="#458588" />
-                                        </Group>
+                                        <KonvaProgressBar
+                                            x={-50}
+                                            y={-70}
+                                            width={100}
+                                            height={10}
+                                            startTime={building.training.startTime}
+                                            duration={building.training.duration}
+                                        />
                                     )}
                                 </Group>
                             );
@@ -948,7 +954,7 @@ const TestMapPage = () => {
                             let timeRemainingText = "∞";
 
                             if (numBuilders > 0) {
-                                const timeRemainingMs = workRemaining / numBuilders;
+                                const timeRemainingMs = workRemaining / (numBuilders * (1 / BUILD_TIME));
                                 timeRemainingText = `${(timeRemainingMs / 1000).toFixed(1)}s`;
                             }
                             

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Stage, Layer, Rect, Image } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Group } from 'react-konva';
 import Konva from 'konva';
 
 const GRID_SIZE = 30;
@@ -20,6 +20,34 @@ interface Building {
     type: 'Barracks' | 'Town Center';
 }
 
+// A new component for our animated figure, based on the user's example.
+// It's purely presentational; all animation logic is handled by the parent.
+const AnimatedVillager = React.forwardRef<Konva.Group, {
+    isSelected: boolean;
+    leftLegRef: React.RefObject<Konva.Rect>;
+    rightLegRef: React.RefObject<Konva.Rect>;
+}>(({ isSelected, leftLegRef, rightLegRef }, ref) => {
+    return (
+        <Group ref={ref} offsetY={130}>
+            {/* Body (torso) */}
+            <Rect x={-40} y={-110} width={80} height={130} fill="#3b5998" stroke="black" strokeWidth={2} cornerRadius={20}/>
+            {/* Left Arm */}
+            <Rect x={-70} y={-100} width={30} height={90} fill="#f5d6b4" stroke="black" strokeWidth={2} cornerRadius={15}/>
+            {/* Right Arm */}
+            <Rect x={40} y={-100} width={30} height={90} fill="#f5d6b4" stroke="black" strokeWidth={2} cornerRadius={15}/>
+            {/* Legs */}
+            <Rect ref={leftLegRef} x={-30} y={20} width={30} height={110} fill="#654321" stroke="black" strokeWidth={2} cornerRadius={15}/>
+            <Rect ref={rightLegRef} x={10} y={20} width={30} height={110} fill="#654321" stroke="black" strokeWidth={2} cornerRadius={15}/>
+            {/* Head */}
+            <Circle x={0} y={-150} radius={40} fill="#f5d6b4" stroke="black" strokeWidth={2}/>
+            {/* Selection Indicator */}
+            {isSelected && <Circle radius={60} y={-30} stroke="#d79921" strokeWidth={3} dash={[10, 5]} listening={false}/>}
+        </Group>
+    );
+});
+AnimatedVillager.displayName = 'AnimatedVillager';
+
+
 const TestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
     const [targetPosition, setTargetPosition] = useState({ x: 5, y: 5 });
@@ -29,103 +57,76 @@ const TestMapPage = () => {
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
     const [panelPosition, setPanelPosition] = useState<{ x: number, y: number } | null>(null);
     const [isUnitSelected, setIsUnitSelected] = useState(false);
-    const [spriteSheet, setSpriteSheet] = useState<HTMLImageElement | null>(null);
-    const [crop, setCrop] = useState({ x: 0, y: 0, width: 24, height: 24 });
+    const [isMoving, setIsMoving] = useState(false);
 
     const stageRef = useRef<Konva.Stage>(null);
-    const unitRef = useRef<Konva.Image>(null);
+    const villagerRef = useRef<Konva.Group>(null);
+    const leftLegRef = useRef<Konva.Rect>(null);
+    const rightLegRef = useRef<Konva.Rect>(null);
     const animationRef = useRef<Konva.Animation | null>(null);
-
-    // --- Sprite Sheet and Animation Data ---
-    const animations = {
-        idle: [{ x: 0, y: 0, width: 24, height: 24 }],
-        walk: [
-            { x: 24, y: 0, width: 24, height: 24 },
-            { x: 48, y: 0, width: 24, height: 24 },
-            { x: 72, y: 0, width: 24, height: 24 },
-            { x: 96, y: 0, width: 24, height: 24 },
-        ],
-    };
 
     useEffect(() => {
         setIsClient(true);
-        const image = new window.Image();
-        // TODO: Replace this placeholder with a real sprite sheet URL.
-        // The placeholder shows a 5x1 grid of colored squares for testing.
-        // The first square is idle, the next 4 are for walking.
-        image.src = 'https://placehold.co/120x24/1f2937/ebdbb2?text=';
-        image.onload = () => {
-            setSpriteSheet(image);
-        };
     }, []);
 
     useEffect(() => {
-        if (!isClient || !unitRef.current || !spriteSheet) {
+        if (!isClient || !villagerRef.current || !leftLegRef.current || !rightLegRef.current) {
             return;
         }
 
-        const unitNode = unitRef.current;
-        const layer = unitNode.getLayer();
-        
-        let currentAnimation = 'idle';
-        let frameIndex = 0;
-        let lastFrameTime = 0;
-        const frameRate = 150; // ms between frames
+        const villagerNode = villagerRef.current;
+        const leftLeg = leftLegRef.current;
+        const rightLeg = rightLegRef.current;
+        const layer = villagerNode.getLayer();
+        if (!layer) return;
+
+        const walkAmplitude = 5;
+        const walkPeriod = 400; // ms for a full step cycle
 
         if (animationRef.current) {
             animationRef.current.stop();
         }
 
         animationRef.current = new Konva.Animation((frame) => {
-            if (!frame || !unitNode) return;
+            if (!frame || !villagerNode) return;
 
             const targetX = targetPosition.x * GRID_SIZE + GRID_SIZE / 2;
             const targetY = targetPosition.y * GRID_SIZE + GRID_SIZE / 2;
             
-            const currentX = unitNode.x();
-            const currentY = unitNode.y();
+            const currentX = villagerNode.x();
+            const currentY = villagerNode.y();
 
             const dx = targetX - currentX;
             const dy = targetY - currentY;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < 5) { // Close enough to target
-                unitNode.position({ x: targetX, y: targetY });
-                if (currentAnimation !== 'idle') {
-                    currentAnimation = 'idle';
-                    frameIndex = 0;
-                    unitNode.crop(animations.idle[0]);
-                    layer.batchDraw();
-                }
+            if (distance < 5) {
+                if (isMoving) setIsMoving(false);
+                // Reset legs to idle position
+                leftLeg.y(20);
+                rightLeg.y(20);
                 return;
+            } else if (!isMoving) {
+                setIsMoving(true);
             }
             
-            // Start walking if not already
-            if (currentAnimation !== 'walk') {
-                currentAnimation = 'walk';
-            }
-
-            // Animate frames
-            if (frame.time - lastFrameTime > frameRate) {
-                frameIndex = (frameIndex + 1) % animations.walk.length;
-                lastFrameTime = frame.time;
-                const newCrop = animations.walk[frameIndex];
-                unitNode.crop(newCrop);
-            }
-
             // Move position
             const moveDistance = UNIT_SPEED * (frame.timeDiff / 1000);
             const ratio = moveDistance / distance;
             const newX = currentX + dx * ratio;
             const newY = currentY + dy * ratio;
-            unitNode.position({ x: newX, y: newY });
+            villagerNode.position({ x: newX, y: newY });
+
+            // Animate legs
+            const angle = (frame.time / walkPeriod) * 2 * Math.PI;
+            leftLeg.y(20 + Math.sin(angle) * walkAmplitude);
+            rightLeg.y(20 - Math.sin(angle) * walkAmplitude);
 
         }, layer);
 
         animationRef.current.start();
-
         return () => animationRef.current?.stop();
-    }, [targetPosition, isClient, spriteSheet]); // Rerun when target changes
+    }, [targetPosition, isClient, isMoving]);
 
     const handleCellClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (e.target.hasName('grid-background')) {
@@ -192,8 +193,6 @@ const TestMapPage = () => {
         )
     }
 
-    const iconSize = GRID_SIZE * 0.8;
-
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <h1 className="text-3xl font-serif text-brand-gold mb-2">High-Performance RTS Map</h1>
@@ -251,25 +250,31 @@ const TestMapPage = () => {
                             />
                         ))}
                         
-                        <Image
-                            ref={unitRef}
-                            image={spriteSheet}
-                            crop={crop}
+                        <Group
                             x={5 * GRID_SIZE + GRID_SIZE / 2}
                             y={5 * GRID_SIZE + GRID_SIZE / 2}
-                            width={24}
-                            height={24}
-                            offsetX={12}
-                            offsetY={12}
-                            stroke={isUnitSelected ? '#d79921' : undefined}
-                            strokeWidth={isUnitSelected ? 2 : 0}
-                            shadowColor={isUnitSelected ? '#d79921' : '#458588'}
-                            shadowBlur={isUnitSelected ? 10 : 5}
-                            shadowOpacity={0.7}
                             onClick={handleUnitClick}
                             onTap={handleUnitClick}
                             listening={true}
-                        />
+                            draggable={true}
+                            onDragEnd={(e) => {
+                                const newX = Math.round(e.target.x() / GRID_SIZE);
+                                const newY = Math.round(e.target.y() / GRID_SIZE);
+                                setTargetPosition({ x: newX, y: newY });
+                                // Snap the group position after drag
+                                e.target.position({
+                                  x: newX * GRID_SIZE + GRID_SIZE / 2,
+                                  y: newY * GRID_SIZE + GRID_SIZE / 2
+                                });
+                            }}
+                        >
+                            <AnimatedVillager
+                                ref={villagerRef}
+                                isSelected={isUnitSelected}
+                                leftLegRef={leftLegRef}
+                                rightLegRef={rightLegRef}
+                            />
+                        </Group>
                     </Layer>
                 </Stage>
                  {selectedBuilding && panelPosition && (

@@ -209,10 +209,10 @@ const TestMapPage = () => {
             return acc + (buildingStats[building.type].providesCapacity || 0);
         }, 0);
         
-        const currentPop = villagers.length;
+        const currentPop = villagers.filter(v => v.task !== 'dead').length;
 
         setPopulation({ current: currentPop, capacity: newCapacity });
-    }, [villagers.length, buildings]);
+    }, [villagers, buildings]);
 
     // Game Loop
     useEffect(() => {
@@ -406,16 +406,31 @@ const TestMapPage = () => {
         const targetSiteNode = getConstructionSiteNode(e.target);
         const targetBuildingNode = getBuildingNode(e.target);
 
-        const targetVillagerId = targetVillagerNode ? targetVillagerNode.id() : null;
-        const targetMineId = targetMineNode ? targetMineNode.id() : null;
-        const targetSiteId = targetSiteNode ? targetSiteNode.id() : null;
-        const targetBuildingId = targetBuildingNode ? targetBuildingNode.id() : null;
+        const targetVillager = villagers.find(v => v.id === (targetVillagerNode?.id() || ''));
+        const targetMine = goldMines.find(m => m.id === (targetMineNode?.id() || ''));
+        const targetSite = constructionSites.find(s => s.id === (targetSiteNode?.id() || ''));
+        const targetBuilding = buildings.find(b => b.id === (targetBuildingNode?.id() || ''));
 
-        const targetVillager = villagers.find(v => v.id === targetVillagerId);
-        const targetMine = goldMines.find(m => m.id === targetMineId);
-        const targetSite = constructionSites.find(s => s.id === targetSiteId);
-        const targetBuilding = buildings.find(b => b.id === targetBuildingId);
+        const selectedVillagers = villagers.filter(v => v.isSelected && v.task !== 'dead');
+        if (selectedVillagers.length === 0) return;
+
+        // --- NEW LOGIC: Pause construction if moving a builder ---
+        const villagersToUpdate = [...villagers];
+        let sitesToUpdate = [...constructionSites];
         
+        selectedVillagers.forEach(villager => {
+            if (villager.task === 'building' && villager.targetId) {
+                const siteIndex = sitesToUpdate.findIndex(s => s.id === villager.targetId);
+                if (siteIndex !== -1) {
+                    const site = sitesToUpdate[siteIndex];
+                    sitesToUpdate[siteIndex] = { ...site, builderId: null };
+                    addToLog(`${villager.name} stopped building the ${buildingStats[site.type].name}.`);
+                }
+            }
+        });
+        setConstructionSites(sitesToUpdate);
+        // --- END NEW LOGIC ---
+
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
                 if (v.isSelected && v.task !== 'dead') {
@@ -430,7 +445,7 @@ const TestMapPage = () => {
                         const ratio = distance > standoff ? (distance - standoff) / distance : 0;
                         const targetX = v.x + dx * ratio;
                         const targetY = v.y + dy * ratio;
-                        return { ...v, task: 'moving', targetX, targetY, targetId: targetMineId };
+                        return { ...v, task: 'moving', targetX, targetY, targetId: targetMine.id };
                     } else if (targetSite) {
                          const siteName = buildingStats[targetSite.type].name;
                          addToLog(`${v.name} is going to construct the ${siteName}.`);
@@ -441,7 +456,7 @@ const TestMapPage = () => {
                          const ratio = distance > standoff ? (distance - standoff) / distance : 0;
                          const targetX = v.x + dx * ratio;
                          const targetY = v.y + dy * ratio;
-                         return { ...v, task: 'moving', targetX, targetY, targetId: targetSiteId };
+                         return { ...v, task: 'moving', targetX, targetY, targetId: targetSite.id };
                     } else if (targetVillager && targetVillager.id !== v.id) {
                         addToLog(`${v.name} is attacking ${targetVillager.name}!`);
                         const dx = targetVillager.x - v.x;
@@ -454,7 +469,7 @@ const TestMapPage = () => {
                             finalTargetX = v.x + dx * ratio;
                             finalTargetY = v.y + dy * ratio;
                         }
-                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetVillagerId };
+                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetVillager.id };
                     } else if (targetBuilding) {
                         const buildingName = buildingStats[targetBuilding.type].name;
                         addToLog(`${v.name} is attacking the ${buildingName}!`);
@@ -468,7 +483,7 @@ const TestMapPage = () => {
                             finalTargetX = v.x + dx * ratio;
                             finalTargetY = v.y + dy * ratio;
                         }
-                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetBuildingId };
+                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetBuilding.id };
                     } else {
                         addToLog(`${v.name} is moving to (${Math.round(pointerPos.x)}, ${Math.round(pointerPos.y)}).`);
                         return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
@@ -697,7 +712,7 @@ const TestMapPage = () => {
     const handleMouseEnterEnemy = (isEnemy: boolean) => setIsHoveringEnemy(isEnemy);
     
     const handleCreateVillager = useCallback(() => {
-        if (villagers.length >= population.capacity) {
+        if (villagers.filter(v => v.task !== 'dead').length >= population.capacity) {
             addToLog("Not enough population capacity. Build more huts!");
             return;
         }
@@ -711,7 +726,7 @@ const TestMapPage = () => {
             addToLog("A new villager has arrived!");
             return [...current, newVillager];
         });
-    }, [villagers.length, population.capacity, addToLog]);
+    }, [villagers, population.capacity, addToLog]);
     
     const handleMouseEnterClickable = (isClickable: boolean) => setIsHoveringClickable(isClickable);
 
@@ -790,7 +805,7 @@ const TestMapPage = () => {
                         {constructionSites.map(site => {
                             const BuildingComponent = BuildingComponents[site.type];
                             return (
-                                <Group key={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)}>
+                                <Group key={site.id} id={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)}>
                                     <BuildingComponent opacity={0.3} />
                                     <Rect x={-30} y={40} width={60} height={8} fill="#3c3836" />
                                     <Rect x={-30} y={40} width={60 * (site.progress / 100)} height={8} fill="#98971a" />

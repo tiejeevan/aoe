@@ -52,6 +52,7 @@ const TestMapPage = () => {
     const [tooltipMineId, setTooltipMineId] = useState<string | null>(null);
     const [stageScale, setStageScale] = useState(1);
     const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+    const [stageDraggable, setStageDraggable] = useState(true);
 
 
     const stageRef = useRef<Konva.Stage>(null);
@@ -348,7 +349,7 @@ const TestMapPage = () => {
                     onMouseUp={handleStageMouseUp}
                     onContextMenu={handleStageContextMenu}
                     onWheel={handleWheel}
-                    draggable
+                    draggable={stageDraggable}
                     scaleX={stageScale}
                     scaleY={stageScale}
                     x={stagePos.x}
@@ -366,8 +367,14 @@ const TestMapPage = () => {
                                 y={mine.y}
                                 onClick={(e) => handleMineClick(mine.id, e)}
                                 onTap={(e) => handleMineClick(mine.id, e as any)}
-                                onMouseEnter={() => {if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id)}}
-                                onMouseLeave={() => setHoveredMineId(null)}
+                                onMouseEnter={() => {
+                                    if(selectedVillagerIds.size > 0) setHoveredMineId(mine.id);
+                                    setStageDraggable(false);
+                                }}
+                                onMouseLeave={() => {
+                                    setHoveredMineId(null);
+                                    setStageDraggable(true);
+                                }}
                             />
                         ))}
 
@@ -389,6 +396,8 @@ const TestMapPage = () => {
                                     isSelected={selectedVillagerIds.has(villager.id)}
                                     onClick={(e) => handleUnitClick(e, villager.id)}
                                     onTap={(e) => handleUnitClick(e, villager.id)}
+                                    onMouseEnter={() => setStageDraggable(false)}
+                                    onMouseLeave={() => setStageDraggable(true)}
                                 />
                              )
                         })}

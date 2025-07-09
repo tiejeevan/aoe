@@ -10,6 +10,7 @@ import AnimatedVillager from '../../../components/AnimatedVillager';
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 40;
 const MAP_HEIGHT_CELLS = 25;
+const MAX_HP = 10;
 
 interface Villager {
     id: string;
@@ -17,7 +18,11 @@ interface Villager {
     y: number;
     targetX: number;
     targetY: number;
-    task: 'idle' | 'moving';
+    hp: number;
+    attack: number;
+    targetId: string | null;
+    attackLastTime: number;
+    task: 'idle' | 'moving' | 'attacking' | 'dead';
     isSelected: boolean;
 }
 
@@ -49,12 +54,80 @@ const TestMapPage = () => {
                 y: y,
                 targetX: x,
                 targetY: y,
+                hp: MAX_HP,
+                attack: 2,
+                targetId: null,
+                attackLastTime: 0,
                 task: 'idle',
                 isSelected: false,
             };
         });
         setVillagers(initialVillagers);
     }, []);
+
+    // Game Loop for Combat and State Updates
+    useEffect(() => {
+        const gameLoop = () => {
+            setVillagers(currentVillagers => {
+                let villagersToUpdate = JSON.parse(JSON.stringify(currentVillagers));
+                const now = Date.now();
+
+                const damageMap = new Map<string, number>();
+
+                villagersToUpdate.forEach((villager: Villager) => {
+                    if (villager.task === 'moving' && villager.targetId) {
+                        const target = villagersToUpdate.find((v: Villager) => v.id === villager.targetId);
+                        if (target && target.task !== 'dead') {
+                            const dx = target.x - villager.x;
+                            const dy = target.y - villager.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            const ATTACK_RANGE = 40; // pixels
+
+                            if (distance <= ATTACK_RANGE) {
+                                villager.task = 'attacking';
+                            }
+                        } else {
+                            villager.task = 'idle';
+                            villager.targetId = null;
+                        }
+                    }
+
+                    if (villager.task === 'attacking' && villager.targetId) {
+                        const target = villagersToUpdate.find((v: Villager) => v.id === villager.targetId);
+                        if (target && target.task !== 'dead') {
+                            const ATTACK_COOLDOWN = 1000; // 1 second
+                            if (now - villager.attackLastTime > ATTACK_COOLDOWN) {
+                                const currentDamage = damageMap.get(target.id) || 0;
+                                damageMap.set(target.id, currentDamage + villager.attack);
+                                villager.attackLastTime = now;
+                            }
+                        } else {
+                            villager.task = 'idle';
+                            villager.targetId = null;
+                        }
+                    }
+                });
+
+                if (damageMap.size > 0) {
+                    villagersToUpdate = villagersToUpdate.map((v: Villager) => {
+                        if (damageMap.has(v.id)) {
+                            const newHp = v.hp - (damageMap.get(v.id) || 0);
+                            if (newHp <= 0) {
+                                return { ...v, hp: 0, task: 'dead' as const, isSelected: false };
+                            }
+                            return { ...v, hp: newHp };
+                        }
+                        return v;
+                    });
+                }
+                return villagersToUpdate;
+            });
+            requestAnimationFrame(gameLoop);
+        };
+        const animationFrameId = requestAnimationFrame(gameLoop);
+        return () => cancelAnimationFrame(animationFrameId);
+    }, []);
+
 
     // Add keyboard listeners for panning
     useEffect(() => {
@@ -97,21 +170,37 @@ const TestMapPage = () => {
         }
     };
     
-    // Move selected villagers on right click
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
         e.evt.preventDefault();
         const pointerPos = getStagePointerPosition();
         if (!pointerPos) return;
 
+        const targetIsVillager = e.target.hasName('villager');
+        const targetId = targetIsVillager ? e.target.id() : null;
+
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
-                if (v.isSelected) {
-                    return { 
-                        ...v, 
-                        targetX: pointerPos.x, 
-                        targetY: pointerPos.y,
-                        task: 'moving'
-                    };
+                if (v.isSelected && v.task !== 'dead' && v.id !== targetId) {
+                    if (targetId) {
+                        const targetVillager = currentVillagers.find(tv => tv.id === targetId);
+                        if (targetVillager && targetVillager.task !== 'dead') {
+                            return { 
+                                ...v, 
+                                task: 'moving',
+                                targetX: targetVillager.x, 
+                                targetY: targetVillager.y,
+                                targetId: targetId,
+                            };
+                        }
+                    } else {
+                        return { 
+                            ...v, 
+                            task: 'moving',
+                            targetX: pointerPos.x, 
+                            targetY: pointerPos.y,
+                            targetId: null,
+                        };
+                    }
                 }
                 return v;
             })
@@ -119,21 +208,19 @@ const TestMapPage = () => {
     };
 
     const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (e.evt.button === 2) return; // Ignore right-click
+        if (e.evt.button === 2) return; 
         const pos = getStagePointerPosition();
         if (!pos) return;
         
-        // If clicking on a villager, select just that one.
         if (e.target.hasName('villager')) {
             const clickedId = e.target.id();
-            setVillagers(v => v.map(villager => ({
+             setVillagers(v => v.map(villager => ({
                 ...villager,
                 isSelected: villager.id === clickedId
             })));
             return;
         }
 
-        // If clicking on the background, start selection process.
         setMouseDownPos(pos);
         setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, visible: true });
     };
@@ -146,7 +233,7 @@ const TestMapPage = () => {
     };
 
     const handleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (mouseDownPos) { // This means a drag was started on the background
+        if (mouseDownPos) {
             const { x1: selX1, y1: selY1, x2: selX2, y2: selY2 } = selectionBox;
             const x1 = Math.min(selX1, selX2);
             const y1 = Math.min(selY1, selY2);
@@ -155,13 +242,13 @@ const TestMapPage = () => {
             
             const dragDistance = Math.sqrt(Math.pow(selX2 - selX1, 2) + Math.pow(selY2 - selY1, 2));
 
-            if (dragDistance < 5) { // It's a click on the background
+            if (dragDistance < 5) { 
                 setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
-            } else { // It's a drag selection
+            } else { 
                 setVillagers(currentVillagers => 
                     currentVillagers.map(v => ({
                         ...v,
-                        isSelected: v.x > x1 && v.x < x2 && v.y > y1 && v.y < y2
+                        isSelected: v.task !== 'dead' && v.x > x1 && v.x < x2 && v.y > y1 && v.y < y2
                     }))
                 );
             }
@@ -211,7 +298,7 @@ const TestMapPage = () => {
         <div className="min-h-screen bg-stone-dark text-parchment-light flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-6xl mb-4">
                 <h1 className="text-3xl font-serif text-brand-gold">Animation Test Map</h1>
-                <p className="text-parchment-dark mb-4 text-sm">Drag to select villagers. Right-click to move them.</p>
+                <p className="text-parchment-dark mb-4 text-sm">Drag to select. Right-click on ground to move, right-click on another villager to attack.</p>
             </div>
             <div className={`flex-grow aspect-[40/25] bg-black rounded-lg overflow-hidden border-2 border-stone-light relative ${isSpacebarPressed ? 'cursor-grab' : 'cursor-default'}`}>
                  <Stage 
@@ -242,6 +329,8 @@ const TestMapPage = () => {
                                 y={villager.y}
                                 targetX={villager.targetX}
                                 targetY={villager.targetY}
+                                hp={villager.hp}
+                                maxHp={MAX_HP}
                                 task={villager.task}
                                 isSelected={villager.isSelected}
                                 onMoveEnd={() => handleVillagerMoveEnd(villager.id)}

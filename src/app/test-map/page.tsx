@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import AnimatedVillager from '../../../components/AnimatedVillager';
+import TownCenter from '../../../components/TownCenter';
 
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 40;
@@ -30,6 +31,7 @@ interface Villager {
     task: 'idle' | 'moving' | 'attacking' | 'dead' | 'building' | 'mining';
     isSelected: boolean;
     deathTime?: number;
+    showAttackPreview?: boolean;
 }
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
@@ -135,6 +137,7 @@ const TestMapPage = () => {
 
                 // Second pass: apply damage and check for deaths
                 if (damageMap.size > 0) {
+                    villagersNeedUpdate = true;
                     for (const villager of nextVillagers) {
                         if (damageMap.has(villager.id)) {
                             const newHp = villager.hp - (damageMap.get(villager.id) || 0);
@@ -147,13 +150,12 @@ const TestMapPage = () => {
                             }
                         }
                     }
-                    villagersNeedUpdate = true;
                 }
                 
                 // Third pass: remove vanished villagers
-                const vanishedCount = nextVillagers.filter(v => v.task === 'dead' && now - (v.deathTime || 0) > DEATH_DURATION).length;
+                const vanishedCount = nextVillagers.filter(v => v.task === 'dead' && v.deathTime && now - v.deathTime > DEATH_DURATION).length;
                 if (vanishedCount > 0) {
-                    nextVillagers = nextVillagers.filter(v => !(v.task === 'dead' && now - (v.deathTime || 0) > DEATH_DURATION));
+                    nextVillagers = nextVillagers.filter(v => !(v.task === 'dead' && v.deathTime && now - v.deathTime > DEATH_DURATION));
                     villagersNeedUpdate = true;
                 }
 
@@ -223,17 +225,14 @@ const TestMapPage = () => {
                         const dx = targetVillager.x - v.x;
                         const dy = targetVillager.y - v.y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
-
-                        if (distance <= ATTACK_DISTANCE) {
-                            // Already in range, just attack
-                            return { ...v, task: 'attacking', targetId: targetId };
-                        } else {
-                            // Move to attack
+                        let finalTargetX = targetVillager.x;
+                        let finalTargetY = targetVillager.y;
+                        if (distance > ATTACK_DISTANCE) {
                             const ratio = (distance - ATTACK_DISTANCE) / distance;
-                            const targetX = v.x + dx * ratio;
-                            const targetY = v.y + dy * ratio;
-                            return { ...v, task: 'moving', targetX, targetY, targetId: targetId };
+                            finalTargetX = v.x + dx * ratio;
+                            finalTargetY = v.y + dy * ratio;
                         }
+                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetId };
                     } else {
                          // Move command
                         return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
@@ -315,6 +314,19 @@ const TestMapPage = () => {
         );
     }, []);
 
+    const handleMouseEnterEnemy = (isEnemy: boolean) => {
+        setIsHoveringEnemy(isEnemy);
+        const anySelected = villagers.some(v => v.isSelected);
+        if (anySelected && isEnemy) {
+            setVillagers(v => v.map(vill => vill.isSelected ? {...vill, showAttackPreview: true} : vill));
+        }
+    };
+    
+    const handleMouseLeaveEnemy = () => {
+        setIsHoveringEnemy(false);
+         setVillagers(v => v.map(vill => ({...vill, showAttackPreview: false})));
+    };
+
     const renderGrid = () => {
         return Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => (
             <Rect 
@@ -370,6 +382,8 @@ const TestMapPage = () => {
                 >
                     <Layer>
                         {renderGrid()}
+
+                        <TownCenter x={MAP_WIDTH_CELLS * GRID_SIZE / 2} y={MAP_HEIGHT_CELLS * GRID_SIZE / 2} />
                         
                         {villagers.map(villager => (
                             <AnimatedVillager
@@ -379,6 +393,7 @@ const TestMapPage = () => {
                                 }}
                                 key={villager.id}
                                 id={villager.id}
+                                name="villager"
                                 initialX={villager.x}
                                 initialY={villager.y}
                                 targetX={villager.targetX}
@@ -389,13 +404,12 @@ const TestMapPage = () => {
                                 isSelected={villager.isSelected}
                                 onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)}
                                 deathTime={villager.deathTime}
+                                showAttackPreview={villager.showAttackPreview}
                                 onMouseEnter={() => {
-                                    const node = villagerRefs.current.get(villager.id);
-                                    if (node && getVillagerNode(node)?.id() !== villager.id) {
-                                         setIsHoveringEnemy(true);
-                                    }
+                                    const anySelected = villagers.some(v => v.isSelected);
+                                    if(anySelected && !villager.isSelected) handleMouseEnterEnemy(true);
                                 }}
-                                onMouseLeave={() => setIsHoveringEnemy(false)}
+                                onMouseLeave={() => handleMouseEnterEnemy(false)}
                             />
                         ))}
 

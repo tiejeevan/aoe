@@ -7,16 +7,19 @@ import Konva from 'konva';
 
 const scale = 0.07;
 
-interface AnimatedVillagerProps extends Konva.GroupConfig {
+interface AnimatedVillagerProps extends Omit<Konva.GroupConfig, 'x' | 'y'> {
+    id: string;
     isSelected?: boolean;
     task: 'idle' | 'moving';
+    x: number;
+    y: number;
     targetX: number;
     targetY: number;
     onMoveEnd: () => void;
 }
 
 const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
-  ({ isSelected, task, targetX, targetY, onMoveEnd, ...groupProps }, ref) => {
+  ({ isSelected, task, x, y, targetX, targetY, onMoveEnd, ...groupProps }, ref) => {
     
     const nodeRef = useRef<Konva.Group>(null);
     const leftArmRef = useRef<Konva.Group>(null);
@@ -24,6 +27,17 @@ const AnimatedVillager = forwardRef<Konva.Group, AnimatedVillagerProps>(
     const leftLegRef = useRef<Konva.Group>(null);
     const rightLegRef = useRef<Konva.Group>(null);
     const animRef = useRef<Konva.Animation | null>(null);
+
+    // This effect handles setting the position from props, but ONLY when not moving.
+    // This prevents React from snapping the villager back to the start during an animation.
+    useEffect(() => {
+        const node = nodeRef.current;
+        if (!node) return;
+
+        if (task !== 'moving') {
+            node.position({ x, y });
+        }
+    }, [x, y, task]);
 
     useEffect(() => {
         const node = nodeRef.current;

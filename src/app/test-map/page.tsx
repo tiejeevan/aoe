@@ -159,7 +159,8 @@ const TestMapPage = () => {
     // State for UI panels
     const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; showBuildMenu: boolean; } | null>(null);
     const [buildingPopup, setBuildingPopup] = useState<{ visible: boolean; x: number; y: number; buildingId: string; } | null>(null);
-    const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; buildingType: BuildingType | null } | null>(null);
+    const [placementMode, setPlacementMode] = useState<{ active: boolean; type: 'build' | 'move'; initiatorId: string | null; buildingType: BuildingType | null; buildingId?: string; } | null>(null);
+    const [previewPos, setPreviewPos] = useState<{x: number, y: number} | null>(null);
     const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; siteId: string; } | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
@@ -400,6 +401,14 @@ const TestMapPage = () => {
     
     const handleStageContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
         e.evt.preventDefault();
+        
+        if (placementMode?.active) {
+            setPlacementMode(null);
+            setPreviewPos(null);
+            addToLog("Action cancelled.");
+            return;
+        }
+
         const pointerPos = getStagePointerPosition();
         if (!pointerPos) return;
 
@@ -513,7 +522,7 @@ const TestMapPage = () => {
                  const cost = buildingStats[buildingType].cost;
                  const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
                  if (canAfford) {
-                    setPlacementMode({ active: true, initiatorId: popup.villagerId, buildingType });
+                    setPlacementMode({ active: true, type: 'build', initiatorId: popup.villagerId, buildingType, buildingId: undefined });
                     setPopup(null);
                  } else {
                      addToLog("Not enough resources!");
@@ -524,6 +533,15 @@ const TestMapPage = () => {
         // Handle building popup clicks
         if (buildingPopup?.visible) {
             const name = e.target.name();
+            if (name === 'move-button') {
+                const building = buildings.find(b => b.id === buildingPopup.buildingId);
+                if (building) {
+                    setPlacementMode({ active: true, type: 'move', initiatorId: null, buildingType: building.type, buildingId: building.id });
+                    setBuildingPopup(null);
+                    addToLog(`Moving ${buildingStats[building.type].name}. Click to place.`);
+                }
+                return;
+            }
             if (name === 'demolish-button') {
                 const building = buildings.find(b => b.id === buildingPopup.buildingId);
                 if (building) {
@@ -558,43 +576,56 @@ const TestMapPage = () => {
         if (!pos) return;
         
         // If in placement mode, place the object
-        if (placementMode?.active && placementMode.buildingType) {
-            const stats = buildingStats[placementMode.buildingType];
-            const cost = stats.cost;
+        if (placementMode?.active) {
+            if (placementMode.type === 'build' && placementMode.buildingType) {
+                const stats = buildingStats[placementMode.buildingType];
+                const cost = stats.cost;
 
-            const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
+                const canAfford = Object.entries(cost).every(([res, amount]) => resources[res as keyof Resources] >= (amount || 0));
 
-            if (canAfford) {
-                setResources(prev => {
-                    const newRes = { ...prev };
-                    for (const key in cost) {
-                        newRes[key as keyof Resources] -= cost[key as keyof Resources] || 0;
-                    }
-                    return newRes;
-                });
-
-                const siteId = `site-${Date.now()}`;
-                setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, workApplied: 0, builderIds: [], cost }]);
-                
-                // Auto-assign the initiator to build
-                if (placementMode.initiatorId) {
-                    const siteX = pos.x, siteY = pos.y;
-                    setVillagers(vs => vs.map(v => {
-                        if (v.id === placementMode.initiatorId) {
-                            const dx = siteX - v.x; const dy = siteY - v.y;
-                            const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
-                            const ratio = dist > standoff ? (dist - standoff)/dist : 0;
-                            addToLog(`${v.name} is going to construct the ${stats.name}.`);
-                            return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+                if (canAfford) {
+                    setResources(prev => {
+                        const newRes = { ...prev };
+                        for (const key in cost) {
+                            newRes[key as keyof Resources] -= cost[key as keyof Resources] || 0;
                         }
-                        return v;
-                    }));
+                        return newRes;
+                    });
+
+                    const siteId = `site-${Date.now()}`;
+                    setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, workApplied: 0, builderIds: [], cost }]);
+                    
+                    if (placementMode.initiatorId) {
+                        const siteX = pos.x, siteY = pos.y;
+                        setVillagers(vs => vs.map(v => {
+                            if (v.id === placementMode.initiatorId) {
+                                const dx = siteX - v.x; const dy = siteY - v.y;
+                                const dist = Math.sqrt(dx*dx + dy*dy); const standoff = 30;
+                                const ratio = dist > standoff ? (dist - standoff)/dist : 0;
+                                addToLog(`${v.name} is going to construct the ${stats.name}.`);
+                                return { ...v, task: 'moving', targetId: siteId, targetX: v.x + dx * ratio, targetY: v.y + dy * ratio };
+                            }
+                            return v;
+                        }));
+                    }
+                    addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
+                } else {
+                     addToLog("Not enough resources to build!");
                 }
-                addToLog(`Construction started for ${stats.name}. Cost: ${Object.entries(cost).map(([r,a]) => `${a} ${r}`).join(', ')}.`);
-            } else {
-                 addToLog("Not enough resources to build!");
+            } else if (placementMode.type === 'move' && placementMode.buildingId) {
+                setBuildings(bs => bs.map(b => 
+                    b.id === placementMode.buildingId
+                        ? { ...b, x: pos.x, y: pos.y }
+                        : b
+                ));
+                const movedBuilding = buildings.find(b => b.id === placementMode.buildingId);
+                if (movedBuilding) {
+                    addToLog(`Moved ${buildingStats[movedBuilding.type].name} to (${Math.round(pos.x)}, ${Math.round(pos.y)}).`);
+                }
             }
-             setPlacementMode({ active: false, initiatorId: null, buildingType: null });
+
+            setPlacementMode(null);
+            setPreviewPos(null);
             return;
         }
         
@@ -604,10 +635,18 @@ const TestMapPage = () => {
     };
 
     const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (!mouseDownPos) return;
         const pos = getStagePointerPosition();
         if (!pos) return;
-        setSelectionBox(prev => ({ ...prev, x2: pos.x, y2: pos.y }));
+
+        // Handle selection box dragging
+        if (mouseDownPos) {
+            setSelectionBox(prev => ({ ...prev, x2: pos.x, y2: pos.y }));
+        }
+
+        // Handle placement preview
+        if (placementMode?.active) {
+            setPreviewPos(pos);
+        }
     };
 
     const handleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -837,10 +876,10 @@ const TestMapPage = () => {
                             );
                         })}
                         {villagers.map(villager => <AnimatedVillager ref={(node) => { if (node) villagerRefs.current.set(villager.id, node); else villagerRefs.current.delete(villager.id); }} key={villager.id} id={villager.id} initialX={villager.x} initialY={villager.y} targetX={villager.targetX} targetY={villager.targetY} hp={villager.hp} maxHp={MAX_HP} task={villager.task} isSelected={villager.isSelected} onMoveEnd={(pos) => handleMoveEnd(villager.id, pos)} deathTime={villager.deathTime} onMouseEnter={() => { if(villagers.some(v => v.isSelected) && !villager.isSelected) handleMouseEnterEnemy(true); }} onMouseLeave={() => handleMouseEnterEnemy(false)} /> )}
-                        {placementMode?.active && placementMode.buildingType && (
+                        {placementMode?.active && placementMode.buildingType && previewPos && (
                             React.createElement(BuildingComponents[placementMode.buildingType], {
-                                x: getStagePointerPosition()?.x,
-                                y: getStagePointerPosition()?.y,
+                                x: previewPos.x,
+                                y: previewPos.y,
                                 opacity: 0.7,
                                 listening: false,
                             })
@@ -922,11 +961,13 @@ const TestMapPage = () => {
                             if (!building) return null;
                             return (
                                 <Group x={buildingPopup.x} y={buildingPopup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>
-                                    <Rect width={100} height={60} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
+                                    <Rect width={100} height={80} fill="#3c3836" stroke="#fbf1c7" strokeWidth={2} cornerRadius={5} />
                                     <Text text={`${buildingStats[building.type].name}`} x={10} y={8} fill="#fbf1c7" fontSize={12} fontStyle="bold" />
                                     <Text text={`HP: ${building.hp}/${building.maxHp}`} x={10} y={22} fill="#ebdbb2" fontSize={10} />
-                                    <Rect name="demolish-button" x={5} y={38} width={90} height={18} fill="#7c1e19" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
-                                    <Text text="Demolish" x={25} y={41} fill="#fbf1c7" fontSize={10} listening={false}/>
+                                    <Rect name="move-button" x={5} y={38} width={90} height={18} fill="#458588" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Move Building" x={15} y={41} fill="#fbf1c7" fontSize={10} listening={false}/>
+                                    <Rect name="demolish-button" x={5} y={58} width={90} height={18} fill="#7c1e19" cornerRadius={3} onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)} />
+                                    <Text text="Demolish" x={25} y={61} fill="#fbf1c7" fontSize={10} listening={false}/>
                                 </Group>
                             );
                          })()}

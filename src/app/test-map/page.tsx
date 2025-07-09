@@ -70,9 +70,8 @@ interface ConstructionSite {
     x: number;
     y: number;
     type: BuildingType;
-    progress: number; // 0-100
-    builderId: string | null;
-    startTime: number;
+    workApplied: number; // 0 to BUILD_TIME
+    builderIds: string[];
     cost: Partial<Resources>;
 }
 
@@ -161,8 +160,10 @@ const TestMapPage = () => {
     const [popup, setPopup] = useState<{ visible: boolean; x: number; y: number; villagerId: string; showBuildMenu: boolean; } | null>(null);
     const [buildingPopup, setBuildingPopup] = useState<{ visible: boolean; x: number; y: number; buildingId: string; } | null>(null);
     const [placementMode, setPlacementMode] = useState<{ active: boolean; initiatorId: string | null; buildingType: BuildingType | null } | null>(null);
+    const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; text: string } | null>(null);
 
     const stageRef = useRef<Konva.Stage>(null);
+    const lastTickRef = useRef<number>(Date.now());
     const villagerRefs = useRef<Map<string, Konva.Group>>(new Map());
 
     const BuildingComponents: Record<BuildingType, React.ForwardRefExoticComponent<Konva.GroupConfig & React.RefAttributes<Konva.Group>>> = {
@@ -219,9 +220,12 @@ const TestMapPage = () => {
         if (!isClient) return;
         
         const gameLoop = () => {
+             const now = Date.now();
+             const deltaTime = now - lastTickRef.current;
+             lastTickRef.current = now;
+
              // --- Combat and Death ---
              setVillagers(currentVillagers => {
-                const now = Date.now();
                 const damageMap = new Map<string, number>();
                 let villagersNeedUpdate = false;
 
@@ -321,30 +325,28 @@ const TestMapPage = () => {
 
              // --- Construction ---
             setConstructionSites(currentSites => {
+                let siteUpdated = false;
                 const newSites = currentSites.map(site => {
-                    if (site.builderId) {
-                        const builder = villagers.find(v => v.id === site.builderId);
-                        if (builder && builder.task === 'building') {
-                            const newProgress = site.progress + (100 / (BUILD_TIME / 16)); // ~60fps
-                            if (newProgress >= 100) {
-                                const stats = buildingStats[site.type];
-                                setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type, hp: stats.hp, maxHp: stats.hp }]);
-                                setVillagers(vs => vs.map(v => v.id === site.builderId ? { ...v, task: 'idle', targetId: null } : v));
-                                
-                                const endTime = Date.now();
-                                const timeTaken = ((endTime - site.startTime) / 1000).toFixed(1);
-                                const builderName = builder ? builder.name : 'A villager';
-                                const buildingName = buildingStats[site.type].name;
-                                addToLog(`${builderName} built a ${buildingName} at (${Math.round(site.x)}, ${Math.round(site.y)}) in ${timeTaken} seconds.`);
-                                return null;
-                            }
-                            return { ...site, progress: newProgress };
+                    if (site.builderIds.length > 0) {
+                        siteUpdated = true;
+                        const workThisTick = deltaTime * site.builderIds.length;
+                        const newWorkApplied = site.workApplied + workThisTick;
+
+                        if (newWorkApplied >= BUILD_TIME) {
+                            const stats = buildingStats[site.type];
+                            setBuildings(b => [...b, { id: `building-${site.id}`, x: site.x, y: site.y, type: site.type, hp: stats.hp, maxHp: stats.hp }]);
+                            setVillagers(vs => vs.map(v => site.builderIds.includes(v.id) ? { ...v, task: 'idle', targetId: null } : v));
+                            
+                            const builderNames = site.builderIds.map(id => villagers.find(v => v.id === id)?.name || 'A villager').join(', ');
+                            addToLog(`${builderNames} built a ${stats.name} at (${Math.round(site.x)}, ${Math.round(site.y)}).`);
+                            return null;
                         }
+                        return { ...site, workApplied: newWorkApplied };
                     }
                     return site;
                 }).filter(Boolean) as ConstructionSite[];
                 
-                if (newSites.length !== currentSites.length || newSites.some((s, i) => s.progress !== currentSites[i].progress)) {
+                if (siteUpdated) {
                     return newSites;
                 }
                 return currentSites;
@@ -414,22 +416,20 @@ const TestMapPage = () => {
         const selectedVillagers = villagers.filter(v => v.isSelected && v.task !== 'dead');
         if (selectedVillagers.length === 0) return;
 
-        // --- NEW LOGIC: Pause construction if moving a builder ---
-        const villagersToUpdate = [...villagers];
         let sitesToUpdate = [...constructionSites];
-        
         selectedVillagers.forEach(villager => {
-            if (villager.task === 'building' && villager.targetId) {
-                const siteIndex = sitesToUpdate.findIndex(s => s.id === villager.targetId);
+            const currentVillagerState = villagers.find(v => v.id === villager.id);
+            if (currentVillagerState?.task === 'building' && currentVillagerState.targetId) {
+                const siteIndex = sitesToUpdate.findIndex(s => s.id === currentVillagerState.targetId);
                 if (siteIndex !== -1) {
                     const site = sitesToUpdate[siteIndex];
-                    sitesToUpdate[siteIndex] = { ...site, builderId: null };
+                    const newBuilderIds = site.builderIds.filter(id => id !== villager.id);
+                    sitesToUpdate[siteIndex] = { ...site, builderIds: newBuilderIds };
                     addToLog(`${villager.name} stopped building the ${buildingStats[site.type].name}.`);
                 }
             }
         });
         setConstructionSites(sitesToUpdate);
-        // --- END NEW LOGIC ---
 
         setVillagers(currentVillagers =>
             currentVillagers.map(v => {
@@ -574,7 +574,7 @@ const TestMapPage = () => {
                 });
 
                 const siteId = `site-${Date.now()}`;
-                setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, progress: 0, builderId: null, startTime: Date.now(), cost }]);
+                setConstructionSites(cs => [...cs, { id: siteId, x: pos.x, y: pos.y, type: placementMode.buildingType!, workApplied: 0, builderIds: [], cost }]);
                 
                 // Auto-assign the initiator to build
                 if (placementMode.initiatorId) {
@@ -699,7 +699,13 @@ const TestMapPage = () => {
                     newTask = 'building';
                     const siteName = buildingStats[targetIsSite.type].name;
                     addToLog(`${v.name} has started building the ${siteName}.`);
-                    setConstructionSites(cs => cs.map(s => s.id === v.targetId ? { ...s, builderId: v.id, startTime: s.startTime || Date.now() } : s));
+                    setConstructionSites(cs => cs.map(s => {
+                        if (s.id === v.targetId) {
+                            const newBuilderIds = s.builderIds.includes(v.id) ? s.builderIds : [...s.builderIds, v.id];
+                            return { ...s, builderIds: newBuilderIds };
+                        }
+                        return s;
+                    }));
                 } else {
                      addToLog(`${v.name} has arrived at their destination.`);
                 }
@@ -729,6 +735,36 @@ const TestMapPage = () => {
     }, [villagers, population.capacity, addToLog]);
     
     const handleMouseEnterClickable = (isClickable: boolean) => setIsHoveringClickable(isClickable);
+
+    const handleMouseEnterSite = (e: Konva.KonvaEventObject<MouseEvent>) => {
+        const siteNode = getConstructionSiteNode(e.target);
+        if (!siteNode) return;
+        const site = constructionSites.find(s => s.id === siteNode.id());
+        if (!site) return;
+
+        const workRemaining = BUILD_TIME - site.workApplied;
+        const numBuilders = site.builderIds.length;
+        let timeRemainingText = "∞";
+
+        if (numBuilders > 0) {
+            const timeRemainingMs = workRemaining / numBuilders;
+            timeRemainingText = `${(timeRemainingMs / 1000).toFixed(1)}s`;
+        }
+        
+        const builderText = `Builders: ${numBuilders}`;
+        const buildingName = buildingStats[site.type].name;
+
+        setTooltip({
+            visible: true,
+            x: site.x,
+            y: site.y - 45,
+            text: `Building: ${buildingName}\n${builderText}\nTime Left: ${timeRemainingText}`
+        });
+    };
+
+    const handleMouseLeaveSite = () => {
+        setTooltip(null);
+    };
 
     const renderGrid = () => Array.from({ length: MAP_WIDTH_CELLS * MAP_HEIGHT_CELLS }).map((_, i) => ( <Rect key={i} x={(i % MAP_WIDTH_CELLS) * GRID_SIZE} y={Math.floor(i / MAP_WIDTH_CELLS) * GRID_SIZE} width={GRID_SIZE} height={GRID_SIZE} fill="#504945" stroke="#665c54" strokeWidth={1} listening={false} /> ));
 
@@ -805,10 +841,10 @@ const TestMapPage = () => {
                         {constructionSites.map(site => {
                             const BuildingComponent = BuildingComponents[site.type];
                             return (
-                                <Group key={site.id} id={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={() => handleMouseEnterClickable(true)} onMouseLeave={() => handleMouseEnterClickable(false)}>
+                                <Group key={site.id} id={site.id} x={site.x} y={site.y} name="construction-site" onMouseEnter={handleMouseEnterSite} onMouseLeave={handleMouseLeaveSite}>
                                     <BuildingComponent opacity={0.3} />
                                     <Rect x={-30} y={40} width={60} height={8} fill="#3c3836" />
-                                    <Rect x={-30} y={40} width={60 * (site.progress / 100)} height={8} fill="#98971a" />
+                                    <Rect x={-30} y={40} width={60 * (site.workApplied / BUILD_TIME)} height={8} fill="#98971a" />
                                 </Group>
                             );
                         })}
@@ -822,6 +858,33 @@ const TestMapPage = () => {
                             })
                         )}
                          <Rect x={Math.min(selectionBox.x1, selectionBox.x2)} y={Math.min(selectionBox.y1, selectionBox.y2)} width={Math.abs(selectionBox.x1 - selectionBox.x2)} height={Math.abs(selectionBox.y1 - selectionBox.y2)} fill="rgba(131, 165, 152, 0.3)" stroke="#83a598" strokeWidth={1 / stageScale} visible={selectionBox.visible} listening={false} />
+                         {tooltip?.visible && (
+                             <Group listening={false}>
+                                <Rect
+                                    x={tooltip.x}
+                                    y={tooltip.y}
+                                    width={150}
+                                    height={45}
+                                    fill="#3c3836"
+                                    stroke="#fbf1c7"
+                                    strokeWidth={1 / stageScale}
+                                    cornerRadius={4}
+                                    opacity={0.8}
+                                    offsetX={75}
+                                />
+                                <Text
+                                    x={tooltip.x}
+                                    y={tooltip.y}
+                                    text={tooltip.text}
+                                    fontSize={12}
+                                    fill="#fbf1c7"
+                                    padding={5}
+                                    offsetX={75}
+                                    width={150}
+                                    align="center"
+                                />
+                             </Group>
+                         )}
                          {popup?.visible && (
                             popup.showBuildMenu ? (
                                 <Group x={popup.x} y={popup.y} onClick={handleStageClick} onTap={handleStageClick} attrs={{ isPopup: true }}>

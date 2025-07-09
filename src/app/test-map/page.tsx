@@ -9,7 +9,7 @@ import Konva from 'konva';
 const GRID_SIZE = 30;
 const MAP_WIDTH_CELLS = 30;
 const MAP_HEIGHT_CELLS = 20;
-const UNIT_SPEED = 200; // pixels per second
+const UNIT_SPEED = 120; // pixels per second
 
 interface Building {
     id: number;
@@ -29,32 +29,48 @@ const TestMapPage = () => {
     const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
     const [panelPosition, setPanelPosition] = useState<{ x: number, y: number } | null>(null);
     const [isUnitSelected, setIsUnitSelected] = useState(false);
-    const [villagerImage, setVillagerImage] = useState<HTMLImageElement | null>(null);
-    
+    const [spriteSheet, setSpriteSheet] = useState<HTMLImageElement | null>(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0, width: 24, height: 24 });
+
     const stageRef = useRef<Konva.Stage>(null);
     const unitRef = useRef<Konva.Image>(null);
     const animationRef = useRef<Konva.Animation | null>(null);
 
+    // --- Sprite Sheet and Animation Data ---
+    const animations = {
+        idle: [{ x: 0, y: 0, width: 24, height: 24 }],
+        walk: [
+            { x: 24, y: 0, width: 24, height: 24 },
+            { x: 48, y: 0, width: 24, height: 24 },
+            { x: 72, y: 0, width: 24, height: 24 },
+            { x: 96, y: 0, width: 24, height: 24 },
+        ],
+    };
+
     useEffect(() => {
         setIsClient(true);
-        
-        // Create Villager Icon from SVG
-        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#83a598" width="24" height="24"><path d="M12 5.5a2.5 2.5 0 010 5 2.5 2.5 0 010-5zM12 15c-3.87 0-7 1.57-7 3.5V20h14v-1.5c0-1.93-3.13-3.5-7-3.5z"/></svg>`;
         const image = new window.Image();
-        image.src = `data:image/svg+xml;base64,${window.btoa(svgString)}`;
+        // TODO: Replace this placeholder with a real sprite sheet URL.
+        // The placeholder shows a 5x1 grid of colored squares for testing.
+        // The first square is idle, the next 4 are for walking.
+        image.src = 'https://placehold.co/120x24/1f2937/ebdbb2?text=';
         image.onload = () => {
-            setVillagerImage(image);
+            setSpriteSheet(image);
         };
-
     }, []);
 
     useEffect(() => {
-        if (!isClient || !unitRef.current) {
+        if (!isClient || !unitRef.current || !spriteSheet) {
             return;
         }
 
         const unitNode = unitRef.current;
         const layer = unitNode.getLayer();
+        
+        let currentAnimation = 'idle';
+        let frameIndex = 0;
+        let lastFrameTime = 0;
+        const frameRate = 150; // ms between frames
 
         if (animationRef.current) {
             animationRef.current.stop();
@@ -73,39 +89,55 @@ const TestMapPage = () => {
             const dy = targetY - currentY;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < 5) {
+            if (distance < 5) { // Close enough to target
                 unitNode.position({ x: targetX, y: targetY });
-                animationRef.current?.stop();
+                if (currentAnimation !== 'idle') {
+                    currentAnimation = 'idle';
+                    frameIndex = 0;
+                    unitNode.crop(animations.idle[0]);
+                    layer.batchDraw();
+                }
                 return;
             }
+            
+            // Start walking if not already
+            if (currentAnimation !== 'walk') {
+                currentAnimation = 'walk';
+            }
 
+            // Animate frames
+            if (frame.time - lastFrameTime > frameRate) {
+                frameIndex = (frameIndex + 1) % animations.walk.length;
+                lastFrameTime = frame.time;
+                const newCrop = animations.walk[frameIndex];
+                unitNode.crop(newCrop);
+            }
+
+            // Move position
             const moveDistance = UNIT_SPEED * (frame.timeDiff / 1000);
             const ratio = moveDistance / distance;
-            
             const newX = currentX + dx * ratio;
             const newY = currentY + dy * ratio;
-
             unitNode.position({ x: newX, y: newY });
+
         }, layer);
 
         animationRef.current.start();
 
         return () => animationRef.current?.stop();
-    }, [targetPosition, isClient]);
+    }, [targetPosition, isClient, spriteSheet]); // Rerun when target changes
 
     const handleCellClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
         if (e.target.hasName('grid-background')) {
-            setSelectedBuilding(null);
             const pos = e.target.getStage()?.getPointerPosition();
             if (pos && isUnitSelected) {
                  setTargetPosition({
                     x: Math.floor(pos.x / GRID_SIZE),
                     y: Math.floor(pos.y / GRID_SIZE),
                 });
-                setIsUnitSelected(false);
-            } else {
-                 setIsUnitSelected(false);
             }
+            setIsUnitSelected(false);
+            setSelectedBuilding(null);
         }
     };
     
@@ -182,6 +214,7 @@ const TestMapPage = () => {
                             width={MAP_WIDTH_CELLS * GRID_SIZE}
                             height={MAP_HEIGHT_CELLS * GRID_SIZE}
                             name="grid-background"
+                            listening={true}
                         />
                         {renderGrid()}
 
@@ -197,6 +230,21 @@ const TestMapPage = () => {
                                 strokeWidth={2}
                                 shadowBlur={10}
                                 shadowColor="black"
+                                draggable
+                                onDragEnd={(e) => {
+                                    const newX = Math.round(e.target.x() / GRID_SIZE);
+                                    const newY = Math.round(e.target.y() / GRID_SIZE);
+                                    e.target.position({ x: newX * GRID_SIZE, y: newY * GRID_SIZE });
+                                    setBuildings(prev => prev.map(b => b.id === building.id ? {...b, x: newX, y: newY} : b));
+                                }}
+                                onMouseEnter={e => {
+                                    const stage = e.target.getStage();
+                                    if (stage) stage.container().style.cursor = 'grab';
+                                }}
+                                onMouseLeave={e => {
+                                    const stage = e.target.getStage();
+                                    if (stage) stage.container().style.cursor = 'default';
+                                }}
                                 onClick={(e) => handleBuildingClick(building, e)}
                                 onTap={(e) => handleBuildingClick(building, e)}
                                 listening={true}
@@ -205,13 +253,14 @@ const TestMapPage = () => {
                         
                         <Image
                             ref={unitRef}
-                            image={villagerImage}
+                            image={spriteSheet}
+                            crop={crop}
                             x={5 * GRID_SIZE + GRID_SIZE / 2}
                             y={5 * GRID_SIZE + GRID_SIZE / 2}
-                            width={iconSize}
-                            height={iconSize}
-                            offsetX={iconSize / 2}
-                            offsetY={iconSize / 2}
+                            width={24}
+                            height={24}
+                            offsetX={12}
+                            offsetY={12}
                             stroke={isUnitSelected ? '#d79921' : undefined}
                             strokeWidth={isUnitSelected ? 2 : 0}
                             shadowColor={isUnitSelected ? '#d79921' : '#458588'}

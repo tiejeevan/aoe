@@ -28,7 +28,7 @@ interface Villager {
 
 const getVillagerNode = (node: Konva.Node | null): Konva.Group | null => {
     if (!node) return null;
-    if (node.hasName('villager') && node instanceof Konva.Group) {
+    if (node.name() === 'villager' && node instanceof Konva.Group) {
         return node;
     }
     if (node.getParent()) {
@@ -224,62 +224,57 @@ const TestMapPage = () => {
     };
 
     const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (e.evt.button === 2) return; 
+        if (e.evt.button !== 0 || isSpacebarPressed) return;
+        
         const pos = getStagePointerPosition();
         if (!pos) return;
-        
-        const clickedVillagerNode = getVillagerNode(e.target);
-
-        if (clickedVillagerNode) {
-            const clickedId = clickedVillagerNode.id();
-            const isShiftPressed = e.evt.shiftKey;
-            
-             setVillagers(v => v.map(villager => ({
-                ...villager,
-                isSelected: isShiftPressed 
-                    ? (villager.id === clickedId ? !villager.isSelected : villager.isSelected) 
-                    : villager.id === clickedId
-            })));
-            
-            // Prevent starting a selection box
-            setSelectionBox({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
-            setMouseDownPos(null);
-            return;
-        }
 
         setMouseDownPos(pos);
         setSelectionBox({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, visible: true });
     };
 
     const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (!selectionBox.visible || !mouseDownPos) return;
+        if (!mouseDownPos) return;
+        
         const pos = getStagePointerPosition();
         if (!pos) return;
         setSelectionBox(prev => ({ ...prev, x2: pos.x, y2: pos.y }));
     };
 
     const handleMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
-        if (mouseDownPos) {
-            const { x1: selX1, y1: selY1, x2: selX2, y2: selY2 } = selectionBox;
+        if (e.evt.button !== 0 || !mouseDownPos) return;
+
+        const { x1: selX1, y1: selY1, x2: selX2, y2: selY2 } = selectionBox;
+        const dragDistance = Math.sqrt(Math.pow(selX2 - selX1, 2) + Math.pow(selY2 - selY1, 2));
+
+        const isShiftPressed = e.evt.shiftKey;
+
+        // Handle Click (short drag)
+        if (dragDistance < 5) {
+            const clickedVillagerNode = getVillagerNode(e.target);
+            const clickedId = clickedVillagerNode?.id();
+
+            setVillagers(v => v.map(villager => {
+                 if (isShiftPressed) {
+                     return villager.id === clickedId ? { ...villager, isSelected: !villager.isSelected } : villager;
+                 }
+                 return { ...villager, isSelected: villager.id === clickedId };
+            }));
+
+        } else { // Handle Drag
             const x1 = Math.min(selX1, selX2);
             const y1 = Math.min(selY1, selY2);
             const x2 = Math.max(selX1, selX2);
             const y2 = Math.max(selY1, selY2);
-            
-            const dragDistance = Math.sqrt(Math.pow(selX2 - selX1, 2) + Math.pow(selY2 - selY1, 2));
 
-            if (dragDistance < 5) { 
-                setVillagers(v => v.map(villager => ({ ...villager, isSelected: false })));
-            } else { 
-                setVillagers(currentVillagers => 
-                    currentVillagers.map(v => ({
-                        ...v,
-                        isSelected: v.task !== 'dead' && v.x > x1 && v.x < x2 && v.y > y1 && v.y < y2
-                    }))
-                );
-            }
+            setVillagers(currentVillagers => 
+                currentVillagers.map(v => {
+                    const isWithinBox = v.task !== 'dead' && v.x > x1 && v.x < x2 && v.y > y1 && v.y < y2;
+                    return { ...v, isSelected: isShiftPressed ? (isWithinBox || v.isSelected) : isWithinBox };
+                })
+            );
         }
-        
+
         setMouseDownPos(null);
         setSelectionBox({ x1: 0, y1: 0, x2: 0, y2: 0, visible: false });
     };
@@ -383,5 +378,3 @@ const TestMapPage = () => {
 };
 
 export default TestMapPage;
-
-    

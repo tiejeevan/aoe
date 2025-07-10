@@ -1,4 +1,5 @@
 
+
 export enum GameStatus {
     MENU,
     LOADING,
@@ -24,6 +25,7 @@ export interface Villager {
     id: string;
     name: string;
     currentTask: string | null; // null if idle, otherwise the ID of the GameTask
+    carrying?: { type: string; amount: number };
 }
 
 export type MilitaryUnitType = 'swordsman' | 'archer' | 'knight' | 'catapult' | string;

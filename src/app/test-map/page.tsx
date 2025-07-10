@@ -519,82 +519,71 @@ const TestMapPage = () => {
         const selectedVillagers = villagers.filter(v => v.isSelected && v.task !== 'dead');
         if (selectedVillagers.length === 0) return;
 
-        let sitesToUpdate = [...constructionSites];
-        selectedVillagers.forEach(villager => {
-            const currentVillagerState = villagers.find(v => v.id === villager.id);
-            if (currentVillagerState?.task === 'building' && currentVillagerState.targetId) {
-                const siteIndex = sitesToUpdate.findIndex(s => s.id === currentVillagerState.targetId);
-                if (siteIndex !== -1) {
-                    const site = sitesToUpdate[siteIndex];
-                    const newBuilderIds = site.builderIds.filter(id => id !== villager.id);
-                    sitesToUpdate[siteIndex] = { ...site, builderIds: newBuilderIds };
-                    addToLog(`${villager.name} stopped building the ${buildingStats[site.type].name}.`);
-                }
+        let logMessage = "";
+        let targetDescription = "";
+
+        const handleVillagerCommand = (v: Villager) => {
+            // Drop any carried resources if interrupted
+            if (v.carrying && v.carrying.amount > 0) {
+                logMessage += `${v.name} dropped ${v.carrying.amount} ${v.carrying.type}. `;
+                v.carrying = undefined;
             }
-        });
-        setConstructionSites(sitesToUpdate);
+
+            if (targetMine) {
+                targetDescription = "the Gold Mine";
+                const dx = targetMine.x - v.x;
+                const dy = targetMine.y - v.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const standoff = 40;
+                const ratio = distance > standoff ? (distance - standoff) / distance : 0;
+                return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetMine.id };
+            } else if (targetSite) {
+                const siteName = buildingStats[targetSite.type].name;
+                targetDescription = `the ${siteName} construction site`;
+                const dx = targetSite.x - v.x;
+                const dy = targetSite.y - v.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const standoff = 30;
+                const ratio = distance > standoff ? (distance - standoff) / distance : 0;
+                return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetSite.id };
+            } else if (targetVillager && targetVillager.id !== v.id) {
+                targetDescription = targetVillager.name;
+                const dx = targetVillager.x - v.x;
+                const dy = targetVillager.y - v.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const ratio = distance > ATTACK_DISTANCE ? (distance - ATTACK_DISTANCE) / distance : 0;
+                return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetVillager.id };
+            } else if (targetBuilding) {
+                targetDescription = `the ${buildingStats[targetBuilding.type].name}`;
+                const dx = targetBuilding.x - v.x;
+                const dy = targetBuilding.y - v.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const ratio = distance > ATTACK_DISTANCE ? (distance - ATTACK_DISTANCE) / distance : 0;
+                return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetBuilding.id };
+            } else {
+                targetDescription = `position (${Math.round(pointerPos.x)}, ${Math.round(pointerPos.y)})`;
+                return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
+            }
+        };
 
         setVillagers(currentVillagers =>
-            currentVillagers.map(v => {
-                if (v.isSelected && v.task !== 'dead') {
-                    setPopup(null);
-                    setBuildingPopup(null);
-                    if (targetMine) {
-                        addToLog(`${v.name} is on the way to the Gold Mine.`);
-                        const dx = targetMine.x - v.x;
-                        const dy = targetMine.y - v.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        const standoff = 40;
-                        const ratio = distance > standoff ? (distance - standoff) / distance : 0;
-                        const targetX = v.x + dx * ratio;
-                        const targetY = v.y + dy * ratio;
-                        return { ...v, task: 'moving', targetX, targetY, targetId: targetMine.id };
-                    } else if (targetSite) {
-                         const siteName = buildingStats[targetSite.type].name;
-                         addToLog(`${v.name} is going to construct the ${siteName}.`);
-                         const dx = targetSite.x - v.x;
-                         const dy = targetSite.y - v.y;
-                         const distance = Math.sqrt(dx * dx + dy * dy);
-                         const standoff = 30;
-                         const ratio = distance > standoff ? (distance - standoff) / distance : 0;
-                         const targetX = v.x + dx * ratio;
-                         const targetY = v.y + dy * ratio;
-                         return { ...v, task: 'moving', targetX, targetY, targetId: targetSite.id };
-                    } else if (targetVillager && targetVillager.id !== v.id) {
-                        addToLog(`${v.name} is attacking ${targetVillager.name}!`);
-                        const dx = targetVillager.x - v.x;
-                        const dy = targetVillager.y - v.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        let finalTargetX = targetVillager.x;
-                        let finalTargetY = targetVillager.y;
-                        if (distance > ATTACK_DISTANCE) {
-                            const ratio = (distance - ATTACK_DISTANCE) / distance;
-                            finalTargetX = v.x + dx * ratio;
-                            finalTargetY = v.y + dy * ratio;
-                        }
-                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetVillager.id };
-                    } else if (targetBuilding) {
-                        const buildingName = buildingStats[targetBuilding.type].name;
-                        addToLog(`${v.name} is attacking the ${buildingName}!`);
-                        const dx = targetBuilding.x - v.x;
-                        const dy = targetBuilding.y - v.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        let finalTargetX = targetBuilding.x;
-                        let finalTargetY = targetBuilding.y;
-                        if (distance > ATTACK_DISTANCE) {
-                            const ratio = (distance - ATTACK_DISTANCE) / distance;
-                            finalTargetX = v.x + dx * ratio;
-                            finalTargetY = v.y + dy * ratio;
-                        }
-                        return { ...v, task: 'moving', targetX: finalTargetX, targetY: finalTargetY, targetId: targetBuilding.id };
-                    } else {
-                        addToLog(`${v.name} is moving to (${Math.round(pointerPos.x)}, ${Math.round(pointerPos.y)}).`);
-                        return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
-                    }
-                }
-                return v;
-            })
+            currentVillagers.map(v => v.isSelected && v.task !== 'dead' ? handleVillagerCommand(v) : v)
         );
+
+        if (targetDescription) {
+            if (selectedVillagers.length > 1) {
+                logMessage += `${selectedVillagers.length} villagers are moving to ${targetDescription}.`;
+            } else if (selectedVillagers.length === 1) {
+                logMessage += `${selectedVillagers[0].name} is moving to ${targetDescription}.`;
+            }
+        }
+
+        if (logMessage) {
+            addToLog(logMessage.trim());
+        }
+
+        setPopup(null);
+        setBuildingPopup(null);
     };
 
     const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -838,7 +827,7 @@ const TestMapPage = () => {
     const handleMoveEnd = useCallback((villagerId: string, newPosition: {x: number, y: number}) => {
         setVillagers(currentVillagers => 
             currentVillagers.map(v => {
-                if (v.id !== villagerId) return { ...v, x: v.x, y: v.y };
+                if (v.id !== villagerId) return v;
 
                 let newVillagerState = { ...v, x: newPosition.x, y: newPosition.y };
                 

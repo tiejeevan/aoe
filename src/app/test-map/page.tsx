@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -519,18 +520,14 @@ const TestMapPage = () => {
         const selectedVillagers = villagers.filter(v => v.isSelected && v.task !== 'dead');
         if (selectedVillagers.length === 0) return;
 
-        let logMessage = "";
-        let targetDescription = "";
-
         const handleVillagerCommand = (v: Villager) => {
             // Drop any carried resources if interrupted
             if (v.carrying && v.carrying.amount > 0) {
-                logMessage += `${v.name} dropped ${v.carrying.amount} ${v.carrying.type}. `;
+                addToLog(`${v.name} dropped ${v.carrying.amount} ${v.carrying.type}.`);
                 v.carrying = undefined;
             }
 
             if (targetMine) {
-                targetDescription = "the Gold Mine";
                 const dx = targetMine.x - v.x;
                 const dy = targetMine.y - v.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
@@ -538,8 +535,6 @@ const TestMapPage = () => {
                 const ratio = distance > standoff ? (distance - standoff) / distance : 0;
                 return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetMine.id };
             } else if (targetSite) {
-                const siteName = buildingStats[targetSite.type].name;
-                targetDescription = `the ${siteName} construction site`;
                 const dx = targetSite.x - v.x;
                 const dy = targetSite.y - v.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
@@ -547,40 +542,39 @@ const TestMapPage = () => {
                 const ratio = distance > standoff ? (distance - standoff) / distance : 0;
                 return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetSite.id };
             } else if (targetVillager && targetVillager.id !== v.id) {
-                targetDescription = targetVillager.name;
                 const dx = targetVillager.x - v.x;
                 const dy = targetVillager.y - v.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 const ratio = distance > ATTACK_DISTANCE ? (distance - ATTACK_DISTANCE) / distance : 0;
                 return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetVillager.id };
             } else if (targetBuilding) {
-                targetDescription = `the ${buildingStats[targetBuilding.type].name}`;
                 const dx = targetBuilding.x - v.x;
                 const dy = targetBuilding.y - v.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 const ratio = distance > ATTACK_DISTANCE ? (distance - ATTACK_DISTANCE) / distance : 0;
                 return { ...v, task: 'moving', targetX: v.x + dx * ratio, targetY: v.y + dy * ratio, targetId: targetBuilding.id };
             } else {
-                targetDescription = `position (${Math.round(pointerPos.x)}, ${Math.round(pointerPos.y)})`;
                 return { ...v, task: 'moving', targetX: pointerPos.x, targetY: pointerPos.y, targetId: null };
             }
         };
 
+        const firstSelected = selectedVillagers[0];
+        let targetDescription = "";
+        if (targetMine) targetDescription = "the Gold Mine";
+        else if (targetSite) targetDescription = `the ${buildingStats[targetSite.type].name} construction site`;
+        else if (targetVillager && targetVillager.id !== firstSelected.id) targetDescription = targetVillager.name;
+        else if (targetBuilding) targetDescription = `the ${buildingStats[targetBuilding.type].name}`;
+        else targetDescription = `position (${Math.round(pointerPos.x)}, ${Math.round(pointerPos.y)})`;
+
+        if (selectedVillagers.length > 1) {
+            addToLog(`${selectedVillagers.length} villagers are moving to ${targetDescription}.`);
+        } else {
+            addToLog(`${firstSelected.name} is moving to ${targetDescription}.`);
+        }
+
         setVillagers(currentVillagers =>
             currentVillagers.map(v => v.isSelected && v.task !== 'dead' ? handleVillagerCommand(v) : v)
         );
-
-        if (targetDescription) {
-            if (selectedVillagers.length > 1) {
-                logMessage += `${selectedVillagers.length} villagers are moving to ${targetDescription}.`;
-            } else if (selectedVillagers.length === 1) {
-                logMessage += `${selectedVillagers[0].name} is moving to ${targetDescription}.`;
-            }
-        }
-
-        if (logMessage) {
-            addToLog(logMessage.trim());
-        }
 
         setPopup(null);
         setBuildingPopup(null);
@@ -1159,7 +1153,10 @@ const TestMapPage = () => {
                     </Layer>
                 </Stage>
             </div>
-            <Link href="/" className="sci-fi-button mt-6">Return to Main Menu</Link>
+            <div className="flex items-center gap-4">
+                <Link href="/" className="sci-fi-button mt-6">Return to Main Menu</Link>
+                <Link href="/admin-test-map" className="sci-fi-button mt-6">Admin</Link>
+            </div>
         </div>
     );
 };

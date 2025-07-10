@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, useTransition } from 'react';
 import Link from 'next/link';
 import { Stage, Layer } from 'react-konva';
 import Konva from 'konva';
@@ -58,6 +58,8 @@ const AdminTestMapPage = () => {
     const [buildingName, setBuildingName] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [log, setLog] = useState<string[]>([]);
+    const [isPending, startTransition] = useTransition();
+
 
     useEffect(() => {
         setIsClient(true);
@@ -68,11 +70,15 @@ const AdminTestMapPage = () => {
         setJsonInput(newJson);
         try {
             const parsed = JSON.parse(newJson);
-            setScene(parsed);
+            startTransition(() => {
+                setScene(parsed);
+            });
             setError(null);
         } catch (err) {
             setError("Invalid JSON format.");
-            setScene(null);
+            startTransition(() => {
+                setScene(null);
+            });
         }
     };
 

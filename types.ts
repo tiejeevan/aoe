@@ -293,7 +293,6 @@ export interface BuildingConfig {
     attack?: number;
     attackRate?: number; // attacks per second
     attackRange?: number;
-axle...
     visionRange?: number;
     maintenanceCost?: BuildingCosts;
     researchCost?: BuildingCosts;

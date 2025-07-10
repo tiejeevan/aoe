@@ -1,6 +1,9 @@
-import type { BuildingInstance, BuildingType, BuildingUpgradePath, Resources, Buildings, GameTask, Population, BuildingConfig, UnitConfig, ActiveBuffs, ResearchConfig } from './types';
+import type { BuildingInstance, BuildingType, BuildingUpgradePath, Resources, Buildings, GameTask, Population, BuildingConfig, UnitConfig, ActiveBuffs, ResearchConfig, Villager, MilitaryUnit } from './types';
 
-// Action Payloads
+// ==================================
+// ======== BUILDING ACTIONS ========
+// ==================================
+
 type DemolishPayload = {
   buildingId: string;
   buildingType: BuildingType | string;
@@ -26,8 +29,6 @@ type StartResearchPayload = {
 
 type AdvanceAgePayload = {};
 
-
-// Discriminated Union for all building actions
 export type BuildingAction =
   | { type: 'DEMOLISH'; payload: DemolishPayload }
   | { type: 'TRAIN_UNIT'; payload: TrainUnitPayload }
@@ -36,8 +37,6 @@ export type BuildingAction =
   | { type: 'START_RESEARCH'; payload: StartResearchPayload }
   | { type: 'ADVANCE_AGE'; payload: AdvanceAgePayload };
 
-
-// Context for the Building Service
 export interface BuildingServiceContext {
     action: BuildingAction;
     resources: Resources;
@@ -49,5 +48,45 @@ export interface BuildingServiceContext {
     completedResearch: string[];
     unlimitedResources: boolean;
     activeBuffs: ActiveBuffs;
-    masterResearchList?: ResearchConfig[]; // Optional, but useful for some actions
+    masterResearchList?: ResearchConfig[];
+}
+
+
+// ==================================
+// ========== UNIT ACTIONS ==========
+// ==================================
+
+type MovePayload = {
+    unitIds: string[];
+    targetPosition: { x: number, y: number };
+};
+
+type GatherPayload = {
+    villagerIds: string[];
+    resourceNodeId: string;
+};
+
+type BuildPayload = {
+    villagerId: string;
+    buildingType: BuildingType | string;
+};
+
+type AttackPayload = {
+    attackerIds: string[];
+    targetId: string; // Could be a unit or building ID
+};
+
+export type UnitAction = 
+    | { type: 'MOVE', payload: MovePayload }
+    | { type: 'GATHER', payload: GatherPayload }
+    | { type: 'BUILD', payload: BuildPayload }
+    | { type: 'ATTACK', payload: AttackPayload };
+
+export interface UnitServiceContext {
+    action: UnitAction;
+    units: { villagers: Villager[]; military: MilitaryUnit[] };
+    buildings: Buildings;
+    resourceNodes: ResourceNode[];
+    buildingList: BuildingConfig[];
+    unlimitedResources: boolean;
 }

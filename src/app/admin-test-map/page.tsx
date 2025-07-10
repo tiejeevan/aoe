@@ -1,47 +1,127 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import Link from 'next/link';
 import { Stage, Layer } from 'react-konva';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import * as Babel from '@babel/standalone';
 
-// Import the new custom component directly
-import CustomBuilding1 from '../../../components/test/CustomBuilding1';
+const HumanWithHair = `
+import React from 'react';
+import { Stage, Layer, Circle, Rect, Line, Group } from 'react-konva';
+
+const HumanWithHair = () => {
+  return (
+    <Stage width={400} height={400}>
+      <Layer>
+        {/* Body */}
+        <Line
+          points={[200, 150, 200, 250]} // torso
+          stroke="black"
+          strokeWidth={4}
+        />
+
+        {/* Arms */}
+        <Line
+          points={[150, 180, 200, 170, 250, 180]} // arms outstretched
+          stroke="black"
+          strokeWidth={4}
+        />
+
+        {/* Legs */}
+        <Line
+          points={[200, 250, 170, 320]} // left leg
+          stroke="black"
+          strokeWidth={4}
+        />
+        <Line
+          points={[200, 250, 230, 320]} // right leg
+          stroke="black"
+          strokeWidth={4}
+        />
+
+        {/* Head */}
+        <Circle
+          x={200}
+          y={120}
+          radius={30}
+          fill="#ffcc99"
+          stroke="black"
+          strokeWidth={2}
+        />
+
+        {/* Hair */}
+        <Group>
+          <Line
+            points={[170, 100, 230, 100, 220, 110, 180, 110]}
+            fill="brown"
+            closed
+          />
+          <Line
+            points={[175, 95, 225, 95, 220, 100, 180, 100]}
+            fill="darkbrown"
+            closed
+          />
+        </Group>
+      </Layer>
+    </Stage>
+  );
+};
+
+export default HumanWithHair;
+`;
 
 const AdminTestMapPage = () => {
-    const [isClient, setIsClient] = useState(false);
-    const [buildingName, setBuildingName] = useState('My Stick Figure');
+    const [jsxCode, setJsxCode] = useState(HumanWithHair.trim());
+    const [component, setComponent] = useState<React.ComponentType | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [log, setLog] = useState<string[]>([]);
-
 
     useEffect(() => {
-        setIsClient(true);
-    }, []);
+        try {
+            const transformedCode = Babel.transform(jsxCode, {
+                presets: ['react'],
+                plugins: ['transform-modules-commonjs']
+            }).code;
 
-    const handleSaveBuilding = () => {
-        if (!buildingName.trim()) {
-            setError("Building name cannot be empty.");
-            return;
+            if (!transformedCode) {
+                setError("Babel transformation resulted in empty code.");
+                return;
+            }
+
+            const exports: { default?: React.ComponentType } = {};
+            const require = (name: string) => {
+                if (name === 'react') return React;
+                if (name === 'react-konva') return require('react-konva');
+                throw new Error(`Cannot find module '${name}'`);
+            };
+
+            // eslint-disable-next-line no-new-func
+            const func = new Function('exports', 'require', transformedCode);
+            func(exports, require);
+            
+            if (exports.default && typeof exports.default === 'function') {
+                setComponent(() => exports.default!);
+                setError(null);
+            } else {
+                setError("The code does not have a default export of a component.");
+            }
+
+        } catch (err) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError("An unknown error occurred during compilation.");
+            }
+            setComponent(null);
         }
+    }, [jsxCode]);
+    
 
-        // In a real app, this would save to a database or state management solution.
-        // For now, we'll just log it to demonstrate the concept.
-        console.log("Saving building:", {
-            name: buildingName,
-            component: 'CustomBuilding1', // We would save the component identifier
-        });
-
-        const newLogMessage = `Saved building "${buildingName}" successfully.`;
-        setLog(prev => [newLogMessage, ...prev.slice(0, 9)]);
-        setError(null);
-    };
-
-    const stageSize = 300;
+    const stageSize = 400;
 
     return (
         <div className="min-h-screen bg-stone-dark text-parchment-light p-4 sm:p-8">
@@ -55,21 +135,14 @@ const AdminTestMapPage = () => {
                     {/* Left Panel: Inputs */}
                     <div className="flex flex-col gap-4">
                         <div>
-                            <Label htmlFor="building-name" className="text-lg font-serif text-brand-gold">Building Name</Label>
-                            <Input 
-                                id="building-name" 
-                                type="text" 
-                                value={buildingName} 
-                                onChange={(e) => setBuildingName(e.target.value)} 
-                                placeholder="e.g., Grand Library" 
-                                className="sci-fi-input mt-1"
+                            <Label htmlFor="jsx-code" className="text-lg font-serif text-brand-gold">Paste Component JSX</Label>
+                            <Textarea 
+                                id="jsx-code" 
+                                value={jsxCode} 
+                                onChange={(e) => setJsxCode(e.target.value)}
+                                className="sci-fi-input mt-1 font-mono !text-xs h-[60vh]"
                             />
                         </div>
-                         <div>
-                            <Label className="text-lg font-serif text-brand-gold">Component File</Label>
-                            <p className="text-parchment-dark">Currently previewing: <code className="font-mono bg-black/30 p-1 rounded">components/test/CustomBuilding1.tsx</code></p>
-                            <p className="text-xs text-stone-light mt-1">To change this, ask the AI to create or modify a component file.</p>
-                         </div>
                     </div>
                     
                     {/* Right Panel: Preview and Actions */}
@@ -77,27 +150,14 @@ const AdminTestMapPage = () => {
                          <div>
                             <Label className="text-lg font-serif text-brand-gold">Live Preview</Label>
                             <div className="w-full aspect-square bg-black/30 rounded-lg border-2 border-stone-light mt-1 flex items-center justify-center">
-                               {isClient && (
-                                    <Stage width={stageSize} height={stageSize}>
-                                        <Layer>
-                                            <CustomBuilding1 x={stageSize / 2} y={stageSize / 2 - 50} />
-                                        </Layer>
-                                    </Stage>
-                               )}
-                            </div>
-                         </div>
-                         {error && (
-                             <Alert variant="destructive">
-                                <AlertTitle>Error</AlertTitle>
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                         )}
-                         <Button onClick={handleSaveBuilding} className="sci-fi-button !text-lg w-full">Save Building Design</Button>
-
-                         <div className="bg-black/20 p-2 rounded-md mt-4">
-                            <h3 className="font-bold border-b mb-1">Log</h3>
-                             <div className="h-32 overflow-y-auto text-sm font-mono space-y-1">
-                                {log.length > 0 ? log.map((msg, i) => <p key={i}>{msg}</p>) : <p className="italic text-stone-light">No actions yet.</p>}
+                               {error ? (
+                                    <div className="p-4 text-brand-red">
+                                        <h3 className="font-bold">Compilation Error:</h3>
+                                        <pre className="text-xs whitespace-pre-wrap">{error}</pre>
+                                    </div>
+                                ) : (
+                                    component && React.createElement(component)
+                                )}
                             </div>
                          </div>
                     </div>

@@ -1,10 +1,11 @@
-
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath, ResourceConfig, ResearchConfig } from '../../types';
+import type { BuildingAction } from '../../types/actions';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '../../services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig, getAllResourceConfigs, saveResourceConfig, getAllResearchConfigs, saveResearchConfig } from '../../services/dbService';
+import { handleBuildingAction } from '../../services/buildingService';
 import { getRandomNames } from '../../services/nameService';
 import { GAME_ITEMS } from '../../data/itemContent';
 import { INITIAL_AGES } from '../../data/ageInfo';
@@ -118,6 +119,87 @@ const GamePage: React.FC = () => {
             buildingInfo.canResearch && (buildings[buildingInfo.id]?.length || 0) > 0
         );
     }, [buildings, masterBuildingList]);
+
+    const addNotification = useCallback((message: string) => {
+        const id = `${Date.now()}-${Math.random()}`;
+        setNotifications(prev => [{ id, message }]);
+    }, []);
+
+    const addToLog = useCallback((message: string, icon: LogIconType) => {
+        setGameLog(prev => [{ id: `${Date.now()}-${Math.random()}`, message, icon }, ...prev.slice(0, 19)]);
+    }, []);
+    
+    const updateResources = useCallback((deltas: ResourceDeltas) => {
+        setResources(prev => {
+            const newResources = { ...prev };
+            for (const key in deltas) {
+                const resourceKey = key as keyof Resources;
+                newResources[resourceKey] = Math.max(0, (newResources[resourceKey] || 0) + (deltas[resourceKey] ?? 0));
+            }
+            return newResources;
+        });
+
+        setResourceDeltas(prev => ({...prev, ...deltas}));
+
+        for (const key in deltas) {
+            const resourceKey = key as keyof Resources;
+            if (deltaTimeoutRef.current[resourceKey]) {
+                window.clearTimeout(deltaTimeoutRef.current[resourceKey]);
+            }
+            deltaTimeoutRef.current[resourceKey] = window.setTimeout(() => {
+                setResourceDeltas(prev => {
+                    const newDeltas = {...prev};
+                    delete newDeltas[resourceKey];
+                    return newDeltas;
+                });
+            }, 1500);
+        }
+    }, []);
+
+    const dispatchBuildingAction = useCallback((action: BuildingAction) => {
+        const result = handleBuildingAction({
+            action,
+            resources,
+            buildings,
+            activeTasks,
+            population,
+            buildingList: masterBuildingList,
+            unitList: masterUnitList,
+            completedResearch,
+            unlimitedResources,
+            activeBuffs,
+        });
+
+        if (result.error) {
+            addNotification(result.error);
+            return;
+        }
+
+        if (result.resourceDeltas) {
+            updateResources(result.resourceDeltas);
+        }
+        if (result.newBuildings) {
+            setBuildings(result.newBuildings);
+        }
+        if (result.newTasks) {
+            setActiveTasks(prev => [...prev, ...result.newTasks!]);
+        }
+        if (result.updatedActiveBuffs) {
+            setActiveBuffs(result.updatedActiveBuffs);
+        }
+        if (result.log) {
+            addToLog(result.log.message, result.log.icon);
+        }
+        if (result.activityStatus) {
+            setActivityStatus(result.activityStatus);
+        }
+        
+        // Close relevant panels after a successful action
+        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
+        setResearchPanelState({ isOpen: false, anchorRect: null });
+
+    }, [resources, buildings, activeTasks, population, masterBuildingList, masterUnitList, completedResearch, unlimitedResources, activeBuffs, addNotification, updateResources, addToLog]);
+
 
     const fetchResources = useCallback(async () => {
         let allItems = await getAllResourceConfigs();
@@ -289,46 +371,10 @@ const GamePage: React.FC = () => {
         }
     }, [civilization, resources, units, buildings, currentAge, gameLog, gameState, currentSaveName, activeTasks, resourceNodes, inventory, activeBuffs, completedResearch]);
 
-    const addNotification = useCallback((message: string) => {
-        const id = `${Date.now()}-${Math.random()}`;
-        setNotifications(prev => [{ id, message }]);
-    }, []);
-
     const removeNotification = useCallback((id: string) => {
         setNotifications(prev => prev.filter(n => n.id !== id));
     }, []);
     
-    const addToLog = useCallback((message: string, icon: LogIconType) => {
-        setGameLog(prev => [{ id: `${Date.now()}-${Math.random()}`, message, icon }, ...prev.slice(0, 19)]);
-    }, []);
-    
-    const updateResources = useCallback((deltas: ResourceDeltas) => {
-        setResources(prev => {
-            const newResources = { ...prev };
-            for (const key in deltas) {
-                const resourceKey = key as keyof Resources;
-                newResources[resourceKey] = Math.max(0, (newResources[resourceKey] || 0) + (deltas[resourceKey] ?? 0));
-            }
-            return newResources;
-        });
-
-        setResourceDeltas(prev => ({...prev, ...deltas}));
-
-        for (const key in deltas) {
-            const resourceKey = key as keyof Resources;
-            if (deltaTimeoutRef.current[resourceKey]) {
-                window.clearTimeout(deltaTimeoutRef.current[resourceKey]);
-            }
-            deltaTimeoutRef.current[resourceKey] = window.setTimeout(() => {
-                setResourceDeltas(prev => {
-                    const newDeltas = {...prev};
-                    delete newDeltas[resourceKey];
-                    return newDeltas;
-                });
-            }, 1500);
-        }
-    }, []);
-
     const handleTaskCompletion = useCallback((task: GameTask) => {
         if (task.payload?.villagerIds && task.payload.villagerIds.length > 0) {
             setUnits(prev => ({ ...prev, villagers: prev.villagers.map(v => task.payload!.villagerIds!.includes(v.id) ? { ...v, currentTask: null } : v) }));
@@ -780,119 +826,9 @@ const GamePage: React.FC = () => {
 
     const handleCancelPlayerAction = () => { setPlayerAction(null); setActivityStatus('Command cancelled.'); };
 
-    const handleDemolishBuilding = (type: BuildingType | string, id: string) => {
-        if (type === 'townCenter') { addNotification("The Town Center is the heart of your civilization and cannot be demolished."); return; }
-        if (activeTasks.some(task => (task.payload?.buildingId === id) || (task.type === 'upgrade_building' && task.payload?.originalBuildingId === id))) { addNotification("Cannot demolish a building with an active task (e.g., training or upgrading)."); return; }
-        const buildingInfo = buildingList.find(b => b.id === type);
-        const buildingInstance = buildings[type as string].find(b => b.id === id);
-        if (!buildingInfo || !buildingInstance) return;
-        
-        const capacityLost = buildingInfo.populationCapacity || 0;
-        if (capacityLost > 0 && population.current > populationCapacity - capacityLost) {
-             addNotification("Cannot demolish this building, your people would be homeless."); return;
-        }
-
-        const refund = Object.entries(buildingInfo.cost).reduce((acc, [res, cost]) => { const amount = Math.floor((cost || 0) * 0.5); if (amount > 0) acc[res as keyof Resources] = amount; return acc; }, {} as ResourceDeltas);
-        if (Object.keys(refund).length > 0) { updateResources(refund); addNotification(`Salvaged ${Object.entries(refund).map(([r,a]) => `${a} ${r}`).join(', ')}.`); }
-        setBuildings(prev => ({ ...prev, [type as string]: prev[type as string].filter(b => b.id !== id) }));
-        addToLog(`${buildingInstance.name} (${buildingInfo.name}) was demolished.`, buildingInfo.iconId);
-        setBuildingManagementPanel({isOpen: false, type: null, instanceId: null, anchorRect: null });
-    };
-
     const handleUpdateBuilding = (type: BuildingType | string, id: string, name: string) => {
         setBuildings(prev => ({ ...prev, [type as string]: prev[type as string].map(b => b.id === id ? { ...b, name } : b) }));
         addNotification("Building renamed.");
-    };
-
-    const handleUpgradeBuilding = (building: BuildingInstance, upgradePath: BuildingUpgradePath) => {
-        if (!unlimitedResources) {
-            const missing = (Object.keys(upgradePath.cost) as (keyof Resources)[]).filter(res => (resources[res] || 0) < (upgradePath.cost[res] || 0));
-            if (missing.length > 0) { addNotification(`Need more ${missing.join(', ')}.`); return; }
-            updateResources(Object.entries(upgradePath.cost).reduce((acc, [k, v]) => ({ ...acc, [k]: -(v || 0) }), {}));
-        }
-        
-        const originalBuildingType = Object.keys(buildings).find(type => buildings[type as string].some(b => b.id === building.id));
-        const taskPayload = {
-            originalBuildingId: building.id,
-            originalBuildingType,
-            targetBuildingType: upgradePath.id,
-        };
-
-        if (unlimitedResources) {
-            handleTaskCompletion({ id: 'instant', type: 'upgrade_building', startTime: 0, duration: 0, payload: taskPayload });
-        } else {
-            setActiveTasks(prev => [...prev, { id: `${Date.now()}-upgrade-${building.id}`, type: 'upgrade_building', startTime: Date.now(), duration: upgradePath.time * 1000, payload: taskPayload }]);
-            addToLog(`Upgrading ${building.name} to a ${buildingList.find(b => b.id === upgradePath.id)?.name}.`, 'system');
-            setActivityStatus(`Upgrading ${building.name}...`);
-        }
-        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
-    };
-
-    const handleTrainVillagers = (count: number) => {
-        if (activeTasks.some(t => t.type === 'train_villager') || count <= 0) return;
-        if (population.current + count > population.capacity) { addNotification(`Need space for ${count} more villagers.`); return; }
-        if (!buildings.townCenter?.[0]) { addNotification(`No Town Center to train villagers.`); return; }
-        if (!unlimitedResources) { const totalCost = 50 * count; if ((resources.food || 0) < totalCost) { addNotification(`Need ${totalCost - (resources.food || 0)} more Food.`); return; } updateResources({ food: -totalCost }); }
-        
-        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'train_villager', startTime: 0, duration: 0, payload: { count } });
-        else {
-            setActiveTasks(prev => [...prev, { id: `${Date.now()}-train-villager`, type: 'train_villager', startTime: Date.now(), duration: 10000 * count, payload: { count, buildingId: buildings.townCenter![0].id } }]);
-            setActivityStatus(`Training ${count} villager(s)...`); addToLog(`Began training ${count} new villager(s).`, 'villager');
-        }
-        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
-    };
-    
-    const handleTrainUnits = (unitType: MilitaryUnitType, count: number) => {
-        const unitInfo = unitList.find(u => u.id === unitType);
-        if (!unitInfo || activeTasks.some(t => t.payload?.unitType === unitType) || count <= 0) return;
-        const totalPopulationCost = (unitInfo.populationCost || 1) * count;
-        if (population.current + totalPopulationCost > population.capacity) { addNotification(`Need space for ${totalPopulationCost} more population.`); return; }
-        
-        // Check for required buildings
-        const trainingBuilding = buildings[unitInfo.requiredBuilding as string]?.[0];
-        if (!trainingBuilding) { addNotification(`No ${buildingList.find(b => b.id === unitInfo.requiredBuilding)?.name} to train units.`); return; }
-
-        if (unitInfo.requiredBuildingIds && unitInfo.requiredBuildingIds.length > 0) {
-            const missingBuildings = unitInfo.requiredBuildingIds.filter(reqId => !buildings[reqId]?.length);
-            if (missingBuildings.length > 0) {
-                const missingNames = missingBuildings.map(id => buildingList.find(b => b.id === id)?.name || id).join(', ');
-                addNotification(`Training this unit requires: ${missingNames}.`);
-                return;
-            }
-        }
-        
-        // Check for required research
-        if(unitInfo.requiredResearchIds && unitInfo.requiredResearchIds.length > 0) {
-            const missingResearch = unitInfo.requiredResearchIds.filter(reqId => !completedResearch.includes(reqId));
-             if (missingResearch.length > 0) {
-                const missingNames = missingResearch.map(id => masterResearchList.find(r => r.id === id)?.name || id).join(', ');
-                addNotification(`Training this unit requires research: ${missingNames}.`);
-                return;
-            }
-        }
-
-
-        if (!unlimitedResources) {
-            const missing = (Object.keys(unitInfo.cost) as (keyof Resources)[]).filter(res => (resources[res] || 0) < (unitInfo.cost[res] || 0) * count);
-            if (missing.length > 0) { addNotification(`Need more ${missing.join(' and ')}.`); return; }
-            updateResources(Object.entries(unitInfo.cost).reduce((acc, [k, v]) => ({...acc, [k]: -(v || 0) * count}), {}));
-        }
-        
-        let trainTime = unitInfo.trainTime * 1000 * count;
-        if(activeBuffs.permanentTrainTimeReduction) trainTime *= (1 - activeBuffs.permanentTrainTimeReduction);
-        if (activeBuffs.trainTimeReduction) {
-            const applicable = Math.min(count, activeBuffs.trainTimeReduction.uses);
-            trainTime = (unitInfo.trainTime * 1000 * applicable * (1 - activeBuffs.trainTimeReduction.percentage)) + (unitInfo.trainTime * 1000 * (count - applicable));
-            if (activeBuffs.trainTimeReduction.uses - applicable > 0) setActiveBuffs(prev => ({...prev, trainTimeReduction: {...prev.trainTimeReduction!, uses: prev.trainTimeReduction!.uses - applicable}}));
-            else { setActiveBuffs(prev => ({...prev, trainTimeReduction: undefined})); addToLog("The Drillmaster's Whistle buff has been fully used.", 'item'); }
-        }
-        
-        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'train_military', startTime: 0, duration: 0, payload: { unitType, count } });
-        else {
-            setActiveTasks(prev => [...prev, { id: `${Date.now()}-train-${unitType}`, type: 'train_military', startTime: Date.now(), duration: trainTime, payload: { unitType, count, buildingId: trainingBuilding.id } }]);
-            setActivityStatus(`Training ${count} ${unitInfo.name}(s)...`); addToLog(`Began training ${count} new ${unitInfo.name}(s).`, unitType);
-        }
-        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
     };
 
     const handleDismissSpecificUnit = (type: 'villagers' | 'military', id: string) => {
@@ -1001,28 +937,6 @@ const GamePage: React.FC = () => {
             setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
         }
     };
-
-    const handleStartResearch = (researchId: string) => {
-        const researchInfo = masterResearchList.find(r => r.id === researchId);
-        if (!researchInfo || activeTasks.some(t => t.payload?.researchId === researchId)) return;
-        
-        if (!unlimitedResources) {
-            const missing = (Object.keys(researchInfo.cost) as (keyof Resources)[]).filter(res => (resources[res] || 0) < (researchInfo.cost[res] || 0));
-            if (missing.length > 0) { addNotification(`Need more ${missing.join(', ')}.`); return; }
-            updateResources(Object.entries(researchInfo.cost).reduce((acc, [k, v]) => ({...acc, [k]: -(v || 0)}), {}));
-        }
-
-        const taskPayload = { researchId };
-        if(unlimitedResources) handleTaskCompletion({ id: 'instant', type: 'research', startTime: 0, duration: 0, payload: taskPayload });
-        else {
-            setActiveTasks(prev => [...prev, { id: `${Date.now()}-research-${researchId}`, type: 'research', startTime: Date.now(), duration: researchInfo.researchTime * 1000, payload: taskPayload }]);
-            setActivityStatus(`Researching ${researchInfo.name}...`);
-            addToLog(`Began research for ${researchInfo.name}.`, researchInfo.iconId);
-        }
-        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
-        setResearchPanelState({ isOpen: false, anchorRect: null });
-    };
-
     
     const handleExitGame = async () => { setCurrentSaveName(null); await fetchSavesAndConfigs(); setGameState(GameStatus.MENU); };
     const handleDeleteGame = async (saveName: string) => { await deleteGameState(saveName); await fetchSavesAndConfigs(); addNotification(`Deleted saga: "${saveName}"`); };
@@ -1153,7 +1067,29 @@ const GamePage: React.FC = () => {
                         />
                         <BuildPanel isOpen={buildPanelState.isOpen} onClose={() => setBuildPanelState({ isOpen: false, villagerId: null, anchorRect: null })} onStartPlacement={handleStartPlacement} resources={resources} buildingCounts={buildingCounts} buildingList={availableBuildings} anchorRect={buildPanelState.anchorRect} />
                         <UnitManagementPanel isOpen={unitManagementPanel.isOpen} onClose={() => setUnitManagementPanel({ isOpen: false, type: null, anchorRect: null })} type={unitManagementPanel.type} units={units} onUpdateUnit={handleUpdateUnit} onDismissUnit={handleDismissSpecificUnit} onInitiateBuild={(villagerId, rect) => { closeAllPanels(); handleInitiateBuild(villagerId, rect); }} getVillagerTaskDetails={getVillagerTaskDetails} anchorRect={unitManagementPanel.anchorRect} />
-                        <BuildingManagementPanel isOpen={buildingManagementPanel.isOpen} onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} panelState={buildingManagementPanel} buildings={buildings} buildingList={buildingList} onUpdateBuilding={handleUpdateBuilding} onDemolishBuilding={handleDemolishBuilding} onTrainUnits={handleTrainUnits} onTrainVillagers={handleTrainVillagers} onUpgradeBuilding={handleUpgradeBuilding} resources={resources} population={population} unitList={activeUnits} onAdvanceAge={handleAdvanceAge} activeTasks={activeTasks} anchorRect={buildingManagementPanel.anchorRect} masterResearchList={masterResearchList} completedResearch={completedResearch} onStartResearch={handleStartResearch} currentAge={currentAge} ageProgressionList={ageProgressionList} />
+                        <BuildingManagementPanel 
+                            isOpen={buildingManagementPanel.isOpen} 
+                            onClose={() => setBuildingManagementPanel({ isOpen: false, type: null, anchorRect: null })} 
+                            panelState={buildingManagementPanel} 
+                            buildings={buildings} 
+                            buildingList={buildingList} 
+                            onUpdateBuilding={handleUpdateBuilding} 
+                            onDemolishBuilding={(type, id) => dispatchBuildingAction({ type: 'DEMOLISH', payload: { buildingId: id, buildingType: type as BuildingType } })} 
+                            onTrainUnits={(unitType, count) => dispatchBuildingAction({ type: 'TRAIN_UNIT', payload: { unitType, count } })} 
+                            onTrainVillagers={(count) => dispatchBuildingAction({ type: 'TRAIN_VILLAGER', payload: { count } })} 
+                            onUpgradeBuilding={(building, path) => dispatchBuildingAction({ type: 'UPGRADE_BUILDING', payload: { building, upgradePath: path } })}
+                            onStartResearch={(researchId) => dispatchBuildingAction({ type: 'START_RESEARCH', payload: { researchId } })}
+                            onAdvanceAge={() => dispatchBuildingAction({ type: 'ADVANCE_AGE', payload: {} })}
+                            resources={resources} 
+                            population={population} 
+                            unitList={activeUnits} 
+                            activeTasks={activeTasks} 
+                            anchorRect={buildingManagementPanel.anchorRect} 
+                            masterResearchList={masterResearchList} 
+                            completedResearch={completedResearch} 
+                            currentAge={currentAge} 
+                            ageProgressionList={ageProgressionList} 
+                        />
                         <ResourceAssignmentPanel isOpen={assignmentPanelState.isOpen} onClose={() => setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null })} assignmentTarget={assignmentTarget || null} idleVillagerCount={idleVillagerCount} onAssignVillagers={handleAssignVillagers} onRecallVillagers={handleRecallVillagers} gatherInfo={gatherInfoRef.current} buildingList={buildingList} units={units} anchorRect={assignmentPanelState.anchorRect} />
                         <CivilizationPanel isOpen={civPanelState.isOpen} onClose={() => setCivPanelState({ isOpen: false, anchorRect: null })} civilization={civilization} anchorRect={civPanelState.anchorRect} />
                         <AllBuildingsPanel isOpen={allBuildingsPanel.isOpen} onClose={() => setAllBuildingsPanel({ isOpen: false, anchorRect: null })} buildingList={buildingList} buildingCounts={buildingCounts} activeTasks={activeTasks} onOpenBuildingPanel={handleOpenBuildingPanel} anchorRect={allBuildingsPanel.anchorRect} />
@@ -1167,7 +1103,7 @@ const GamePage: React.FC = () => {
                             resources={resources}
                             currentAge={currentAge}
                             ageProgressionList={ageProgressionList}
-                            onStartResearch={handleStartResearch}
+                            onStartResearch={(researchId) => dispatchBuildingAction({ type: 'START_RESEARCH', payload: { researchId } })}
                         />
                     </>
                 );

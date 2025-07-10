@@ -131,7 +131,7 @@ export interface UnitUpgradePath {
     targetUnitId: string;
     cost: BuildingCosts;
     time: number;
-    researchRequired?: string;
+    researchRequired?: string; // Future use
 }
 
 export interface UnitConfig {
@@ -177,6 +177,7 @@ export interface UnitConfig {
     isUpgradeOnly?: boolean;
     requiredBuildingIds?: string[]; // Additional buildings that must exist to enable training
     prerequisites?: string[]; // research ids
+    requiredResearchIds?: string[];
 }
 
 
@@ -201,6 +202,10 @@ export type PlayerActionState = {
     villagerId: string;
 } | null;
 
+export interface Population {
+    current: number;
+    capacity: number;
+}
 
 export interface GameTask {
     id: string;
@@ -288,27 +293,77 @@ export interface BuildingConfig {
     attack?: number;
     attackRate?: number; // attacks per second
     attackRange?: number;
-    healRate?: number; // hp per second for garrisoned units
+axle...
     visionRange?: number;
-    requiredBuildingId?: string;
-    
-    // Future-Proofing Attributes
+    maintenanceCost?: BuildingCosts;
     researchCost?: BuildingCosts;
-    researchTime?: number; // in seconds
-    unlocksResearchIds?: string[];
-    requiresResearch?: boolean;
-
+    healRate?: number; // HP per second for units inside
+    decayRate?: number; // HP loss per minute when not repaired
+    placementRadius?: number; // For buildings that need space around them
     awardPoints?: number;
     awardTier?: 'Bronze' | 'Silver' | 'Gold';
     
+    // For Research-related buildings
+    requiresResearch?: boolean; // Does this building itself need to be researched?
+    researchTime?: number;
+    unlocksResearchIds?: string[];
+
+    // For Aesthetics
     customModelId?: string;
-    placementRadius?: number; // minimum distance from another building of the same type
-    
     seasonalVariantIds?: string[];
-    maintenanceCost?: BuildingCosts; // per minute
-    decayRate?: number; // hp loss per minute
 }
 
+export type ResourceRarity = 'Abundant' | 'Common' | 'Uncommon' | 'Rare' | 'Strategic';
+
+export interface ResourceConfig {
+    id: string;
+    name: string;
+    description: string;
+    iconId: string;
+    isActive: boolean;
+    isPredefined: boolean;
+    order: number;
+    rarity: ResourceRarity;
+    initialAmount: number;
+    baseGatherRate: number; // per second per villager
+    spawnInSafeZone: boolean;
+    isTradable: boolean;
+    decaysOverTime?: boolean;
+    decayRate?: number; // percentage per minute
+    storageBuildingId?: string; // Building that increases capacity for this resource
+}
+
+export type ResearchEffectType = 'modify_unit' | 'modify_building' | 'unlock_unit' | 'unlock_building';
+export type ResearchOperation = 'add' | 'multiply';
+export type ResearchTargetType = 'unit' | 'building' | 'resource_gather_rate' | 'all';
+
+
+export interface ResearchEffect {
+    type: ResearchEffectType;
+    targetId: string; // e.g., 'swordsman', 'barracks', 'food'
+    field: string; // e.g., 'hp', 'attack', 'cost.wood'
+    operation: ResearchOperation;
+    value: number;
+}
+
+export interface ResearchConfig {
+    id: string;
+    name: string;
+    description: string;
+    iconId: string;
+    cost: BuildingCosts;
+    researchTime: number; // in seconds
+    requiredBuildingId: string;
+    ageRequirement: string;
+    prerequisites?: string[]; // Other research IDs
+    effects: ResearchEffect[];
+    isActive: boolean;
+    isPredefined: boolean;
+    order: number;
+    treeId: string;
+    treeName: string;
+    colorTheme?: string;
+}
 
 export interface FullGameState {
     civilization: Civilization;
@@ -322,64 +377,4 @@ export interface FullGameState {
     inventory: GameItem[];
     activeBuffs: ActiveBuffs;
     completedResearch: string[];
-}
-
-export type ResourceRarity = 'Abundant' | 'Common' | 'Uncommon' | 'Rare' | 'Strategic';
-
-export interface ResourceConfig {
-    id: string;
-    name: string;
-    description: string;
-    iconId: string;
-    isActive: boolean;
-    isPredefined: boolean;
-    order: number;
-
-    // --- Economy & Spawning ---
-    rarity: ResourceRarity;
-    initialAmount: number;
-    baseGatherRate: number;
-    spawnInSafeZone: boolean;
-    isTradable: boolean;
-
-    // --- Advanced Mechanics (Future-Proofing) ---
-    decaysOverTime?: boolean;
-    decayRate?: number; // percentage per minute
-    storageBuildingId?: string; // ID of building that increases capacity
-}
-
-export type ResearchEffectType = 'stat_boost' | 'unlock_unit' | 'unlock_building';
-export type ResearchTargetType = 'unit_type' | 'unit_class' | 'building_type';
-export type ResearchOperation = 'add' | 'multiply';
-
-export interface ResearchEffect {
-    type: ResearchEffectType;
-    targetType: ResearchTargetType;
-    targetId: string; // e.g., 'swordsman', 'infantry', 'barracks'
-    stat: string; // e.g., 'hp', 'attack', 'meleeArmor'
-    value: number;
-    operation: ResearchOperation;
-}
-
-export interface ResearchConfig {
-    id: string; // Unique key for the technology node
-    name: string;
-    description: string;
-    iconId: string;
-    cost: BuildingCosts;
-    researchTime: number; // in seconds
-    prerequisites: string[]; // Array of tech IDs required before this one
-    effects: ResearchEffect[]; // Structured list of in-game effects
-    
-    // Admin & Tree Management
-    treeId: string; // ID for the tree this tech belongs to (e.g., 'military', 'economy')
-    treeName: string; // Display name for the tree
-    colorTheme?: string; // Hex color for the tree's UI theme
-
-    requiredBuildingId: string;
-    ageRequirement: string;
-    isActive: boolean;
-    isPredefined: boolean;
-    order: number; // Display order within its tree
-    repeatable?: boolean;
 }

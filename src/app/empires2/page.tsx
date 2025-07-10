@@ -147,7 +147,7 @@ const isClickOnPopup = (node: Konva.Node | null): boolean => {
 };
 
 
-const TestMapPage = () => {
+const Empires2Page = () => {
     const [isClient, setIsClient] = useState(false);
     const [villagers, setVillagers] = useState<Villager[]>([]);
     const [goldMines, setGoldMines] = useState<GoldMine[]>([]);
@@ -1161,4 +1161,4 @@ const TestMapPage = () => {
     );
 };
 
-export default TestMapPage;
+export default Empires2Page;

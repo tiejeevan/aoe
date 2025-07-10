@@ -115,8 +115,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onNewGame, onResumeGame, save
                             <button onClick={() => router.push('/admin')} className="text-xs text-brand-blue hover:underline">
                                 admin?
                             </button>
-                             <button onClick={() => router.push('/test-map')} className="text-xs text-brand-green hover:underline">
-                                Test Map
+                             <button onClick={() => router.push('/empires2')} className="text-xs text-brand-green hover:underline">
+                                Empires2
                             </button>
                          </div>
                     </div>

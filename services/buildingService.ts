@@ -1,7 +1,6 @@
 
 import type { BuildingAction, BuildingServiceContext } from '../types/actions';
 import type { BuildingInstance, GameTask } from '../types';
-import { getRandomNames } from './nameService';
 
 type ServiceResult = {
     error?: string;
@@ -55,7 +54,7 @@ const demolishBuilding = (context: BuildingServiceContext, payload: { buildingId
 
 // Internal handler for training units
 const trainUnit = (context: BuildingServiceContext, payload: { unitType: string, count: number }): ServiceResult => {
-    const { resources, population, activeTasks, unitList, buildingList, completedResearch, unlimitedResources } = context;
+    const { resources, population, activeTasks, unitList, buildingList, completedResearch, unlimitedResources, activeBuffs } = context;
     const { unitType, count } = payload;
 
     const unitInfo = unitList.find(u => u.id === unitType);
@@ -98,23 +97,136 @@ const trainUnit = (context: BuildingServiceContext, payload: { unitType: string,
         resourceDeltas = Object.entries(unitInfo.cost).reduce((acc, [k, v]) => ({ ...acc, [k]: -(v || 0) * count }), {});
     }
 
-    // This part should be pure data generation, not a side effect.
-    // The caller (GamePage) will handle the task completion.
+    let trainTime = unitInfo.trainTime * 1000 * count;
+    let updatedActiveBuffs = { ...activeBuffs };
+
+    const permanentReduction = activeBuffs.permanentTrainTimeReduction || 0;
+    let tempReduction = 0;
+    if (activeBuffs.trainTimeReduction && activeBuffs.trainTimeReduction.uses > 0) {
+        tempReduction = activeBuffs.trainTimeReduction.percentage;
+        updatedActiveBuffs.trainTimeReduction = {
+            ...activeBuffs.trainTimeReduction,
+            uses: activeBuffs.trainTimeReduction.uses - count,
+        };
+    }
+    
+    const totalReduction = 1 - (permanentReduction + tempReduction);
+    trainTime *= totalReduction;
+
+
     const newTasks: GameTask[] = [{
         id: `${Date.now()}-train-${unitType}`,
         type: 'train_military',
         startTime: Date.now(),
-        duration: unitInfo.trainTime * 1000 * count,
+        duration: trainTime,
         payload: { unitType, count, buildingId: trainingBuilding.id }
     }];
 
     return {
         resourceDeltas,
         newTasks,
+        updatedActiveBuffs,
         log: { message: `Began training ${count} new ${unitInfo.name}(s).`, icon: unitType },
         activityStatus: `Training ${count} ${unitInfo.name}(s)...`
     };
 };
+
+const trainVillager = (context: BuildingServiceContext, payload: { count: number }): ServiceResult => {
+    const { resources, population, activeTasks, unlimitedResources } = context;
+    const { count } = payload;
+    
+    if (activeTasks.some(t => t.type === 'train_villager')) {
+        return { error: 'Already training villagers.' };
+    }
+    if (population.current + count > population.capacity) {
+        return { error: `Need space for ${count} more population.` };
+    }
+
+    let resourceDeltas = {};
+    if (!unlimitedResources) {
+        const cost = 50 * count;
+        if ((resources.food || 0) < cost) {
+            return { error: 'Not enough food.' };
+        }
+        resourceDeltas = { food: -cost };
+    }
+
+    const newTasks: GameTask[] = [{
+        id: `${Date.now()}-train-villager`,
+        type: 'train_villager',
+        startTime: Date.now(),
+        duration: 15000 * count, // 15s per villager
+        payload: { count }
+    }];
+
+    return {
+        resourceDeltas,
+        newTasks,
+        log: { message: `Began training ${count} new villager(s).`, icon: 'villager' },
+        activityStatus: `Training ${count} new villager(s)...`
+    };
+}
+
+const upgradeBuilding = (context: BuildingServiceContext, payload: { building: BuildingInstance, upgradePath: BuildingUpgradePath }): ServiceResult => {
+    const { resources, unlimitedResources, buildings } = context;
+    const { building, upgradePath } = payload;
+    
+     if (!unlimitedResources) {
+        const missing = Object.entries(upgradePath.cost).filter(([res, cost]) => (resources[res] || 0) < (cost || 0));
+        if (missing.length > 0) {
+            return { error: `Need more ${missing.map(([res, cost]) => `${cost} ${res}`).join(' and ')}.` };
+        }
+    }
+
+    const originalBuildingType = Object.keys(buildings).find(type => buildings[type].some(b => b.id === building.id));
+    if (!originalBuildingType) return { error: "Original building not found." };
+    
+    const resourceDeltas = unlimitedResources ? {} : Object.entries(upgradePath.cost).reduce((acc, [k, v]) => ({ ...acc, [k]: -(v || 0) }), {});
+    
+    return {
+        resourceDeltas,
+        newTasks: [{
+            id: `${Date.now()}-upgrade-${building.id}`,
+            type: 'upgrade_building',
+            startTime: Date.now(),
+            duration: upgradePath.time * 1000,
+            payload: {
+                originalBuildingId: building.id,
+                originalBuildingType: originalBuildingType,
+                targetBuildingType: upgradePath.id
+            }
+        }],
+        log: { message: `Upgrading ${building.name} to a ${upgradePath.id}...`, icon: upgradePath.id },
+        activityStatus: `Upgrading ${building.name}...`
+    }
+}
+
+const advanceAge = (context: BuildingServiceContext): ServiceResult => {
+     const { resources, activeTasks, unlimitedResources } = context;
+
+    if (activeTasks.some(t => t.type === 'advance_age')) {
+        return { error: "Advancement already in progress." };
+    }
+    
+    let resourceDeltas = {};
+    if (!unlimitedResources) {
+        const missing = [];
+        if ((resources.food || 0) < 500) missing.push(`${500 - (resources.food || 0)} Food`);
+        if ((resources.gold || 0) < 200) missing.push(`${200 - (resources.gold || 0)} Gold`);
+        if (missing.length > 0) {
+            return { error: `To advance, you need ${missing.join(' and ')}.` };
+        }
+        resourceDeltas = { food: -500, gold: -200 };
+    }
+    
+    return {
+        resourceDeltas,
+        newTasks: [{ id: `${Date.now()}-advance_age`, type: 'advance_age', startTime: Date.now(), duration: 60000 }],
+        log: { message: `Advancing to the next age...`, icon: 'age' },
+        activityStatus: 'Advancing to the next age...'
+    };
+}
+
 
 // The main service function that acts as a router
 export const handleBuildingAction = (context: BuildingServiceContext): ServiceResult => {
@@ -128,20 +240,12 @@ export const handleBuildingAction = (context: BuildingServiceContext): ServiceRe
             return trainUnit(context, action.payload);
 
         case 'TRAIN_VILLAGER':
-            // Logic for training villagers
-            // This is just an example, more logic would be needed
-            return { newTasks: [{ id: `${Date.now()}-train-villager`, type: 'train_villager', startTime: Date.now(), duration: 10000 * action.payload.count, payload: { count: action.payload.count } }] };
+            return trainVillager(context, action.payload);
         
         case 'UPGRADE_BUILDING':
-            // Logic for upgrading
-            return { newTasks: [{ id: `${Date.now()}-upgrade-${action.payload.building.id}`, type: 'upgrade_building', startTime: Date.now(), duration: action.payload.upgradePath.time * 1000, payload: { originalBuildingId: action.payload.building.id, originalBuildingType: Object.keys(context.buildings).find(type => context.buildings[type].some(b => b.id === action.payload.building.id)), targetBuildingType: action.payload.upgradePath.id } }] };
+            return upgradeBuilding(context, action.payload);
 
-        case 'START_RESEARCH':
-            // Logic for research
-            return { newTasks: [{ id: `${Date.now()}-research-${action.payload.researchId}`, type: 'research', startTime: Date.now(), duration: 60000, payload: { researchId: action.payload.researchId } }] };
-        
         case 'ADVANCE_AGE':
-            // Logic for advancing age
-            return { newTasks: [{ id: `${Date.now()}-advance_age`, type: 'advance_age', startTime: Date.now(), duration: 60000 }] };
+            return advanceAge(context);
     }
 };

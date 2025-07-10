@@ -1,4 +1,5 @@
-import type { BuildingInstance, BuildingType, BuildingUpgradePath, Resources, Buildings, GameTask, Population, BuildingConfig, UnitConfig, ActiveBuffs, ResearchConfig, Villager, MilitaryUnit } from './types';
+
+import type { BuildingInstance, BuildingType, BuildingUpgradePath, Resources, Buildings, GameTask, Population, BuildingConfig, UnitConfig, ActiveBuffs, ResearchConfig, Villager, MilitaryUnit, GameEventChoice, GameItem } from './types';
 
 // ==================================
 // ======== BUILDING ACTIONS ========
@@ -23,10 +24,6 @@ type UpgradeBuildingPayload = {
   upgradePath: BuildingUpgradePath;
 };
 
-type StartResearchPayload = {
-    researchId: string;
-};
-
 type AdvanceAgePayload = {};
 
 export type BuildingAction =
@@ -34,7 +31,6 @@ export type BuildingAction =
   | { type: 'TRAIN_UNIT'; payload: TrainUnitPayload }
   | { type: 'TRAIN_VILLAGER'; payload: TrainVillagerPayload }
   | { type: 'UPGRADE_BUILDING'; payload: UpgradeBuildingPayload }
-  | { type: 'START_RESEARCH'; payload: StartResearchPayload }
   | { type: 'ADVANCE_AGE'; payload: AdvanceAgePayload };
 
 export interface BuildingServiceContext {
@@ -89,4 +85,42 @@ export interface UnitServiceContext {
     resourceNodes: ResourceNode[];
     buildingList: BuildingConfig[];
     unlimitedResources: boolean;
+}
+
+
+// ==================================
+// ======== RESEARCH ACTIONS ========
+// ==================================
+
+type StartResearchPayload = {
+    researchId: string;
+};
+
+export type ResearchAction = 
+    | { type: 'START_RESEARCH', payload: StartResearchPayload };
+
+export interface ResearchServiceContext {
+    action: ResearchAction;
+    resources: Resources;
+    activeTasks: GameTask[];
+    masterResearchList: ResearchConfig[];
+    unlimitedResources: boolean;
+}
+
+// ==================================
+// ========= EVENT ACTIONS ==========
+// ==================================
+
+type ProcessChoicePayload = {
+    choice: GameEventChoice;
+};
+
+export type EventAction = 
+    | { type: 'PROCESS_CHOICE', payload: ProcessChoicePayload };
+
+export interface GameEventServiceContext {
+    action: EventAction;
+    choice: GameEventChoice; // For internal use in the service
+    resources: Resources;
+    inventory: GameItem[];
 }

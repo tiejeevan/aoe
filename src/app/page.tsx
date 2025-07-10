@@ -3,11 +3,13 @@
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { GameStatus, type Civilization, type Resources, type Units, type Buildings, type GameEvent, type GameLogEntry, type LogIconType, type ResourceDeltas, BuildingType, UINotification, FullGameState, Villager, MilitaryUnit, UnitConfig, MilitaryUnitType, GameTask, TaskType, ResourceNode, ResourceNodeType, PlayerActionState, GameEventChoice, GameItem, Reward, ActiveBuffs, BuildingInstance, AgeConfig, BuildingConfig, BuildingUpgradePath, ResourceConfig, ResearchConfig } from '../../types';
-import type { BuildingAction, UnitAction } from '../../types/actions';
+import type { BuildingAction, UnitAction, ResearchAction, EventAction } from '../../types/actions';
 import { getPredefinedCivilization, getPredefinedGameEvent } from '../../services/geminiService';
 import { saveGameState, loadGameState, getAllSaveNames, deleteGameState, getAllAgeConfigs, getAllBuildingConfigs, getAllUnitConfigs, saveAgeConfig, saveBuildingConfig, saveUnitConfig, getAllResourceConfigs, saveResourceConfig, getAllResearchConfigs, saveResearchConfig } from '../../services/dbService';
 import { handleBuildingAction } from '../../services/buildingService';
 import { handleUnitAction } from '../../services/unitService';
+import { handleResearchAction } from '../../services/researchService';
+import { handleEventAction } from '../../services/gameEventService';
 import { getRandomNames } from '../../services/nameService';
 import { GAME_ITEMS } from '../../data/itemContent';
 import { INITIAL_AGES } from '../../data/ageInfo';
@@ -198,7 +200,6 @@ const GamePage: React.FC = () => {
         
         // Close relevant panels after a successful action
         setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
-        setResearchPanelState({ isOpen: false, anchorRect: null });
 
     }, [resources, buildings, activeTasks, population, masterBuildingList, masterUnitList, completedResearch, unlimitedResources, activeBuffs, addNotification, updateResources, addToLog]);
 
@@ -233,6 +234,37 @@ const GamePage: React.FC = () => {
         // Close relevant panels
         setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     }, [units, buildings, resourceNodes, masterBuildingList, unlimitedResources, addNotification, addToLog]);
+
+    const dispatchResearchAction = useCallback((action: ResearchAction) => {
+        const result = handleResearchAction({
+            action,
+            resources,
+            activeTasks,
+            masterResearchList,
+            unlimitedResources,
+        });
+        if (result.error) { addNotification(result.error); return; }
+        if (result.resourceDeltas) { updateResources(result.resourceDeltas); }
+        if (result.newTasks) { setActiveTasks(prev => [...prev, ...result.newTasks!]); }
+        if (result.log) { addToLog(result.log.message, result.log.icon); }
+        if (result.activityStatus) { setActivityStatus(result.activityStatus); }
+        setBuildingManagementPanel({ isOpen: false, type: null, instanceId: null, anchorRect: null });
+        setResearchPanelState({ isOpen: false, anchorRect: null });
+    }, [resources, activeTasks, masterResearchList, unlimitedResources, addNotification, updateResources, addToLog]);
+
+     const dispatchEventAction = useCallback((action: EventAction) => {
+        const result = handleEventAction({
+            action,
+            resources,
+            inventory,
+            choice: action.payload.choice, // for internal service use
+        });
+        if (result.error) { addNotification(result.error); return; }
+        if (result.resourceDeltas) { updateResources(result.resourceDeltas); }
+        if (result.newInventory) { setInventory(result.newInventory); }
+        if (result.log) { addToLog(result.log.message, result.log.icon); }
+        if (result.activityStatus) { setActivityStatus(result.activityStatus); }
+    }, [resources, inventory, addNotification, updateResources, addToLog]);
 
 
     const fetchResources = useCallback(async () => {
@@ -748,58 +780,9 @@ const GamePage: React.FC = () => {
     }, [gameState, currentEvent, scheduleNextEvent]);
 
     const handleEventChoice = (choice: GameEventChoice) => {
-        if (choice.cost) {
-            const missing = (Object.keys(choice.cost) as (keyof Resources)[]).filter(res => (resources[res] || 0) < (choice.cost![res] || 0));
-            if (missing.length > 0) { addNotification(`You lack the required resources: ${missing.join(', ')}.`); return; }
-            updateResources(Object.entries(choice.cost).reduce((acc, [k, v]) => ({...acc, [k]: -(v || 0)}), {}));
-        }
-        const isSuccess = choice.successChance === undefined || Math.random() < choice.successChance;
-        const effects = isSuccess ? choice.successEffects : choice.failureEffects;
-        if (!effects) { setCurrentEvent(null); scheduleNextEvent(); return; }
-
-        let logMessage = `Decision: "${choice.text}". Outcome: ${isSuccess ? 'Success' : 'Failure'}. ${effects.log}`;
-        effects.rewards.forEach((reward: Reward) => {
-            if (reward.type === 'resource') {
-                const amount = Array.isArray(reward.amount) ? Math.floor(Math.random() * (reward.amount[1] - reward.amount[0] + 1)) + reward.amount[0] : reward.amount;
-                if (amount !== 0) { updateResources({ [reward.resource]: amount }); logMessage += ` You ${amount > 0 ? 'gained' : 'lost'} ${Math.abs(amount)} ${reward.resource}.`; }
-            } else if (reward.type === 'item') {
-                const itemInfo = GAME_ITEMS[reward.itemId];
-                if (itemInfo) {
-                    const newItems = Array.from({length: reward.amount}, (_, i) => ({ ...itemInfo, id: `${reward.itemId}-${Date.now()}-${i}` }));
-                    setInventory(prev => [...prev, ...newItems]);
-                    logMessage += ` You received ${reward.amount}x ${itemInfo.name}!`;
-                }
-            } else if (reward.type === 'unit' && reward.unitType === 'villager') {
-                const newVillagers = getRandomNames('villager', reward.amount).map(name => ({ id: `${Date.now()}-${name}`, name, currentTask: null }));
-                setUnits(p => ({ ...p, villagers: [...p.villagers, ...newVillagers] }));
-                logMessage += ` You gained ${reward.amount} villager(s).`;
-            } else if (reward.type === 'building') {
-                const buildingInfo = buildingList.find(b => b.id === reward.buildingId);
-                if (buildingInfo) {
-                    const occupiedCells = new Set<string>();
-                    Object.values(buildings).flat().forEach(b => occupiedCells.add(`${b.position.x},${b.position.y}`));
-                    activeTasks.filter(t => t.type === 'build').forEach(t => t.payload?.position && occupiedCells.add(`${t.payload.position.x},${t.payload.position.y}`));
-                    resourceNodes.forEach(n => occupiedCells.add(`${n.position.x},${n.position.y}`));
-                    
-                    let placed = false;
-                    for (let i = 0; i < MAP_DIMENSIONS.width * MAP_DIMENSIONS.height; i++) {
-                        const x = Math.floor(Math.random() * MAP_DIMENSIONS.width);
-                        const y = Math.floor(Math.random() * MAP_DIMENSIONS.height);
-                        if (!occupiedCells.has(`${x},${y}`)) {
-                            const [name] = getRandomNames('building', 1);
-                            const newBuilding: BuildingInstance = { id: `reward-${Date.now()}`, name, position: {x,y}, currentHp: buildingInfo.hp };
-                            setBuildings(p => ({ ...p, [reward.buildingId as string]: [...(p[reward.buildingId as string] || []), newBuilding]}));
-                            logMessage += ` You were gifted a new ${buildingInfo.name}!`;
-                            placed = true;
-                            break;
-                        }
-                    }
-                    if (!placed) logMessage += ` You were to be gifted a ${buildingInfo.name}, but there was no room to build it!`;
-                }
-            }
-        });
-        
-        addToLog(logMessage, 'event'); setActivityStatus(effects.log); setCurrentEvent(null); scheduleNextEvent();
+        dispatchEventAction({ type: 'PROCESS_CHOICE', payload: { choice } });
+        setCurrentEvent(null);
+        scheduleNextEvent();
     };
 
     const handleInitiateBuild = (villagerId: string, rect: DOMRect) => {
@@ -957,23 +940,6 @@ const GamePage: React.FC = () => {
         }
         setAssignmentPanelState({ isOpen: false, targetId: null, targetType: null, anchorRect: null });
     };
-
-    const handleAdvanceAge = async () => {
-        if (activeTasks.some(t => t.type === 'advance_age')) { addNotification("Advancement already in progress."); return; }
-        if (!unlimitedResources) {
-            const missing = [];
-            if ((resources.food || 0) < 500) missing.push(`${500 - (resources.food || 0)} Food`);
-            if ((resources.gold || 0) < 200) missing.push(`${200 - (resources.gold || 0)} Gold`);
-            if (missing.length > 0) { addNotification(`To advance, you need ${missing.join(' and ')}.`); return; }
-        }
-        
-        if(unlimitedResources) {
-             handleTaskCompletion({ id: 'instant', type: 'advance_age', startTime: 0, duration: 0, payload: {} });
-        } else {
-            dispatchBuildingAction({ type: 'ADVANCE_AGE', payload: {} });
-            updateResources({ food: -500, gold: -200 }); // Cost deduction is immediate
-        }
-    };
     
     const handleExitGame = async () => { setCurrentSaveName(null); await fetchSavesAndConfigs(); setGameState(GameStatus.MENU); };
     const handleDeleteGame = async (saveName: string) => { await deleteGameState(saveName); await fetchSavesAndConfigs(); addNotification(`Deleted saga: "${saveName}"`); };
@@ -1115,8 +1081,8 @@ const GamePage: React.FC = () => {
                             onTrainUnits={(unitType, count) => dispatchBuildingAction({ type: 'TRAIN_UNIT', payload: { unitType, count } })} 
                             onTrainVillagers={(count) => dispatchBuildingAction({ type: 'TRAIN_VILLAGER', payload: { count } })} 
                             onUpgradeBuilding={(building, path) => dispatchBuildingAction({ type: 'UPGRADE_BUILDING', payload: { building, upgradePath: path } })}
-                            onStartResearch={(researchId) => dispatchBuildingAction({ type: 'START_RESEARCH', payload: { researchId } })}
-                            onAdvanceAge={handleAdvanceAge}
+                            onStartResearch={(researchId) => dispatchResearchAction({ type: 'START_RESEARCH', payload: { researchId } })}
+                            onAdvanceAge={() => dispatchBuildingAction({ type: 'ADVANCE_AGE', payload: {} })}
                             resources={resources} 
                             population={population} 
                             unitList={activeUnits} 
@@ -1140,7 +1106,7 @@ const GamePage: React.FC = () => {
                             resources={resources}
                             currentAge={currentAge}
                             ageProgressionList={ageProgressionList}
-                            onStartResearch={(researchId) => dispatchBuildingAction({ type: 'START_RESEARCH', payload: { researchId } })}
+                            onStartResearch={(researchId) => dispatchResearchAction({ type: 'START_RESEARCH', payload: { researchId } })}
                         />
                     </>
                 );

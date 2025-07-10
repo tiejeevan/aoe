@@ -170,4 +170,3 @@ const AdminTestMapPage = () => {
 };
 
 export default AdminTestMapPage;
-

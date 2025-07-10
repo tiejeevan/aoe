@@ -4,58 +4,17 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Stage, Layer } from 'react-konva';
-import Konva from 'konva';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Dynamically import the renderer to avoid SSR issues with Konva
-import KonvaRenderer from '../../../components/test/KonvaRenderer';
-
-const defaultScene = {
-  attrs: {},
-  className: "Stage",
-  children: [
-    {
-      attrs: {},
-      className: "Layer",
-      children: [
-        {
-          attrs: {
-            x: 150,
-            y: 100,
-            width: 100,
-            height: 100,
-            fill: "#d79921",
-            stroke: "black",
-            strokeWidth: 4,
-            shadowBlur: 10
-          },
-          className: "Rect",
-        },
-        {
-          attrs: {
-            x: 150,
-            y: 100,
-            text: "Hello",
-            fontSize: 30,
-            fontFamily: "Calibri",
-            fill: "black"
-          },
-          className: "Text"
-        }
-      ]
-    }
-  ]
-};
+// Import the new custom component directly
+import CustomBuilding1 from '../../../components/test/CustomBuilding1';
 
 const AdminTestMapPage = () => {
     const [isClient, setIsClient] = useState(false);
-    const [jsonInput, setJsonInput] = useState(JSON.stringify(defaultScene, null, 2));
-    const [scene, setScene] = useState<Konva.NodeConfig | null>(defaultScene);
-    const [buildingName, setBuildingName] = useState('');
+    const [buildingName, setBuildingName] = useState('My Stick Figure');
     const [error, setError] = useState<string | null>(null);
     const [log, setLog] = useState<string[]>([]);
 
@@ -64,26 +23,9 @@ const AdminTestMapPage = () => {
         setIsClient(true);
     }, []);
 
-    const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const newJson = e.target.value;
-        setJsonInput(newJson);
-        try {
-            const parsed = JSON.parse(newJson);
-            setScene(parsed);
-            setError(null);
-        } catch (err) {
-            setError("Invalid JSON format.");
-            setScene(null);
-        }
-    };
-
     const handleSaveBuilding = () => {
         if (!buildingName.trim()) {
             setError("Building name cannot be empty.");
-            return;
-        }
-        if (!scene) {
-            setError("Cannot save, JSON is invalid.");
             return;
         }
 
@@ -91,10 +33,10 @@ const AdminTestMapPage = () => {
         // For now, we'll just log it to demonstrate the concept.
         console.log("Saving building:", {
             name: buildingName,
-            konvaJson: jsonInput,
+            component: 'CustomBuilding1', // We would save the component identifier
         });
 
-        const newLogMessage = `Saved building "${buildingName}" successfully. (Check console for data)`;
+        const newLogMessage = `Saved building "${buildingName}" successfully.`;
         setLog(prev => [newLogMessage, ...prev.slice(0, 9)]);
         setError(null);
     };
@@ -105,7 +47,7 @@ const AdminTestMapPage = () => {
         <div className="min-h-screen bg-stone-dark text-parchment-light p-4 sm:p-8">
             <div className="w-full max-w-5xl mx-auto">
                 <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-4xl font-serif text-parchment-light">Test Map Admin</h1>
+                    <h1 className="text-4xl font-serif text-parchment-light">Building Designer</h1>
                     <Link href="/test-map" className="sci-fi-button">Back to Test Map</Link>
                 </div>
                 
@@ -124,14 +66,9 @@ const AdminTestMapPage = () => {
                             />
                         </div>
                          <div>
-                            <Label htmlFor="konva-json" className="text-lg font-serif text-brand-gold">Konva JSON Definition</Label>
-                            <Textarea 
-                                id="konva-json" 
-                                value={jsonInput} 
-                                onChange={handleJsonChange} 
-                                className="sci-fi-input mt-1 font-mono text-xs h-96"
-                                placeholder="Paste Konva JSON here..."
-                            />
+                            <Label className="text-lg font-serif text-brand-gold">Component File</Label>
+                            <p className="text-parchment-dark">Currently previewing: <code className="font-mono bg-black/30 p-1 rounded">components/test/CustomBuilding1.tsx</code></p>
+                            <p className="text-xs text-stone-light mt-1">To change this, ask the AI to create or modify a component file.</p>
                          </div>
                     </div>
                     
@@ -142,7 +79,9 @@ const AdminTestMapPage = () => {
                             <div className="w-full aspect-square bg-black/30 rounded-lg border-2 border-stone-light mt-1 flex items-center justify-center">
                                {isClient && (
                                     <Stage width={stageSize} height={stageSize}>
-                                        {scene && <KonvaRenderer node={scene} />}
+                                        <Layer>
+                                            <CustomBuilding1 x={stageSize / 2} y={stageSize / 2 - 50} />
+                                        </Layer>
                                     </Stage>
                                )}
                             </div>

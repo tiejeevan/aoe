@@ -10,6 +10,7 @@ import { handleBuildingAction } from '../../services/buildingService';
 import { handleUnitAction } from '../../services/unitService';
 import { handleResearchAction } from '../../services/researchService';
 import { handleEventAction } from '../../services/gameEventService';
+import { addLogEntry } from '../../services/logService';
 import { getRandomNames } from '../../services/nameService';
 import { GAME_ITEMS } from '../../data/itemContent';
 import { INITIAL_AGES } from '../../data/ageInfo';
@@ -130,7 +131,7 @@ const GamePage: React.FC = () => {
     }, []);
 
     const addToLog = useCallback((message: string, icon: LogIconType) => {
-        setGameLog(prev => [{ id: `${Date.now()}-${Math.random()}`, message, icon }, ...prev.slice(0, 19)]);
+        setGameLog(prevLog => addLogEntry(prevLog, message, icon));
     }, []);
     
     const updateResources = useCallback((deltas: ResourceDeltas) => {

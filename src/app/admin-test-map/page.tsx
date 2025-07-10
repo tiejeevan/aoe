@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense, useTransition } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Stage, Layer } from 'react-konva';
 import Konva from 'konva';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Dynamically import the renderer to avoid SSR issues with Konva
-const KonvaRenderer = React.lazy(() => import('../../../components/test/KonvaRenderer'));
+import KonvaRenderer from '../../../components/test/KonvaRenderer';
 
 const defaultScene = {
   attrs: {},
@@ -58,7 +58,6 @@ const AdminTestMapPage = () => {
     const [buildingName, setBuildingName] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [log, setLog] = useState<string[]>([]);
-    const [isPending, startTransition] = useTransition();
 
 
     useEffect(() => {
@@ -70,15 +69,11 @@ const AdminTestMapPage = () => {
         setJsonInput(newJson);
         try {
             const parsed = JSON.parse(newJson);
-            startTransition(() => {
-                setScene(parsed);
-            });
+            setScene(parsed);
             setError(null);
         } catch (err) {
             setError("Invalid JSON format.");
-            startTransition(() => {
-                setScene(null);
-            });
+            setScene(null);
         }
     };
 
@@ -146,11 +141,9 @@ const AdminTestMapPage = () => {
                             <Label className="text-lg font-serif text-brand-gold">Live Preview</Label>
                             <div className="w-full aspect-square bg-black/30 rounded-lg border-2 border-stone-light mt-1 flex items-center justify-center">
                                {isClient && (
-                                    <Suspense fallback={<div className="text-parchment-dark">Loading Preview...</div>}>
-                                        <Stage width={stageSize} height={stageSize}>
-                                            {scene && <KonvaRenderer node={scene} />}
-                                        </Stage>
-                                    </Suspense>
+                                    <Stage width={stageSize} height={stageSize}>
+                                        {scene && <KonvaRenderer node={scene} />}
+                                    </Stage>
                                )}
                             </div>
                          </div>
